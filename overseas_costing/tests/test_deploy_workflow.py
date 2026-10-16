@@ -54,9 +54,9 @@ def test_inventory_ownership_cutover_requires_the_paired_branding_commit() -> No
 
     assert match, "deployment must pin the branding ownership commit"
     required_sha = match.group(1)
-    assert f'git fetch --no-tags origin deeplinkerp_branding' in test_job
-    assert 'test "$(git rev-parse origin/deeplinkerp_branding)" = "$REQUIRED_INVENTORY_BRANDING_SHA"' in test_job
-    assert test_job.index("Verify paired inventory owner branch") < test_job.index(
+    assert 'git fetch --no-tags --depth 1 https://github.com/yueweiit/deeplinkerp-deeplinkerp_branding.git "$REQUIRED_INVENTORY_BRANDING_SHA"' in test_job
+    assert 'test "$(git rev-parse FETCH_HEAD)" = "$REQUIRED_INVENTORY_BRANDING_SHA"' in test_job
+    assert test_job.index("Verify paired inventory owner commit") < test_job.index(
         "Run tests affected by this update"
     )
     assert f"REQUIRED_INVENTORY_BRANDING_SHA='{required_sha}'" in deploy
