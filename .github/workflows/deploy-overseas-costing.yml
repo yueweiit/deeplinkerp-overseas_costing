@@ -3,7 +3,7 @@ name: Overseas Costing CI/CD
 on:
   push:
     branches:
-      - overseas_costing
+      - main
   workflow_dispatch:
 
 permissions:
@@ -19,12 +19,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify paired inventory owner branch
+      - name: Verify paired inventory owner commit
         env:
           REQUIRED_INVENTORY_BRANDING_SHA: 0ecae087da52155fe5745e1d55dde0e599d04cb6
         run: |
-          git fetch --no-tags origin deeplinkerp_branding
-          test "$(git rev-parse origin/deeplinkerp_branding)" = "$REQUIRED_INVENTORY_BRANDING_SHA"
+          git fetch --no-tags --depth 1 https://github.com/yueweiit/deeplinkerp-deeplinkerp_branding.git "$REQUIRED_INVENTORY_BRANDING_SHA"
+          test "$(git rev-parse FETCH_HEAD)" = "$REQUIRED_INVENTORY_BRANDING_SHA"
 
       - name: Set up Python
         uses: actions/setup-python@v5
