@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import hashlib
 import json
 import re
@@ -49,7 +56,7 @@ def build_workbench_assets(package_root: str | Path = PACKAGE_ROOT) -> dict:
     for extension in ("js", "css"):
         parts = sorted(parts_dir.glob(f"*.{extension}"), key=_part_key)
         if not parts:
-            raise FileNotFoundError(f"未找到工作台 {extension.upper()} parts：{parts_dir}")
+            raise FileNotFoundError(_("未找到工作台 {0} parts：{1}").format(extension.upper(), parts_dir))
         content = _joined(parts)
         source_path = source_dir / f"overseas_cost_workbench.{extension}"
         deployed_path = deployed_dir / source_path.name

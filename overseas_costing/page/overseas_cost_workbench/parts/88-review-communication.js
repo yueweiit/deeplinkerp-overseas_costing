@@ -50,7 +50,7 @@
 
   renderReviewReturnAction(batch = {}) {
     if (!this.canOpenReviewRemediation(batch)) return "";
-    return `<button class="ocw-review-return-btn" type="button" data-action="open-review-remediation">提出整改</button>`;
+    return `<button class="ocw-review-return-btn" type="button" data-action="open-review-remediation">${ocTranslate("提出整改")}</button>`;
   }
 
   renderReviewFeedbackButton(anchor = {}, label = "反馈此项") {
@@ -58,7 +58,7 @@
     const value = (key) => this.escape(String(anchor[key] || ""));
     return `<button class="ocw-review-feedback-btn" type="button" data-action="review-feedback-item"
       data-review-target-tab="${value("target_tab")}" data-review-target-field="${value("target_field")}"
-      data-review-target-row="${value("target_row")}" data-review-target-item="${value("target_item")}">${this.escape(label)}</button>`;
+      data-review-target-row="${value("target_row")}" data-review-target-item="${value("target_item")}">${this.escape(ocTranslate(label))}</button>`;
   }
 
   reviewAnchorFromElement($element) {
@@ -71,7 +71,7 @@
   }
 
   reviewAnchorLabel(anchor = {}) {
-    const labels = { documents: "资料与费用", items: "SKU 明细", vouchers: "凭证核对", overview: "总览", dingtalk: "钉钉审批" };
+    const labels = { documents: ocTranslate("资料与费用"), items: ocTranslate("SKU 明细"), vouchers: ocTranslate("凭证核对"), overview: ocTranslate("总览"), dingtalk: ocTranslate("钉钉审批") };
     const parts = [labels[anchor.target_tab] || anchor.target_tab, anchor.target_field, anchor.target_item || anchor.target_row].filter(Boolean);
     return parts.join(" / ");
   }
@@ -105,7 +105,7 @@
   async closeReviewRemediationDrawer(force = false) {
     if (!force && this.hasUnsavedReviewDrafts()) {
       const confirmed = await new Promise((resolve) => frappe.confirm(
-        "尚有未提交的整改问题，确认放弃草稿？",
+        ocTranslate("尚有未提交的整改问题，确认放弃草稿？"),
         () => resolve(true),
         () => resolve(false)
       ));
@@ -129,21 +129,21 @@
     const rows = state.drafts.map((row, index) => {
       const anchorLabel = this.reviewAnchorLabel(row);
       return `<article class="ocw-review-draft-card" data-review-draft="${index}">
-        <div class="ocw-review-draft-head"><strong>整改问题 ${index + 1}</strong><button type="button" data-action="delete-review-draft" data-index="${index}" aria-label="删除该问题">删除</button></div>
-        ${anchorLabel ? `<div class="ocw-review-anchor"><span>关联位置</span><strong>${this.escape(anchorLabel)}</strong><small>提交后不可在本轮中修改</small></div>` : ""}
-        <label><span>问题说明 <em>*</em></span><textarea data-review-draft-description="${index}" rows="4" placeholder="请直接说明需要改什么、正确值或核对要求">${this.escape(row.description || "")}</textarea></label>
+        <div class="ocw-review-draft-head"><strong>${ocTranslate("整改问题 {0}", [index + 1])}</strong><button type="button" data-action="delete-review-draft" data-index="${index}" aria-label="${ocTranslate('删除该问题')}">${ocTranslate("删除")}</button></div>
+        ${anchorLabel ? `<div class="ocw-review-anchor"><span>${ocTranslate("关联位置")}</span><strong>${this.escape(anchorLabel)}</strong><small>${ocTranslate("提交后不可在本轮中修改")}</small></div>` : ""}
+        <label><span>${ocTranslate("问题说明")} <em>*</em></span><textarea data-review-draft-description="${index}" rows="4" placeholder="${ocTranslate('请直接说明需要改什么、正确值或核对要求')}">${this.escape(row.description || "")}</textarea></label>
         <div class="ocw-review-attachments">
-          ${(row.attachments || []).map((file, fileIndex) => `<span><a href="${this.escape(file.file_url || "#")}" target="_blank" rel="noopener">${this.escape(file.file_name || file.name)}</a><button type="button" data-action="remove-review-attachment" data-index="${index}" data-file-index="${fileIndex}">移除</button></span>`).join("")}
-          <label class="ocw-review-upload"><input type="file" data-review-draft-attachment="${index}" hidden />+上传附件（可选）</label>
+          ${(row.attachments || []).map((file, fileIndex) => `<span><a href="${this.escape(file.file_url || "#")}" target="_blank" rel="noopener">${this.escape(file.file_name || file.name)}</a><button type="button" data-action="remove-review-attachment" data-index="${index}" data-file-index="${fileIndex}">${ocTranslate("移除")}</button></span>`).join("")}
+          <label class="ocw-review-upload"><input type="file" data-review-draft-attachment="${index}" hidden />${ocTranslate("+上传附件（可选）")}</label>
         </div>
       </article>`;
     }).join("");
     const completeCount = state.drafts.filter((row) => String(row.description || "").trim()).length;
     $host.html(`<div class="ocw-review-drawer-mask" data-action="close-review-remediation"></div>
-      <aside class="ocw-review-drawer" role="dialog" aria-modal="true" aria-label="提出整改">
-        <header><div><small>成本核对</small><h2>提出整改</h2><p>先在本地编辑，只有点击“退回整改”才会写入并改变批次状态。</p></div><button type="button" data-action="close-review-remediation" aria-label="关闭">×</button></header>
-        <div class="ocw-review-drawer__body">${rows}<button class="ocw-outline-btn" type="button" data-action="add-review-draft">+添加一项整改问题</button></div>
-        <footer class="ocw-review-drawer__footer"><button class="ocw-outline-btn" type="button" data-action="close-review-remediation" ${state.submitting ? "disabled" : ""}>取消</button><button class="ocw-primary-btn" type="button" data-action="submit-review-remediation" ${!completeCount || completeCount !== state.drafts.length || state.submitting ? "disabled" : ""}>${state.submitting ? "正在退回…" : `退回整改 (${completeCount})`}</button></footer>
+      <aside class="ocw-review-drawer" role="dialog" aria-modal="true" aria-label="${ocTranslate('提出整改')}">
+        <header><div><small>${ocTranslate("成本核对")}</small><h2>${ocTranslate("提出整改")}</h2><p>${ocTranslate("先在本地编辑，只有点击“退回整改”才会写入并改变批次状态。")}</p></div><button type="button" data-action="close-review-remediation" aria-label="${ocTranslate('关闭')}">×</button></header>
+        <div class="ocw-review-drawer__body">${rows}<button class="ocw-outline-btn" type="button" data-action="add-review-draft">${ocTranslate("+添加一项整改问题")}</button></div>
+        <footer class="ocw-review-drawer__footer"><button class="ocw-outline-btn" type="button" data-action="close-review-remediation" ${state.submitting ? "disabled" : ""}>${ocTranslate("取消")}</button><button class="ocw-primary-btn" type="button" data-action="submit-review-remediation" ${!completeCount || completeCount !== state.drafts.length || state.submitting ? "disabled" : ""}>${state.submitting ? ocTranslate("正在退回…") : ocTranslate("退回整改 ({0})", [completeCount])}</button></footer>
       </aside>`);
   }
 
@@ -173,7 +173,7 @@
       attachments: (row.attachments || []).map((file) => file.name),
     }));
     if (!issues.length || issues.some((row) => !row.description)) {
-      frappe.show_alert({ message: "请填写每一项整改问题。", indicator: "orange" });
+      frappe.show_alert({ message: ocTranslate("请填写每一项整改问题。"), indicator: "orange" });
       return;
     }
     state.submitting = true;
@@ -192,7 +192,7 @@
       this.renderReviewRemediationDrawer();
       await this.refreshDetailSummary({ refreshCurrentTab: false });
       await this.switchDetailTab("review");
-      frappe.show_alert({ message: "已退回待整改，采购和墨西哥同事可在复核沟通中回复。", indicator: "green" });
+      frappe.show_alert({ message: ocTranslate("已退回待整改，采购和墨西哥同事可在复核沟通中回复。"), indicator: "green" });
     } catch (error) {
       this.showError(error);
     } finally {
@@ -202,7 +202,7 @@
   }
 
   reviewStatusLabel(value) {
-    return ({ Returned: "待整改", Resubmitted: "待财务复核", Resolved: "已完成", Open: "待处理", Addressed: "已处理待复核" })[value] || value || "--";
+    return ({ Returned: ocTranslate("待整改"), Resubmitted: ocTranslate("待财务复核"), Resolved: ocTranslate("已完成"), Open: ocTranslate("待处理"), Addressed: ocTranslate("已处理待复核") })[value] || value || "--";
   }
 
   async loadReviewCommunication(force = false) {
@@ -228,13 +228,13 @@
     const canResolve = isFinance && round.status === "Resubmitted" && issue.status === "Addressed";
     const anchor = this.reviewAnchorLabel(issue);
     return `<article class="ocw-review-issue is-${String(issue.status || "open").toLowerCase()}" data-review-issue="${this.escape(issue.name || "")}">
-      <header><div><h3>①${index ? `-${index + 1}` : ""} ${this.escape(issue.description || "")}</h3>${anchor ? `<small>关联：${this.escape(anchor)}</small>` : ""}</div><span>${this.escape(this.reviewStatusLabel(issue.status))}</span></header>
-      ${(issue.attachments || []).length ? `<div class="ocw-review-issue-files">${issue.attachments.map((file) => `<a href="${this.escape(file.file_url || "#")}" target="_blank" rel="noopener">📎 ${this.escape(file.file_name || file.name || "附件")}</a>`).join("")}</div>` : ""}
-      ${issue.reply ? `<div class="ocw-review-reply"><strong>处理回复</strong><p>${this.escape(issue.reply)}</p><small>${this.escape(issue.addressed_by || "--")} · ${this.escape(this.formatDateTimeMinute(issue.addressed_at) || issue.addressed_at || "--")}</small></div>` : ""}
+      <header><div><h3>①${index ? `-${index + 1}` : ""} ${this.escape(issue.description || "")}</h3>${anchor ? `<small>${ocTranslate("关联：{0}", [this.escape(anchor)])}</small>` : ""}</div><span>${this.escape(this.reviewStatusLabel(issue.status))}</span></header>
+      ${(issue.attachments || []).length ? `<div class="ocw-review-issue-files">${issue.attachments.map((file) => `<a href="${this.escape(file.file_url || "#")}" target="_blank" rel="noopener">📎 ${this.escape(file.file_name || file.name || ocTranslate("附件"))}</a>`).join("")}</div>` : ""}
+      ${issue.reply ? `<div class="ocw-review-reply"><strong>${ocTranslate("处理回复")}</strong><p>${this.escape(issue.reply)}</p><small>${this.escape(issue.addressed_by || "--")} · ${this.escape(this.formatDateTimeMinute(issue.addressed_at) || issue.addressed_at || "--")}</small></div>` : ""}
       <footer>
-        ${issue.target_tab ? `<button class="ocw-outline-btn" type="button" data-action="review-go-target" data-issue-name="${this.escape(issue.name || "")}">去修改</button>` : ""}
-        ${canReply ? `<textarea data-review-reply="${this.escape(issue.name || "")}" rows="2" placeholder="填写处理说明…">${this.escape(reply)}</textarea><button class="ocw-primary-btn" type="button" data-action="address-review-issue" data-issue-name="${this.escape(issue.name || "")}">回复并标记已处理</button>` : ""}
-        ${canResolve ? `<button class="ocw-primary-btn" type="button" data-action="resolve-review-issue" data-issue-name="${this.escape(issue.name || "")}">确认整改完成</button>` : ""}
+        ${issue.target_tab ? `<button class="ocw-outline-btn" type="button" data-action="review-go-target" data-issue-name="${this.escape(issue.name || "")}">${ocTranslate("去修改")}</button>` : ""}
+        ${canReply ? `<textarea data-review-reply="${this.escape(issue.name || "")}" rows="2" placeholder="${ocTranslate('填写处理说明…')}">${this.escape(reply)}</textarea><button class="ocw-primary-btn" type="button" data-action="address-review-issue" data-issue-name="${this.escape(issue.name || "")}">${ocTranslate("回复并标记已处理")}</button>` : ""}
+        ${canResolve ? `<button class="ocw-primary-btn" type="button" data-action="resolve-review-issue" data-issue-name="${this.escape(issue.name || "")}">${ocTranslate("确认整改完成")}</button>` : ""}
       </footer>
     </article>`;
   }
@@ -243,10 +243,10 @@
     const issues = round.issues || [];
     const allAddressed = issues.length && issues.every((row) => row.status === "Addressed");
     const isProcurement = !this.isFinanceReviewContext();
-    const content = `<div class="ocw-review-round-head"><div><h2>${current ? "本轮整改" : `第 ${Number(round.round_no || 0)} 轮`}</h2><p>财务于 ${this.escape(this.formatDateTimeMinute(round.returned_at) || round.returned_at || "--")} 退回 · 共 ${issues.length} 项</p></div><span>${this.escape(this.reviewStatusLabel(round.status))}</span></div>
+    const content = `<div class="ocw-review-round-head"><div><h2>${current ? ocTranslate("本轮整改") : ocTranslate("第 {0} 轮", [Number(round.round_no || 0)])}</h2><p>${ocTranslate("财务于 {0} 退回 · 共 {1} 项", [this.escape(this.formatDateTimeMinute(round.returned_at) || round.returned_at || "--"), issues.length])}</p></div><span>${this.escape(this.reviewStatusLabel(round.status))}</span></div>
       <div class="ocw-review-issue-list">${issues.map((issue, index) => this.renderReviewIssue(issue, index, round)).join("")}</div>
-      ${current && isProcurement && round.status === "Returned" ? `<div class="ocw-review-resubmit"><p>${allAddressed ? "全部问题已处理，提交时服务器会再次校验当前试算。" : "请先逐项回复并标记已处理。"}</p><button class="ocw-primary-btn" type="button" data-action="resubmit-review-round" ${allAddressed ? "" : "disabled"}>提交财务复核</button></div>` : ""}`;
-    return current ? `<section class="ocw-review-current">${content}</section>` : `<details class="ocw-review-history-round"><summary>第 ${Number(round.round_no || 0)} 轮 · ${this.escape(this.reviewStatusLabel(round.status))}</summary>${content}</details>`;
+      ${current && isProcurement && round.status === "Returned" ? `<div class="ocw-review-resubmit"><p>${allAddressed ? ocTranslate("全部问题已处理，提交时服务器会再次校验当前试算。") : ocTranslate("请先逐项回复并标记已处理。")}</p><button class="ocw-primary-btn" type="button" data-action="resubmit-review-round" ${allAddressed ? "" : "disabled"}>${ocTranslate("提交财务复核")}</button></div>` : ""}`;
+    return current ? `<section class="ocw-review-current">${content}</section>` : `<details class="ocw-review-history-round"><summary>${ocTranslate("第 {0} 轮 · {1}", [Number(round.round_no || 0), this.escape(this.reviewStatusLabel(round.status))])}</summary>${content}</details>`;
   }
 
   async renderReviewCommunicationTab() {
@@ -258,9 +258,9 @@
       const current = data.current_round;
       const history = data.history || [];
       this.$root.find("[data-area='detail-content']").html(`<div class="ocw-review-workspace">
-        <div class="ocw-detail-section-head"><div><span>可追溯协作</span><h2>复核沟通</h2></div>${this.renderReviewReturnAction(this.getDetailBatch?.() || {})}</div>
-        ${current ? this.renderReviewRound(current, true) : `<div class="ocw-detail-empty"><strong>当前没有待处理的整改问题</strong><span>财务提交后，问题、附件、回复和操作人将保留在这里。</span></div>`}
-        ${history.length ? `<section class="ocw-review-history"><h3>历史整改轮次（${history.length}）</h3>${history.map((round) => this.renderReviewRound(round, false)).join("")}</section>` : ""}
+        <div class="ocw-detail-section-head"><div><span>${ocTranslate("可追溯协作")}</span><h2>${ocTranslate("复核沟通")}</h2></div>${this.renderReviewReturnAction(this.getDetailBatch?.() || {})}</div>
+        ${current ? this.renderReviewRound(current, true) : `<div class="ocw-detail-empty"><strong>${ocTranslate("当前没有待处理的整改问题")}</strong><span>${ocTranslate("财务提交后，问题、附件、回复和操作人将保留在这里。")}</span></div>`}
+        ${history.length ? `<section class="ocw-review-history"><h3>${ocTranslate("历史整改轮次（{0}）", [history.length])}</h3>${history.map((round) => this.renderReviewRound(round, false)).join("")}</section>` : ""}
       </div>`);
       this.restoreReviewTargetFocus();
     } catch (error) {
@@ -277,7 +277,7 @@
     const state = this.ensureReviewCommunicationState();
     const issue = this.reviewCurrentIssue(issueName);
     const reply = String(state.replyDrafts[issueName] ?? issue?.reply ?? "").trim();
-    if (!reply) return frappe.show_alert({ message: "请先填写处理回复。", indicator: "orange" });
+    if (!reply) return frappe.show_alert({ message: ocTranslate("请先填写处理回复。"), indicator: "orange" });
     try {
       await this.call("overseas_costing.api.review.address_review_issue", { batch_name: state.batchName, issue_name: issueName, reply, expected_modified: issue?.modified || "" });
       delete state.replyDrafts[issueName];
@@ -335,7 +335,7 @@
     this.renderReviewReturnBanner(issue);
     const element = $matches.get(0);
     if (!element) {
-      frappe.show_alert({ message: "原关联位置已变化，已打开原页签，请手工核对。", indicator: "orange" });
+      frappe.show_alert({ message: ocTranslate("原关联位置已变化，已打开原页签，请手工核对。"), indicator: "orange" });
       return;
     }
     const $target = $(element).closest("td, tr, .ocw-mf-fee-row").first().length ? $(element).closest("td, tr, .ocw-mf-fee-row").first() : $(element);
@@ -348,7 +348,7 @@
 
   renderReviewReturnBanner(issue = {}) {
     this.$root.find("[data-review-return-banner]").remove();
-    this.$root.find("[data-area='detail-content']").prepend(`<div class="ocw-review-return-banner" data-review-return-banner="1"><span>正在查看整改问题 ${this.escape(issue.order_no || "")}的关联位置</span><button type="button" data-action="return-review-issue" data-issue-name="${this.escape(issue.name || "")}">返回整改问题 ${this.escape(issue.order_no || "")}</button></div>`);
+    this.$root.find("[data-area='detail-content']").prepend(`<div class="ocw-review-return-banner" data-review-return-banner="1"><span>${ocTranslate("正在查看整改问题 {0}的关联位置", [this.escape(issue.order_no || "")])}</span><button type="button" data-action="return-review-issue" data-issue-name="${this.escape(issue.name || "")}">${ocTranslate("返回整改问题 {0}", [this.escape(issue.order_no || "")])}</button></div>`);
   }
 
   restoreReviewTargetFocus() {
@@ -378,7 +378,7 @@
       const completeCount = drafts.filter((row) => String(row.description || "").trim()).length;
       this.$root.find("[data-action='submit-review-remediation']")
         .prop("disabled", completeCount !== drafts.length)
-        .text(`退回整改 (${completeCount})`);
+        .text(ocTranslate("退回整改 ({0})", [completeCount]));
     });
     this.$root.on("click", "[data-action='delete-review-draft']", (event) => {
       this.ensureReviewCommunicationState().drafts.splice(Number($(event.currentTarget).attr("data-index")), 1);

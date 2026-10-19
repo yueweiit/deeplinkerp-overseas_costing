@@ -7,6 +7,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import base64
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -309,7 +316,7 @@ def _load_batch_payload(batch_payload: str | dict | None) -> dict:
         return dict(batch_payload)
     loaded = _json.loads(batch_payload)
     if not isinstance(loaded, dict):
-        raise ValueError("新增报关运单参数必须是对象。")
+        raise ValueError(_("新增报关运单参数必须是对象。"))
     return loaded
 
 

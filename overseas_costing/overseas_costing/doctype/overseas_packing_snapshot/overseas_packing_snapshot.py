@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import frappe
 from frappe.model.document import Document
 
@@ -9,9 +16,9 @@ from frappe.model.document import Document
 class OverseasPackingSnapshot(Document):
     def validate(self) -> None:
         if not self.batch:
-            frappe.throw("所属批次不能为空。")
+            frappe.throw(_("所属批次不能为空。"))
         if self.status not in {"Draft", "Confirmed", "Superseded"}:
-            frappe.throw("装箱快照状态不合法。")
+            frappe.throw(_("装箱快照状态不合法。"))
 
     def before_save(self) -> None:
         previous = self.get_doc_before_save()
@@ -27,4 +34,4 @@ class OverseasPackingSnapshot(Document):
         }
         if allow_packing_supersede and changed <= allowed_changes and self.status == "Superseded" and not self.is_current:
             return
-        frappe.throw("不能修改已确认的装箱快照；请确认新来源并生成新版本。")
+        frappe.throw(_("不能修改已确认的装箱快照；请确认新来源并生成新版本。"))

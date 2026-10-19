@@ -1,6 +1,13 @@
 """不依赖 Frappe 的来源归一化。未知/部分内容保留，不推断成最终值。"""
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import hashlib
 import json
 import re
@@ -190,7 +197,7 @@ def parse_source(row, *, logistics_codes):
     corp = str(row.get('corp_id') or payload.get('corpId') or '')
     instance = str(row.get('process_instance_id') or payload.get('processInstanceId') or '')
     if not corp or not instance:
-        raise ValueError('来源缺少企业或审批实例 ID')
+        raise ValueError(_('来源缺少企业或审批实例 ID'))
     process = row.get('process_code') or payload.get('processCode')
     from .freight_lines import financial_candidate, identifiers_in
     classified = is_logistics_expense(fields) or financial_candidate(row, fields) or row.get('financial_scope') is True

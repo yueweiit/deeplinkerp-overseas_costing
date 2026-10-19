@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import base64
 import hashlib
 import hmac
@@ -39,7 +46,7 @@ class PackingSourceChangedError(PackingSourceIntegrityError):
 def normalize_packing_source_kind(value: str) -> str:
     kind = str(value or "").strip().lower()
     if kind not in SOURCE_KIND_ALIASES:
-        raise ValueError("不支持的装箱来源类型。")
+        raise ValueError(_("不支持的装箱来源类型。"))
     return SOURCE_KIND_ALIASES[kind]
 
 
@@ -508,7 +515,7 @@ def resolve_trusted_packing_source(
     else:
         latest = effective_source.current_source_bundle(batch_name)
     if context != ((latest or {}).get('context') or {}):
-        raise PackingSourceIntegrityError('当前关联来源已变化，请重新预览。')
+        raise PackingSourceIntegrityError(_('当前关联来源已变化，请重新预览。'))
     if context:
         trusted['source_context'] = context
         trusted['source_hash'] = hashlib.sha256(f"{trusted['source_hash']}|{context['fingerprint']}".encode()).hexdigest()
@@ -519,7 +526,7 @@ def resolve_packing_attachment_path(source,bundle=None):
     """Keep bound XLS support inside the already-authorized attachment scope."""
     if bundle and (bundle['context']['root_kind']=='expense' or bundle['context'].get('source_lineage')):
         if not effective_source.attachment_allowed(source,bundle,for_analysis=True):
-            raise ValueError('附件不属于当前采购支出资料。')
+            raise ValueError(_('附件不属于当前采购支出资料。'))
         if str(source.get('file_name') or '').lower().endswith('.xls'):
             from .attachment_parse_service import _resolve_source_file_path
             return _resolve_source_file_path(file_url=str(source.get('file_url') or ''))
@@ -531,20 +538,20 @@ def _read_archived_xls_grid(path, sheet_name, *, max_rows=1000,max_columns=120):
     import xlrd
     from .packing_grid import Cell, MergeRange, dataclass_dict
     if path.stat().st_size > 20*1024*1024:
-        raise ValueError('归档工作簿超过 20 MB 限制。')
+        raise ValueError(_('归档工作簿超过 20 MB 限制。'))
     book=xlrd.open_workbook(str(path),formatting_info=True)
     try:
         if not sheet_name or sheet_name not in book.sheet_names():
-            raise ValueError('请选择归档工作簿中的准确工作表。')
+            raise ValueError(_('请选择归档工作簿中的准确工作表。'))
         sheet=book.sheet_by_name(sheet_name)
         if sheet.nrows > max_rows or sheet.ncols > max_columns:
-            raise ValueError('归档工作表超过行列限制，请核对完整资料。')
+            raise ValueError(_('归档工作表超过行列限制，请核对完整资料。'))
         cells=[]
         for r in range(sheet.nrows):
             row=[]
             for c in range(sheet.ncols):
                 if sheet.cell_type(r,c)==xlrd.XL_CELL_ERROR:
-                    raise ValueError('归档工作表包含错误单元格，不能采用。')
+                    raise ValueError(_('归档工作表包含错误单元格，不能采用。'))
                 row.append(dataclass_dict(Cell(raw_value=sheet.cell_value(r,c),display_value=None,formula=None,row=r+1,column=c+1)))
             cells.append(row)
         return {'schema_version':1,'source_kind':'approval_attachment','sheet_name':sheet_name,
@@ -603,20 +610,20 @@ def refresh_bound_wiki_snapshot(batch_name, source_id, *, store=None, ledger=Non
     context=bundle['context']
     effective_source.require_readable(context)
     if context['root_kind']!='expense' or source_id not in effective_source.explicit_wiki_sources(bundle['source']):
-        raise ValueError('装箱计划表不是当前采购支出明确关联的工作表。')
+        raise ValueError(_('装箱计划表不是当前采购支出明确关联的工作表。'))
     workbook, separator, sheet=source_id.partition(':')
     if not separator or not workbook or not sheet:
-        raise ValueError('装箱计划表标识不完整。')
+        raise ValueError(_('装箱计划表标识不完整。'))
     cache_key=_bound_wiki_cache_key(context,source_id)
     observed=store.get('state',cache_key) or {}
     observed_generation=int(observed.get('refresh_generation') or 0)
     clients=clients or get_packing_runtime_clients()
     manifest=clients.catalog.get_latest_snapshot(workbook,sheet) or {}
     if not manifest.get('content_sha256') or str(manifest.get('corp_id') or '')!=context['corp_id']:
-        raise PackingSourceIntegrityError('当前工作表缺少本企业可验证归档，请先完成归档刷新。')
+        raise PackingSourceIntegrityError(_('当前工作表缺少本企业可验证归档，请先完成归档刷新。'))
     payload=clients.archive.download(manifest)
     if str(payload.get('workbookId') or '')!=workbook or str(payload.get('sheetId') or '')!=sheet:
-        raise PackingSourceIntegrityError('归档内容不属于所选工作表。')
+        raise PackingSourceIntegrityError(_('归档内容不属于所选工作表。'))
     grid=build_grid_from_dingtalk_snapshot(payload)
     trusted={'source_hash':str(manifest['content_sha256']), 'grid':grid,'preview':parse_packing_grid(grid),
              'source':{'source_kind':'wiki_sheet','source_id':source_id,'workbook_id':workbook,'sheet_id':sheet,
@@ -626,9 +633,9 @@ def refresh_bound_wiki_snapshot(batch_name, source_id, *, store=None, ledger=Non
         current=effective_source.load_source_bundle(batch_name,store=store,ledger=ledger,lock=True)
         cache=store.get('state',cache_key,lock=True) or {}
         if int(cache.get('refresh_generation') or 0)!=observed_generation:
-            raise PackingSourceIntegrityError('已有更新的工作表刷新结果，请重新读取本地资料。')
+            raise PackingSourceIntegrityError(_('已有更新的工作表刷新结果，请重新读取本地资料。'))
         if current['context']!=context or source_id not in effective_source.explicit_wiki_sources(current['source']):
-            raise PackingSourceIntegrityError('获取期间采购支出关联已变化，请重新获取。')
+            raise PackingSourceIntegrityError(_('获取期间采购支出关联已变化，请重新获取。'))
         old_sha=(cache.get('trusted') or {}).get('source_hash')
         changed=bool(old_sha and old_sha!=trusted['source_hash'])
         store.put('state',{'id':cache_key,'updated_at':utcnow(),
@@ -663,14 +670,14 @@ def _resolve_trusted_packing_source(
         source = _attachment_source_v2(batch_name, resolved_source_id)
         bundle = effective_source.validate_packing_source(batch_name, kind, resolved_source_id, attachment=source)
         if not source:
-            raise ValueError("未找到当前批次的装箱附件。")
+            raise ValueError(_("未找到当前批次的装箱附件。"))
         if kind == "approval_attachment" and str(source.get("source_type") or "").upper() != "OA":
-            raise ValueError("所选附件不是当前批次的钉钉审批附件。")
+            raise ValueError(_("所选附件不是当前批次的钉钉审批附件。"))
         if _attachment_is_audit_only(source, bundle=bundle):
-            raise ValueError("该附件来自已排除审批，只能审计查看，不能作为装箱来源。")
+            raise ValueError(_("该附件来自已排除审批，只能审计查看，不能作为装箱来源。"))
         file_url = str(source.get("file_url") or "").strip()
         if not file_url:
-            raise ValueError("装箱附件尚未保存到系统。")
+            raise ValueError(_("装箱附件尚未保存到系统。"))
         selected_sheet = str(sheet_name or "").strip()
         path = resolve_packing_attachment_path(source,bundle)
         bound_xls = bool(bundle and (bundle['context']['root_kind']=='expense' or bundle['context'].get('source_lineage')) and path.suffix.lower()=='.xls')
@@ -709,10 +716,10 @@ def _resolve_trusted_packing_source(
         bundle = effective_source.validate_packing_source(batch_name, kind, resolved_source_id)
         source = _find_comment_source(batch_name, resolved_source_id)
         if not source:
-            raise ValueError("未找到该钉钉评论，可能已重新同步。")
+            raise ValueError(_("未找到该钉钉评论，可能已重新同步。"))
         parsed = parse_packing_comment(str(source.get("remark") or ""))
         if not parsed.get("is_candidate"):
-            raise ValueError("该评论没有可识别的装箱信息。")
+            raise ValueError(_("该评论没有可识别的装箱信息。"))
         source_hash = hashlib.sha256(
             json.dumps(
                 {
@@ -745,11 +752,11 @@ def _resolve_trusted_packing_source(
     if bundle and bundle['context']['root_kind']=='expense':
         cached=load_bound_wiki_snapshot(bundle['context'],resolved_source_id)
         if not cached:
-            raise ValueError('当前采购支出工作表尚未获取到本地，请先点击刷新或获取资料。')
+            raise ValueError(_('当前采购支出工作表尚未获取到本地，请先点击刷新或获取资料。'))
         return cached
     workbook_id, separator, sheet_id = resolved_source_id.partition(":")
     if not separator or not workbook_id or not sheet_id:
-        raise ValueError("装箱计划表 Sheet 来源 ID 不合法。")
+        raise ValueError(_("装箱计划表 Sheet 来源 ID 不合法。"))
     from overseas_costing.services.packing_sheet_cache_service import (
         PackingSheetCacheError,
         get_cached_sheet,
@@ -775,19 +782,19 @@ def verify_current_wiki_source(batch_name: str, source_id: str) -> str:
 
         cached = get_cached_sheet(resolved_source_id)
     if not cached:
-        raise PackingSourceIntegrityError("该装箱计划 Sheet 尚无可用的本地缓存。")
+        raise PackingSourceIntegrityError(_("该装箱计划 Sheet 尚无可用的本地缓存。"))
     workbook_id, separator, sheet_id = resolved_source_id.partition(":")
     if not separator or not workbook_id or not sheet_id:
-        raise ValueError("装箱计划表 Sheet 来源 ID 不合法。")
+        raise ValueError(_("装箱计划表 Sheet 来源 ID 不合法。"))
     from overseas_costing.integrations.dingtalk_packing_source import get_packing_runtime_clients
 
     manifest = get_packing_runtime_clients().catalog.get_latest_snapshot(workbook_id, sheet_id)
     if not manifest or str(manifest.get("status") or "ready") != "ready":
-        raise PackingSourceIntegrityError("无法校验装箱计划 Sheet 的最新版本。")
+        raise PackingSourceIntegrityError(_("无法校验装箱计划 Sheet 的最新版本。"))
     remote_hash = str(manifest.get("content_sha256") or "").strip().lower()
     cached_hash = str(cached.get("source_hash") or "").strip().lower()
     if not remote_hash or remote_hash != cached_hash:
-        raise PackingSourceChangedError("装箱计划表已更新，请刷新所选 Sheet 后重新预览。")
+        raise PackingSourceChangedError(_("装箱计划表已更新，请刷新所选 Sheet 后重新预览。"))
     if context:
         return hashlib.sha256(f"{cached_hash}|{context['fingerprint']}".encode()).hexdigest()
     return cached_hash

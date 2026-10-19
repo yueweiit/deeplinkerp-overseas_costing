@@ -6,6 +6,13 @@ bench --site development.localhost execute overseas_costing.scripts.restore_hpcu
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import json
 import shutil
 from pathlib import Path
@@ -254,7 +261,7 @@ def _ensure_source_files(*, include_manual_baseline: bool = False) -> None:
         sources.append(MANUAL_BASELINE_SOURCE)
     missing = [str(path) for path in sources if not path.exists()]
     if missing:
-        raise FileNotFoundError(f"演示资料不存在：{', '.join(missing)}")
+        raise FileNotFoundError(_("演示资料不存在：{0}").format(', '.join(missing)))
 
 
 def _reset_existing_batch() -> dict:

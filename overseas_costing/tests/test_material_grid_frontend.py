@@ -421,9 +421,9 @@ def test_material_reference_dialogs_reuse_the_shared_wide_modal():
     # 窄弹窗会把逐行下拉表和候选列表挤成一条，所以这些弹窗统一挂到共用的宽弹窗类上，
     # 而不是各写一套宽度。
     for anchor in (
-        "title:bulk ? `批量设置项目归属（${items.length} 行）` : `选择项目归属`",
-        'title:source === "bulk" ? `批量设置供应商（${items.length} 行）` : "选择 ERP 供应商"',
-        'title: "已排除物料"',
+        'title:bulk ? ocTranslate("批量设置项目归属（{0} 行）", [items.length])',
+        'title:source === "bulk" ? ocTranslate("批量设置供应商（{0} 行）", [items.length])',
+        'title: ocTranslate("已排除物料")',
     ):
         added = source.split(anchor, 1)[1].split("addClass(", 1)[1].split(")", 1)[0]
         assert added.strip() == '"ocw-mf-dialog"', anchor

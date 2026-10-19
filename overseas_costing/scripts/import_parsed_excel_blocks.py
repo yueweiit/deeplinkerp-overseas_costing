@@ -7,6 +7,13 @@ bench --site development.localhost execute overseas_costing.scripts.import_parse
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import json
 from pathlib import Path
 
@@ -30,13 +37,13 @@ def _resolve_blocks_file(file_path: str | None = None) -> Path:
         path = Path(file_path).expanduser()
         if path.exists():
             return path
-        raise FileNotFoundError(f"未找到 Excel blocks 文件：{file_path}")
+        raise FileNotFoundError(_("未找到 Excel blocks 文件：{0}").format(file_path))
 
     for path in DEFAULT_CANDIDATE_PATHS:
         if path.exists():
             return path
 
-    raise FileNotFoundError("未找到 excel-imported-blocks.js，请通过 file_path 参数传入。")
+    raise FileNotFoundError(_("未找到 excel-imported-blocks.js，请通过 file_path 参数传入。"))
 
 
 def preview_2026_yuewei_sea(

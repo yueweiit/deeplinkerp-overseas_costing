@@ -1,4 +1,11 @@
 """Effective shipment values, without rewriting read-only purchase facts."""
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 import json
 from copy import deepcopy
 from decimal import Decimal, InvalidOperation
@@ -47,7 +54,7 @@ def shipment_input_fingerprint(row):
 def build_manual_shipment_valuation(row, amount_rmb, *, actor, reason='', confirmed_at=''):
     amount = number(amount_rmb)
     if amount is None or amount < 0:
-        raise ValueError('本次发货货值必须是有限非负数字。')
+        raise ValueError(_('本次发货货值必须是有限非负数字。'))
     inputs = shipment_input(row)
     return {
         'amount_rmb': _decimal_text(amount),

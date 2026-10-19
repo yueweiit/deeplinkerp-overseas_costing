@@ -1,4 +1,11 @@
 """Independent, server-owned packing comparison and explicit row adoption."""
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 import re
 from copy import deepcopy
 from .model import digest,dumps,identity,number,fields_of,pick,merchandise_price
@@ -30,7 +37,7 @@ def text_goods(text,evidence):
 
 def evidence_goods(store,logistics,source,lines):
     if any(r.get('identifier_conflict') for r in matching_lines(logistics,lines)):
-        raise ValueError('装箱证据的运单与审批号指向不同票，请先核对')
+        raise ValueError(_('装箱证据的运单与审批号指向不同票，请先核对'))
     goods=[];complete=False;texts=[];seen_text=set()
     for line in lines:
         if line.get('cargo_text') and line['cargo_text'] not in seen_text:
@@ -80,12 +87,12 @@ def item_fingerprint(items):
 
 def preview(store,ledger,batch_name,version_name,candidate_id,candidate_revision):
     c=store.get('freight_candidate',candidate_id)
-    if not c or c['revision']!=candidate_revision or c['status']=='rejected':raise ValueError('候选已变化')
-    if not store.find('batch_map',batch=batch_name,source_id=c['logistics_id']):raise ValueError('候选不属于本票')
+    if not c or c['revision']!=candidate_revision or c['status']=='rejected':raise ValueError(_('候选已变化'))
+    if not store.find('batch_map',batch=batch_name,source_id=c['logistics_id']):raise ValueError(_('候选不属于本票'))
     batch=ledger.get('batch',batch_name)
-    if batch['current_version']!=version_name:raise ValueError('请在当前成本版本核对装箱')
+    if batch['current_version']!=version_name:raise ValueError(_('请在当前成本版本核对装箱'))
     source=store.get('source',c['expense_id']);logistics=store.get('source',c['logistics_id'])
-    if source['snapshot']!=c['expense_snapshot'] or logistics['snapshot']!=c['logistics_snapshot']:raise ValueError('来源已变化')
+    if source['snapshot']!=c['expense_snapshot'] or logistics['snapshot']!=c['logistics_snapshot']:raise ValueError(_('来源已变化'))
     lines=[store.get('freight_line',i) for i in c['line_ids']]
     goods,complete,texts=evidence_goods(store,logistics,source,lines)
     items=ledger.rows('item',batch=batch_name,version=version_name)
@@ -108,31 +115,31 @@ def confirm(store,ledger,batch_name,version_name,preview_id,revision,selections,
     with store.atomic():
         store.get('state','match_lock',lock=True)
         review=store.get('packing_review',preview_id,lock=True)
-        if not review or review['batch']!=batch_name or review['revision']!=revision:raise ValueError('装箱预览不属于本票或已变化')
+        if not review or review['batch']!=batch_name or review['revision']!=revision:raise ValueError(_('装箱预览不属于本票或已变化'))
         batch=ledger.get('batch',batch_name,lock=True)
         if review['status']=='applied' and review.get('applied_version')==batch['current_version']:return {'status':'applied','version':batch['current_version'],'cached':True}
-        if batch['current_version']!=version_name or review['version']!=version_name:raise ValueError('成本版本已变化')
+        if batch['current_version']!=version_name or review['version']!=version_name:raise ValueError(_('成本版本已变化'))
         candidate=store.get('freight_candidate',review['candidate_id'],lock=True)
         if not candidate or candidate['status']=='rejected' or candidate['revision']!=review['candidate_revision']:
-            raise ValueError('匹配候选已变化或被否决，请重新核对')
+            raise ValueError(_('匹配候选已变化或被否决，请重新核对'))
         items=ledger.rows('item',batch=batch_name,version=version_name)
         if review['item_fingerprint']!=item_fingerprint(items) or review['freight_revision']!=context(store,ledger,batch_name,version_name)['revision']:
-            raise ValueError('当前资料已变化，请重新预览装箱差异')
+            raise ValueError(_('当前资料已变化，请重新预览装箱差异'))
         source=store.get('source',review['source_id'],lock=True)
         mapping=store.find('batch_map',batch=batch_name)
         logistics=store.get('source',mapping[0]['source_id'],lock=True) if mapping else None
-        if not logistics or logistics['invalid'] or logistics['snapshot']!=review['logistics_snapshot']:raise ValueError('本票国际物流已变化，请重新预览')
-        if source['snapshot']!=review['source_snapshot'] or not source['approved'] or source['invalid']:raise ValueError('装箱来源已更新、未批准或失效')
+        if not logistics or logistics['invalid'] or logistics['snapshot']!=review['logistics_snapshot']:raise ValueError(_('本票国际物流已变化，请重新预览'))
+        if source['snapshot']!=review['source_snapshot'] or not source['approved'] or source['invalid']:raise ValueError(_('装箱来源已更新、未批准或失效'))
         if any(r.get('identifier_conflict') for r in matching_lines(logistics,[store.get('freight_line',lid) for lid in candidate['line_ids']])):
-            raise ValueError('装箱证据的运单与审批号冲突，不能采用')
-        if not isinstance(selections,list) or not selections:raise ValueError('请选择需要采用的物料行')
+            raise ValueError(_('装箱证据的运单与审批号冲突，不能采用'))
+        if not isinstance(selections,list) or not selections:raise ValueError(_('请选择需要采用的物料行'))
         goods={g['line_key']:g for g in review['goods']}
-        if len(goods)!=len(review['goods']):raise ValueError('来源行身份重复，请先核对')
+        if len(goods)!=len(review['goods']):raise ValueError(_('来源行身份重复，请先核对'))
         selected_keys=[s.get('line_key') for s in selections];target_ids=[s.get('item_name') for s in selections if s.get('item_name')]
-        if len(set(selected_keys))!=len(selected_keys) or set(selected_keys)-set(goods) or len(set(target_ids))!=len(target_ids):raise ValueError('装箱行选择或映射重复')
+        if len(set(selected_keys))!=len(selected_keys) or set(selected_keys)-set(goods) or len(set(target_ids))!=len(target_ids):raise ValueError(_('装箱行选择或映射重复'))
         current={i['name']:i for i in items}
-        if set(target_ids)-set(current):raise ValueError('映射物料不属于当前版本')
-        if complete_confirmed and (not review['complete'] or set(selected_keys)!=set(goods)):raise ValueError('部分资料不能作为完整清单删除物料')
+        if set(target_ids)-set(current):raise ValueError(_('映射物料不属于当前版本'))
+        if complete_confirmed and (not review['complete'] or set(selected_keys)!=set(goods)):raise ValueError(_('部分资料不能作为完整清单删除物料'))
         if locked(batch):
             save(store,{'id':digest(POLICY,'packing-queue',preview_id),'kind':'packing_apply','status':'queued',
                 'request':{'batch_name':batch_name,'version_name':version_name,'preview_id':preview_id,'revision':revision,'selections':selections,'actor':actor,'complete_confirmed':complete_confirmed}})
@@ -165,7 +172,7 @@ def confirm(store,ledger,batch_name,version_name,preview_id,revision,selections,
         if complete_confirmed:
             for item in new_items:
                 if item['name'] not in used:
-                    if item.get('manual_override_flag'):raise ValueError('完整清单与人工补充行冲突，请先核对')
+                    if item.get('manual_override_flag'):raise ValueError(_('完整清单与人工补充行冲突，请先核对'))
                     ledger.delete('item',item['name'])
         meta=row_meta(version);freight=meta.get('freight_settlement') or {'policy':POLICY,'revision':review['freight_revision'],'claims':[]}
         freight['packing_review_id']=review['id'];meta['freight_settlement']=freight
@@ -185,23 +192,23 @@ def confirm(store,ledger,batch_name,version_name,preview_id,revision,selections,
 
 
 def resolve_checks(store,ledger,batch_name,version_name,selections,reason,actor):
-    if not isinstance(selections,list) or not selections or not str(reason).strip():raise ValueError('请选择装箱核对项并填写依据')
+    if not isinstance(selections,list) or not selections or not str(reason).strip():raise ValueError(_('请选择装箱核对项并填写依据'))
     with store.atomic():
         store.get('state','match_lock',lock=True)
         batch=ledger.get('batch',batch_name,lock=True) or {};version=ledger.get('version',version_name,lock=True) or {}
         if batch.get('current_version')!=version_name or version.get('batch')!=batch_name or version.get('status') in ('Confirmed','Archived') or batch.get('writeback_status')=='Success' or locked(batch):
-            raise ValueError('请在未锁定的当前调整草稿核对装箱')
+            raise ValueError(_('请在未锁定的当前调整草稿核对装箱'))
         from overseas_costing.services.effective_logistics_source import resolve_source_context
         current_context=resolve_source_context(batch_name,version_name,store=store,ledger=ledger,lock=True)
-        if not current_context.get('available') or current_context.get('invalid'):raise ValueError('当前装箱来源已变化或不可用，请先重新核对来源')
+        if not current_context.get('available') or current_context.get('invalid'):raise ValueError(_('当前装箱来源已变化或不可用，请先重新核对来源'))
         for choice in selections:
             item=ledger.get('item',choice.get('item_name'),lock=True) or {}
             if item.get('batch')!=batch_name or item.get('version')!=version_name or item_fingerprint([item])!=choice.get('expected_item_hash'):
-                raise ValueError('物料或装箱值已变化，请刷新后核对')
+                raise ValueError(_('物料或装箱值已变化，请刷新后核对'))
             meta=row_meta(item)
             if not meta.get('settlement_packing_review'):continue
-            if (meta.get('effective_logistics_source') or {}).get('fingerprint')!=current_context.get('fingerprint'):raise ValueError('装箱来源或采用版本已变化，请重新比对')
-            if not any(item.get(k) is not None for k in ('gross_weight_kg','volume_m3')):raise ValueError('请先补充本票重量或体积')
+            if (meta.get('effective_logistics_source') or {}).get('fingerprint')!=current_context.get('fingerprint'):raise ValueError(_('装箱来源或采用版本已变化，请重新比对'))
+            if not any(item.get(k) is not None for k in ('gross_weight_kg','volume_m3')):raise ValueError(_('请先补充本票重量或体积'))
             meta.pop('settlement_packing_review',None)
             meta['freight_packing_verification']={'actor':actor,'reason':str(reason),'at':utcnow(),'item_fingerprint':choice['expected_item_hash']}
             ledger.put('item',item['name'],{'extra_json':dumps(meta),**{k:0 for k in DERIVED_FIELDS}})

@@ -1,4 +1,11 @@
 """Administrator recovery of one fee application; packing stays independent."""
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 from .application import row_meta,round_fee_rules
 from .freight_adoption import context,rule_for,refresh_item_contexts
 from .fee_policy import row_scopes
@@ -8,20 +15,20 @@ from .writer import mutable_version,locked
 
 
 def restore_fee_application(store,ledger,batch_name,version_name,application_id,expected_revision,reason,actor):
-    if not str(reason).strip():raise ValueError('请填写恢复原因')
+    if not str(reason).strip():raise ValueError(_('请填写恢复原因'))
     with store.atomic():
         store.get('state','job_lock',lock=True);store.get('state','match_lock',lock=True)
         app=store.get('freight_application',application_id,lock=True)
         batch=ledger.get('batch',batch_name,lock=True) or {}
-        if not app or app['batch']!=batch_name or batch.get('current_version')!=version_name:raise ValueError('应用记录或当前版本不符')
+        if not app or app['batch']!=batch_name or batch.get('current_version')!=version_name:raise ValueError(_('应用记录或当前版本不符'))
         current=context(store,ledger,batch_name,version_name)
-        if current['revision']!=expected_revision or app['revision']!=expected_revision:raise ValueError('采用记录已变化；只能恢复当前采用记录的前一状态')
-        if locked(batch):raise ValueError('批次正在编辑，请结束编辑后恢复')
+        if current['revision']!=expected_revision or app['revision']!=expected_revision:raise ValueError(_('采用记录已变化；只能恢复当前采用记录的前一状态'))
+        if locked(batch):raise ValueError(_('批次正在编辑，请结束编辑后恢复'))
         previous=(app.get('before') or {}).get('claims') or []
         for claim in previous:
             store.get('source',claim['source_id'],lock=True)
             occupied=store.find('freight_claim',charge_key=claim['charge_key'])
-            if any(row['batch']!=batch_name for row in occupied):raise ValueError('原费用现已被其他票占用，不能直接恢复')
+            if any(row['batch']!=batch_name for row in occupied):raise ValueError(_('原费用现已被其他票占用，不能直接恢复'))
         for status in ('queued','running'):
             for job in store.find('job',status=status):pause_job(store,job['id'])
         store.put('state',{'id':'control','updated_at':utcnow(),'data':dumps({'enabled':False,'recovery_application':application_id})})

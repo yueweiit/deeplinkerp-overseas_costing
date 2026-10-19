@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import base64
 import hashlib
 import hmac
@@ -76,15 +83,15 @@ def validate_material_workbook_metadata(file_name: str, file_size: object) -> No
 
     normalized_name = str(file_name or "").strip().lower()
     if normalized_name.endswith(".xls"):
-        raise ValueError("暂不支持旧版 .xls，请先在 Excel 中另存为 .xlsx 后上传。")
+        raise ValueError(_("暂不支持旧版 .xls，请先在 Excel 中另存为 .xlsx 后上传。"))
     if not normalized_name.endswith((".xlsx", ".xlsm")):
-        raise ValueError("装箱工作簿仅支持 .xlsx 或 .xlsm 文件。")
+        raise ValueError(_("装箱工作簿仅支持 .xlsx 或 .xlsm 文件。"))
     try:
         normalized_size = int(file_size or 0)
     except (TypeError, ValueError):
         normalized_size = 0
     if normalized_size > MAX_MATERIAL_WORKBOOK_BYTES:
-        raise ValueError("物料 Excel 文件不能超过 20 MB。")
+        raise ValueError(_("物料 Excel 文件不能超过 20 MB。"))
 
 
 def _normalized(value: object) -> str:
@@ -1044,7 +1051,7 @@ def decode_material_preview_revision(value: str, *, signing_key: Optional[bytes]
 def _source_kind(value: str) -> str:
     normalized = str(value or "").strip().lower()
     if normalized not in SOURCE_KIND_ALIASES:
-        raise ValueError("不支持的物料导入来源类型。")
+        raise ValueError(_("不支持的物料导入来源类型。"))
     return SOURCE_KIND_ALIASES[normalized]
 
 
@@ -1177,7 +1184,7 @@ class FrappeMaterialImportRepository:
 
         resolved_batch = batch_service._resolve_batch_name(batch_name)
         if not resolved_batch:
-            raise ValueError(f"未找到批次：{batch_name}")
+            raise ValueError(_("未找到批次：{0}").format(batch_name))
         batch = frappe.db.get_value(
             "Overseas Cost Batch",
             resolved_batch,
@@ -1192,7 +1199,7 @@ class FrappeMaterialImportRepository:
             as_dict=True,
         ) or {}
         if not version_name or str(version.get("batch") or "") != str(batch.get("name") or ""):
-            raise ValueError("当前批次没有有效的当前版本。")
+            raise ValueError(_("当前批次没有有效的当前版本。"))
         return {
             "batch": str(batch.get("name") or ""),
             "version": version_name,
@@ -1477,7 +1484,7 @@ def _review_trusted_grid(trusted: dict, reviews: object = None) -> dict:
     grid = trusted.get("grid")
     if not isinstance(grid, dict):
         if reviews not in (None, ""):
-            raise ValueError("当前来源没有可复核的原始单元格网格。")
+            raise ValueError(_("当前来源没有可复核的原始单元格网格。"))
         return trusted
     reviewed = review_packing_grid(grid, str(trusted.get("source_hash") or ""), reviews)
     return {**trusted, "grid": reviewed, "preview": parse_packing_grid(reviewed),
@@ -1552,16 +1559,16 @@ def _selected_source_context(context: dict, trusted: dict) -> dict:
     selected = dict(trusted.get('source_context') or context.get('source_context') or {})
     for key, expected in (('batch', context['batch']), ('cost_version', context['version'])):
         if selected.get(key) and str(selected[key]) != str(expected):
-            raise effective_source.EffectiveSourceIntegrityError('所选来源不属于当前批次或成本版本。')
+            raise effective_source.EffectiveSourceIntegrityError(_('所选来源不属于当前批次或成本版本。'))
     current_corp = (context.get('source_context') or {}).get('corp_id')
     if current_corp and selected.get('corp_id') and str(selected['corp_id']) != str(current_corp):
-        raise effective_source.EffectiveSourceIntegrityError('所选来源企业与当前批次不一致。')
+        raise effective_source.EffectiveSourceIntegrityError(_('所选来源企业与当前批次不一致。'))
     lineage = selected.get('source_lineage') or {}
     if lineage and any(str(lineage.get(key) or '') != str(expected or '') for key, expected in (
         ('batch', context['batch']), ('cost_version', context['version']),
         ('instance_id', selected.get('instance_id')),
     )):
-        raise effective_source.EffectiveSourceIntegrityError('所选来源的批次依赖或审批身份不一致。')
+        raise effective_source.EffectiveSourceIntegrityError(_('所选来源的批次依赖或审批身份不一致。'))
     return selected
 
 
@@ -1588,7 +1595,7 @@ def preview_material_import(
     )
     source_hash = str(trusted.get("source_hash") or "")
     if len(source_hash) != 64:
-        raise ValueError("可信物料来源缺少 SHA-256。")
+        raise ValueError(_("可信物料来源缺少 SHA-256。"))
     trusted = _review_trusted_grid(trusted, merge_reviews_json)
     source_context = _selected_source_context(context, trusted)
     source = dict(trusted.get("source") or {})
@@ -1657,9 +1664,9 @@ def _choices(value: object) -> dict:
         try:
             payload = json.loads(str(value or "{}"))
         except (TypeError, ValueError):
-            raise ValueError("物料导入选择不是有效 JSON。")
+            raise ValueError(_("物料导入选择不是有效 JSON。"))
     if not isinstance(payload, dict):
-        raise ValueError("物料导入选择必须是对象。")
+        raise ValueError(_("物料导入选择必须是对象。"))
     return payload
 
 

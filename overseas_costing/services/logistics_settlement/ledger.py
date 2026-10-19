@@ -1,4 +1,11 @@
 """Frappe document adapter; all writes share the Store transaction and never commit here."""
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 from .writer import clean_copy
 
 DOCTYPES = {'batch': 'Overseas Cost Batch', 'version': 'Overseas Cost Version',
@@ -34,10 +41,10 @@ class FrappeLedger:
         """Patch source metadata without invalidating active batch edit tokens."""
         allowed = {'waybill_no', 'extra_json'}
         if set(values) - allowed:
-            raise ValueError('批次后台元数据包含不允许的字段')
+            raise ValueError(_('批次后台元数据包含不允许的字段'))
         filtered = self.fields('batch', values)
         if set(filtered) != set(values):
-            raise ValueError('批次后台元数据字段不存在')
+            raise ValueError(_('批次后台元数据字段不存在'))
         self.frappe.db.set_value(
             DOCTYPES['batch'], name, filtered, update_modified=False,
         )

@@ -1,5 +1,12 @@
 """Server-owned evidence contexts; bindings preserve their own audit identity."""
 from __future__ import annotations
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 import json
 from copy import deepcopy
 from urllib.parse import urlparse, parse_qs
@@ -66,7 +73,7 @@ def _legacy_source_bundle(batch_name, version_name=None, *, store=None, ledger=N
     version_name = version_name or batch.get('current_version') or ''
     version = ledger.get('version', version_name, lock=lock) if version_name else None
     if version and version.get('batch') != batch_name:
-        raise EffectiveSourceIntegrityError('版本不属于当前批次。')
+        raise EffectiveSourceIntegrityError(_('版本不属于当前批次。'))
     if version and version_name != batch.get('current_version'):
         frozen = json_dict(version.get('extra_json')).get('effective_logistics_source') or {}
         if frozen and frozen.get('policy_version') == POLICY_VERSION:
@@ -185,16 +192,16 @@ def require_available(context):
     if (context.get('root_kind') == 'expense' or (context.get('packing') or {}).get('selected_source')) and (
         not context.get('available') or not context.get('approved') or context.get('invalid')
     ):
-        raise EffectiveSourceIntegrityError('当前关联采购支出缺失、未批准或已失效，不能使用资料；请核对当前来源。')
+        raise EffectiveSourceIntegrityError(_('当前关联采购支出缺失、未批准或已失效，不能使用资料；请核对当前来源。'))
 
 
 def require_readable(context):
     if (context.get('root_kind') == 'expense' or (context.get('packing') or {}).get('selected_source')) and not context.get('available'):
-        raise EffectiveSourceIntegrityError('当前关联采购支出缺少本地归档，暂时无法分析；请等待同步。')
+        raise EffectiveSourceIntegrityError(_('当前关联采购支出缺少本地归档，暂时无法分析；请等待同步。'))
     if context.get('source_lineage') and context.get('instance_id') and (
         not context.get('available') or context.get('invalid')
     ):
-        raise EffectiveSourceIntegrityError('所选审批资料缺少本地归档或已失效，请核对该来源。')
+        raise EffectiveSourceIntegrityError(_('所选审批资料缺少本地归档或已失效，请核对该来源。'))
 
 
 def json_dict(value):
@@ -358,7 +365,7 @@ def validate_packing_source(batch_name, kind, source_id, *, attachment=None, bun
     # resolver; a locally managed batch must prove the selected relationship.
     if context.get('root_kind') != 'expense' and not context.get('root_source_id'):
         return bundle
-    raise EffectiveSourceIntegrityError('所选资料不属于当前批次的有效关联来源，或归档身份、版本已变化。')
+    raise EffectiveSourceIntegrityError(_('所选资料不属于当前批次的有效关联来源，或归档身份、版本已变化。'))
 
 
 PHYSICAL_FIELDS = ('actual_shipped_qty', 'shipped_uom', 'net_weight_kg', 'gross_weight_kg',

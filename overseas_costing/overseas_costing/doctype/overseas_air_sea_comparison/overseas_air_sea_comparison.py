@@ -1,4 +1,11 @@
 """Enforce authoritative calculation on RPC and ordinary Frappe REST writes."""
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 import json
 import uuid
 import frappe
@@ -22,7 +29,7 @@ class OverseasAirSeaComparison(Document):
             digest = air_sea_records.request_digest(values["title"], json.loads(values["payload_json"]))
             if before:
                 if self.create_request_id != before.create_request_id or self.create_request_hash != before.create_request_hash:
-                    raise ValueError("不能修改记录的创建标识。")
+                    raise ValueError(_("不能修改记录的创建标识。"))
                 if self.last_request_id == before.last_request_id and digest != before.last_request_hash:
                     self.last_request_id = str(uuid.uuid4())
             else:

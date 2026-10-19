@@ -9,6 +9,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 from frappe.model.document import Document
 
 from overseas_costing.constants import ALLOCATION_BASES
@@ -50,12 +57,12 @@ class OverseasCostAllocationRule(Document):
             if _server_metadata_fields(getattr(previous, "scope_value_json", None), ("project_allocation",)) and any(
                 getattr(previous, field, None) != getattr(self, field, None) for field in ("batch", "version")
             ):
-                raise ValueError("服务器项目规则不能通过普通保存迁移到其他批次或版本。")
+                raise ValueError(_("服务器项目规则不能通过普通保存迁移到其他批次或版本。"))
         if _server_metadata_fields(scope, ("project_allocation",)) and (
             getattr(self, "scope_type", None) != "ALL_ITEMS" or self.allocation_basis != "gross_weight"
             or getattr(self, "basis_field", None) not in (None, "", "gross_weight")
         ):
-            raise ValueError("已确认的项目毛重规则不能变更为其他范围或依据。")
+            raise ValueError(_("已确认的项目毛重规则不能变更为其他范围或依据。"))
         require_value(self.batch, "所属批次")
         require_value(self.version, "所属版本")
         require_value(self.rule_code, "规则编码")

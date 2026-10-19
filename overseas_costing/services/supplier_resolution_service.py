@@ -6,6 +6,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import json
 import unicodedata
 from difflib import SequenceMatcher
@@ -334,7 +341,7 @@ def validate_canonical_supplier(value: Any, *, suppliers: Iterable[Any] | None =
     ]
     if len(matches) == 1:
         return matches[0]
-    raise ValueError("供应商必须从启用中的 ERP 供应商列表选择。")
+    raise ValueError(_("供应商必须从启用中的 ERP 供应商列表选择。"))
 
 
 def effective_push_supplier(value: Any) -> str:

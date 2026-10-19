@@ -1,9 +1,14 @@
+function ocTranslate(text, args = []) {
+  if (typeof globalThis.__ === "function") return globalThis.__(text, args);
+  return String(text).replace(/\{(\d+)\}/g, (_, index) => args[index] ?? "");
+}
+
 const headers = [
-  "对应钉钉采购订单号", "品目编码Item code", "品牌", "申报名称", "申报单位", "供应商supplier",
-  "中文品名 Chinese Name", "是否开票/CI", "海关编码", "英文品名", "西语品名", "规格型号品牌",
-  "长m", "宽m", "高m", "净重NW/件kg", "毛重GW/件kg", "单件CBM", "个数(每件)", "件数",
-  "总个数", "包装", "总净重", "总毛重Gross weight", "总体积total capacity", "单价unit price", "总价（RMB)",
-  "计划出货日期", "备注Remarks", "项目归属"
+  ocTranslate("对应钉钉采购订单号"), ocTranslate("品目编码Item code"), ocTranslate("品牌"), ocTranslate("申报名称"), ocTranslate("申报单位"), ocTranslate("供应商supplier"),
+  ocTranslate("中文品名 Chinese Name"), ocTranslate("是否开票/CI"), ocTranslate("海关编码"), ocTranslate("英文品名"), ocTranslate("西语品名"), ocTranslate("规格型号品牌"),
+  ocTranslate("长m"), ocTranslate("宽m"), ocTranslate("高m"), ocTranslate("净重NW/件kg"), ocTranslate("毛重GW/件kg"), ocTranslate("单件CBM"), ocTranslate("个数(每件)"), ocTranslate("件数"),
+  ocTranslate("总个数"), ocTranslate("包装"), ocTranslate("总净重"), ocTranslate("总毛重Gross weight"), ocTranslate("总体积total capacity"), ocTranslate("单价unit price"), ocTranslate("总价（RMB)"),
+  ocTranslate("计划出货日期"), ocTranslate("备注Remarks"), ocTranslate("项目归属")
 ];
 const displayColumns = [0, 1, 6, 11, 20, 23, 24, 25, 26, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 27, 28, 29];
 const numericColumns = new Set([20, 23, 24, 25, 26]);

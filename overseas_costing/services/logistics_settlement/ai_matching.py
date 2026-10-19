@@ -1,4 +1,11 @@
 """A cached second pass over unresolved local sources; AI never adopts or binds data."""
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 import re
 import uuid
 import unicodedata
@@ -85,7 +92,7 @@ def prepare(store):
         group['rejected_pairs'].extend([[eid, c['logistics_id']] for c in previous if c['status'] == 'rejected'])
     payload = list(groups.values())
     if len(dumps(payload)) > 200_000:
-        raise ValueError('待分析资料超过单次 AI 容量，请先确认已有候选后再分析剩余单据')
+        raise ValueError(_('待分析资料超过单次 AI 容量，请先确认已有候选后再分析剩余单据'))
     return {'groups': payload, 'evidence_keys': keys, 'fingerprint': digest(POLICY, keys)}
 
 
@@ -160,7 +167,7 @@ def run(store, job_id, call_model, model=''):
                         rows = [r for r in proposals if isinstance(r, dict) and r.get('expense_id') == expense['id']]
                         try:
                             if len(rows) != 1:
-                                raise ValueError('AI 未唯一返回此采购支出的分析结果')
+                                raise ValueError(_('AI 未唯一返回此采购支出的分析结果'))
                             outcome = adopt_suggestion(store, job, group, expense['id'], rows[0])
                             job[outcome] += 1
                             save(store, {'id': digest('ai-match-result', expense['id']),
@@ -189,20 +196,20 @@ def adopt_suggestion(store, job, group, expense_id, proposal):
     reason = str(proposal.get('reason') or '').strip()[:1000]
     confidence = Decimal(str(proposal.get('confidence', 0)))
     if not reason or not confidence.is_finite() or not 0 <= confidence <= 1:
-        raise ValueError('AI 依据或置信度无效')
+        raise ValueError(_('AI 依据或置信度无效'))
     if lid is None or confidence < Decimal('0.75'):
         return 'no_match'
     if lid not in {s['id'] for s in group['logistics']} or [expense_id, lid] in group['rejected_pairs']:
-        raise ValueError('AI 推荐的目标不属于受控来源，或该组合已被人工否决')
+        raise ValueError(_('AI 推荐的目标不属于受控来源，或该组合已被人工否决'))
     expense, logistics = store.get('source', expense_id), store.get('source', lid)
     if expense['invalid'] or logistics['invalid'] or expense['corp'] != logistics['corp']:
-        raise ValueError('AI 来源已失效或企业不一致')
+        raise ValueError(_('AI 来源已失效或企业不一致'))
     if store.find('binding', expense_id=expense_id) or store.find('binding', logistics_id=lid):
-        raise ValueError('来源已被关联占用')
+        raise ValueError(_('来源已被关联占用'))
     cid = digest(lid, expense_id)
     candidate = store.get('candidate', cid)
     if candidate and candidate['status'] in {'confirmed', 'rejected'}:
-        raise ValueError('已处理的候选不能被 AI 覆盖')
+        raise ValueError(_('已处理的候选不能被 AI 覆盖'))
     proof = {'type': 'deepseek', 'value': reason, 'confidence': str(confidence), 'job_id': job['id']}
     if candidate and candidate['status'] != 'stale':
         candidate['evidence'] = [r for r in candidate['evidence'] if r.get('type') != 'deepseek'] + [proof]

@@ -141,7 +141,7 @@
     this.cleanupSkuScrollControls();
     this.cleanupMaterialGridScrollControls?.();
     this.$root.find("[data-area='detail-screen']").html(`
-      <div class="ocw-detail-state"><span class="ocw-spinner"></span><strong>正在加载批次详情</strong><small>不会预加载 SKU 明细</small></div>
+      <div class="ocw-detail-state"><span class="ocw-spinner"></span><strong>${ocTranslate("正在加载批次详情")}</strong><small>${ocTranslate("不会预加载 SKU 明细")}</small></div>
     `);
   }
 
@@ -150,9 +150,9 @@
     this.cleanupMaterialGridScrollControls?.();
     this.$root.find("[data-area='detail-screen']").html(`
       <div class="ocw-detail-state is-error">
-        <strong>批次详情加载失败</strong>
+        <strong>${ocTranslate("批次详情加载失败")}</strong>
         <span>${this.escape(this.normalizeErrorMessage(error))}</span>
-        <div><button class="ocw-outline-btn" type="button" data-action="return-workbench">返回工作台</button><button class="ocw-primary-btn" type="button" data-action="retry-detail">重试</button></div>
+        <div><button class="ocw-outline-btn" type="button" data-action="return-workbench">${ocTranslate("返回工作台")}</button><button class="ocw-primary-btn" type="button" data-action="retry-detail">${ocTranslate("重试")}</button></div>
       </div>
     `);
   }
@@ -175,16 +175,16 @@
       || status.includes("confirmed")
       || Number(batch.actual_total_cost_rmb || batch.estimated_total_cost_rmb || summary.total_cost_rmb || 0) > 0
     );
-    return { action: "recalculate", label: hasSavedResult ? "重新试算" : "开始试算" };
+    return { action: "recalculate", label: hasSavedResult ? ocTranslate("重新试算") : ocTranslate("开始试算") };
   }
 
   renderDetailErpAction(batch = {}) {
     const erpAction = this.erpPushActionState(batch, Number(batch.item_count || 0));
     const reasonId = "ocw-detail-erp-action-reason";
     return `
-      <span class="ocw-detail-erp-action" data-area="detail-erp-action" title="${this.escape(erpAction.reason)}">
-        <button class="ocw-outline-btn" type="button" data-action="detail-writeback-to-erp" aria-label="${this.escape(`${erpAction.label}：${erpAction.reason}`)}" aria-describedby="${reasonId}"${erpAction.enabled ? "" : " disabled"}>${this.escape(erpAction.label)}</button>
-        <small id="${reasonId}">${this.escape(erpAction.reason)}</small>
+      <span class="ocw-detail-erp-action" data-area="detail-erp-action" title="${this.escape(ocTranslate(erpAction.reason))}">
+        <button class="ocw-outline-btn" type="button" data-action="detail-writeback-to-erp" aria-label="${this.escape(`${ocTranslate(erpAction.label)}: ${ocTranslate(erpAction.reason)}`)}" aria-describedby="${reasonId}"${erpAction.enabled ? "" : " disabled"}>${this.escape(ocTranslate(erpAction.label))}</button>
+        <small id="${reasonId}">${this.escape(ocTranslate(erpAction.reason))}</small>
       </span>
     `;
   }
@@ -200,43 +200,43 @@
     this.cleanupMaterialGridScrollControls?.();
     const batch = this.getDetailBatch();
     const reference = batch.batch_no || batch.source_approval_no || batch.customs_no || batch.name;
-    const logistics = batch.waybill_no || batch.container_no || batch.sea_bill_no || "未填写物流单号";
+    const logistics = batch.waybill_no || batch.container_no || batch.sea_bill_no || ocTranslate("未填写物流单号");
     this.$root.find("[data-area='detail-screen']").html(`
       <div class="ocw-detail-page">
         <header class="ocw-detail-header">
           <div class="ocw-detail-heading">
-            <button class="ocw-back-btn" type="button" data-action="return-workbench" aria-label="返回工作台">← <span>返回工作台</span></button>
+            <button class="ocw-back-btn" type="button" data-action="return-workbench" aria-label="${ocTranslate('返回工作台')}">← <span>${ocTranslate("返回工作台")}</span></button>
             <div>
-              <span class="ocw-detail-eyebrow">批次详情</span>
+              <span class="ocw-detail-eyebrow">${ocTranslate("批次详情")}</span>
               <h1>${this.escape(reference)}</h1>
-              <p>${this.escape(logistics)} · ${this.escape(this.businessTypeLabel(batch.business_type) || this.transportLabel(batch.transport_mode) || "未分类")}</p>
+              <p>${this.escape(logistics)} · ${this.escape(this.businessTypeLabel(batch.business_type) || this.transportLabel(batch.transport_mode) || ocTranslate("未分类"))}</p>
             </div>
           </div>
           <div class="ocw-detail-header-actions">
             ${this.renderReviewReturnAction?.(batch) || ""}
-            <button class="ocw-outline-btn" type="button" data-action="detail-dingtalk">打开钉钉原单</button>
+            <button class="ocw-outline-btn" type="button" data-action="detail-dingtalk">${ocTranslate("打开钉钉原单")}</button>
             ${this.renderDetailErpAction(batch)}
             <div class="ocw-menu-wrap">
-              <button class="ocw-outline-btn" type="button" data-action="toggle-detail-tools" aria-expanded="false">更多操作 ▾</button>
+              <button class="ocw-outline-btn" type="button" data-action="toggle-detail-tools" aria-expanded="false">${ocTranslate("更多操作 ▾")}</button>
               <div class="ocw-detail-tools" data-area="detail-tools" hidden>
-                <button type="button" data-action="detail-export">导出</button>
-                <button type="button" data-action="detail-voucher">凭证对比</button>
-                <button type="button" data-action="detail-category">商品归类</button>
-                <button type="button" data-action="detail-excel">单批次 Excel 补充</button>
+                <button type="button" data-action="detail-export">${ocTranslate("导出")}</button>
+                <button type="button" data-action="detail-voucher">${ocTranslate("凭证对比")}</button>
+                <button type="button" data-action="detail-category">${ocTranslate("商品归类")}</button>
+                <button type="button" data-action="detail-excel">${ocTranslate("单批次 Excel 补充")}</button>
               </div>
             </div>
           </div>
         </header>
-        <nav class="ocw-detail-tabs" aria-label="批次详情分类">
+        <nav class="ocw-detail-tabs" aria-label="${ocTranslate('批次详情分类')}">
           ${[
             ["overview", "总览"],
             ["dingtalk", "钉钉审批"],
             ["documents", "资料与费用"],
             ["items", "SKU 明细"],
             ["vouchers", "凭证核对"],
-            ["review", `复核沟通${Number(batch.unresolved_count || 0) ? ` <span class="ocw-detail-tab-badge">${Number(batch.unresolved_count || 0)}</span>` : ""}`],
+            ["review", ocTranslate("复核沟通{0}", [Number(batch.unresolved_count || 0) ? ` <span class="ocw-detail-tab-badge">${Number(batch.unresolved_count || 0)}</span>` : ""])],
             ["audit", "操作记录"],
-          ].map(([key, label]) => `<button class="${this.detailState.tab === key ? "is-active" : ""}" type="button" data-action="switch-detail-tab" data-tab="${key}">${label}</button>`).join("")}
+          ].map(([key, label]) => `<button class="${this.detailState.tab === key ? "is-active" : ""}" type="button" data-action="switch-detail-tab" data-tab="${key}">${ocTranslate(label)}</button>`).join("")}
         </nav>
         <section class="ocw-detail-content" data-area="detail-content"></section>
         <div data-area="review-drawer-host"></div>
@@ -271,7 +271,7 @@
     this.cleanupSkuScrollControls();
     this.cleanupMaterialGridScrollControls?.();
     this.$root.find("[data-area='detail-content']").html(`
-      <div class="ocw-detail-state"><span class="ocw-spinner"></span><strong>${this.escape(label)}</strong></div>
+      <div class="ocw-detail-state"><span class="ocw-spinner"></span><strong>${this.escape(ocTranslate(label))}</strong></div>
     `);
   }
 
@@ -284,13 +284,13 @@
     const feeRows = model.feeRows.length
       ? model.feeRows.map((fee) => `
           <tr>
-            <td><strong>${this.escape(fee.label)}</strong></td>
+            <td><strong>${this.escape(ocTranslate(fee.label))}</strong></td>
             <td>${this.escape(amountText(fee.amount, fee.currency))}</td>
             <td>${this.escape(amountText(fee.amountRmb, "RMB"))}</td>
-            <td><span class="ocw-overview-state is-${this.escape(fee.state)}">${this.escape(fee.stateLabel)}</span></td>
+            <td><span class="ocw-overview-state is-${this.escape(fee.state)}">${this.escape(ocTranslate(fee.stateLabel))}</span></td>
           </tr>
         `).join("")
-      : `<tr><td colspan="4"><div class="ocw-detail-empty">当前没有费用构成记录</div></td></tr>`;
+      : `<tr><td colspan="4"><div class="ocw-detail-empty">${ocTranslate("当前没有费用构成记录")}</div></td></tr>`;
     const flowLabels = {
       done: "已完成",
       current: "当前",
@@ -299,22 +299,22 @@
     };
     const documentsReady = model.documents.every((row) => ["ready", "unused"].includes(row.state));
     const flowSteps = [
-      { key: "documents", label: "资料补充", detail: model.flow.documents === "done" ? "本次试算所需资料已采用" : documentsReady ? "物料与费用资料已具备" : "仍有资料需处理" },
-      { key: "trial", label: "成本试算", detail: model.statusInfo.label || (model.hasCurrentTrial ? "已试算" : "待试算") },
-      { key: "erp", label: "推送 ERP", detail: model.writebackInfo.label || "未开始" },
+      { key: "documents", label: ocTranslate("资料补充"), detail: model.flow.documents === "done" ? ocTranslate("本次试算所需资料已采用") : documentsReady ? ocTranslate("物料与费用资料已具备") : ocTranslate("仍有资料需处理") },
+      { key: "trial", label: ocTranslate("成本试算"), detail: model.statusInfo.label || (model.hasCurrentTrial ? ocTranslate("已试算") : ocTranslate("待试算")) },
+      { key: "erp", label: ocTranslate("推送 ERP"), detail: model.writebackInfo.label || ocTranslate("未开始") },
     ];
     const documents = model.documents.map((document) => `
       <li class="is-${this.escape(document.state)}">
         <span class="ocw-overview-document-mark" aria-hidden="true"></span>
-        <div><strong>${this.escape(document.label)}</strong><small>${this.escape(document.detail)}</small></div>
-        <button type="button" data-action="switch-detail-tab" data-tab="${this.escape(document.tab)}">${document.count ? `${document.count} 项 · ` : ""}${this.escape(document.stateLabel)}</button>
+        <div><strong>${this.escape(ocTranslate(document.label))}</strong><small>${this.escape(ocTranslate(document.detail))}</small></div>
+        <button type="button" data-action="switch-detail-tab" data-tab="${this.escape(document.tab)}">${document.count ? ocTranslate("{0} 项 · ", [document.count]) : ""}${this.escape(ocTranslate(document.stateLabel))}</button>
       </li>
     `).join("");
     const basicInfo = [
       ["运输方式", this.transportLabel(batch.transport_mode) || "--"],
       ["业务类型", this.businessTypeLabel(batch.business_type) || "--"],
       ["业务主体", batch.subsidiary_code || "--"],
-      ["物料行数", `${model.itemCount} 行`],
+      ["物料行数", ocTranslate("{0} 行", [model.itemCount])],
       ["运单/柜号", batch.waybill_no || batch.container_no || batch.sea_bill_no || "--"],
     ];
     const currentStep = model.flow.erp === "current" || model.flow.erp === "error"
@@ -324,45 +324,45 @@
         : "资料补充";
     const actionButtons = [
       calculationAction
-        ? `<button class="ocw-primary-btn" type="button" data-action="detail-primary" data-primary-action="${calculationAction.action}">${this.escape(calculationAction.label)}</button>`
+        ? `<button class="ocw-primary-btn" type="button" data-action="detail-primary" data-primary-action="${calculationAction.action}">${this.escape(ocTranslate(calculationAction.label))}</button>`
         : "",
       model.isCostReview && !model.confirmed
-        ? `<button class="ocw-primary-btn" type="button" data-action="confirm-calculation-result"${model.canConfirm ? "" : " disabled"}>校验计算结果</button>`
+        ? `<button class="ocw-primary-btn" type="button" data-action="confirm-calculation-result"${model.canConfirm ? "" : " disabled"}>${ocTranslate("校验计算结果")}</button>`
         : "",
       model.confirmed
-        ? `<button class="ocw-outline-btn" type="button" data-action="preview-erp-payload"${model.canPreview ? "" : " disabled"}>预览 ERP 报文</button>`
+        ? `<button class="ocw-outline-btn" type="button" data-action="preview-erp-payload"${model.canPreview ? "" : " disabled"}>${ocTranslate("预览 ERP 报文")}</button>`
         : "",
     ].filter(Boolean).join("");
     return `
       <div class="ocw-detail-overview-dashboard">
         <section class="ocw-detail-overview-costs">
-          <div class="ocw-overview-panel-title"><div><span>成本结果</span><h2>本次成本</h2></div></div>
+          <div class="ocw-overview-panel-title"><div><span>${ocTranslate("成本结果")}</span><h2>${ocTranslate("本次成本")}</h2></div></div>
           <div class="ocw-overview-total-grid">
-            <article><span>采购货值</span><strong>${this.escape(amountText(model.goodsValueRmb, "RMB"))}</strong></article>
-            <article class="is-primary"><span>综合成本</span><strong>${this.escape(amountText(model.totalCostRmb, "RMB"))}</strong></article>
+            <article><span>${ocTranslate("采购货值")}</span><strong>${this.escape(amountText(model.goodsValueRmb, "RMB"))}</strong></article>
+            <article class="is-primary"><span>${ocTranslate("综合成本")}</span><strong>${this.escape(amountText(model.totalCostRmb, "RMB"))}</strong></article>
           </div>
-          <div class="ocw-overview-fee-head"><h3>费用构成</h3><strong>合计 ${this.escape(amountText(model.feeTotalRmb, "RMB"))}</strong></div>
+          <div class="ocw-overview-fee-head"><h3>${ocTranslate("费用构成")}</h3><strong>${ocTranslate("合计 {0}", [this.escape(amountText(model.feeTotalRmb, "RMB"))])}</strong></div>
           <div class="ocw-overview-fee-scroll">
             <table class="ocw-overview-fee-table">
-              <thead><tr><th>费用项目</th><th>原币金额</th><th>折合 RMB</th><th>状态</th></tr></thead>
+              <thead><tr><th>${ocTranslate("费用项目")}</th><th>${ocTranslate("原币金额")}</th><th>${ocTranslate("折合 RMB")}</th><th>${ocTranslate("状态")}</th></tr></thead>
               <tbody>${feeRows}</tbody>
             </table>
           </div>
           <dl class="ocw-overview-basic-info">
-            ${basicInfo.map(([label, value]) => `<div><dt>${this.escape(label)}</dt><dd>${this.escape(this.formatValue(value))}</dd></div>`).join("")}
+            ${basicInfo.map(([label, value]) => `<div><dt>${this.escape(ocTranslate(label))}</dt><dd>${this.escape(this.formatValue(value))}</dd></div>`).join("")}
           </dl>
           <div class="ocw-overview-current-action">
-            <div><span>当前需要</span><strong>${this.escape(currentStep)}</strong><small>${this.escape(model.invalidBusiness ? "当前审批已无效，不可确认或推送。" : model.statusInfo.suggestion || model.statusInfo.label || "按当前流程继续处理。")}</small></div>
+            <div><span>${ocTranslate("当前需要")}</span><strong>${this.escape(ocTranslate(currentStep))}</strong><small>${this.escape(model.invalidBusiness ? ocTranslate("当前审批已无效，不可确认或推送。") : model.statusInfo.suggestion || model.statusInfo.label || ocTranslate("按当前流程继续处理。"))}</small></div>
             <div class="ocw-overview-current-buttons">${actionButtons}</div>
           </div>
         </section>
         <aside class="ocw-detail-overview-progress">
-          <div class="ocw-overview-panel-title"><div><span>业务流程</span><h2>处理进度</h2></div></div>
+          <div class="ocw-overview-panel-title"><div><span>${ocTranslate("业务流程")}</span><h2>${ocTranslate("处理进度")}</h2></div></div>
           <ol class="ocw-overview-flow">
-            ${flowSteps.map((step, index) => `<li data-step="${step.key}" data-state="${model.flow[step.key]}"><span>${model.flow[step.key] === "done" ? "✓" : index + 1}</span><div><strong>${this.escape(step.label)}</strong><small>${this.escape(step.detail)}</small></div><em>${this.escape(flowLabels[model.flow[step.key]])}</em></li>`).join("")}
+            ${flowSteps.map((step, index) => `<li data-step="${step.key}" data-state="${model.flow[step.key]}"><span>${model.flow[step.key] === "done" ? "✓" : index + 1}</span><div><strong>${this.escape(ocTranslate(step.label))}</strong><small>${this.escape(ocTranslate(step.detail))}</small></div><em>${this.escape(ocTranslate(flowLabels[model.flow[step.key]]))}</em></li>`).join("")}
           </ol>
           <div class="ocw-overview-documents">
-            <div><h3>资料清单</h3><span>点击状态查看对应资料</span></div>
+            <div><h3>${ocTranslate("资料清单")}</h3><span>${ocTranslate("点击状态查看对应资料")}</span></div>
             <ul>${documents}</ul>
           </div>
         </aside>
@@ -411,9 +411,9 @@
       });
       const items = (result && result.items) || [];
       this.$root.find("[data-area='detail-content']").html(`
-        <div class="ocw-detail-section-head"><div><span>最终对账</span><h2>凭证核对</h2></div><button class="ocw-primary-btn" type="button" data-action="detail-voucher">+ 新增凭证对比</button></div>
+        <div class="ocw-detail-section-head"><div><span>${ocTranslate("最终对账")}</span><h2>${ocTranslate("凭证核对")}</h2></div><button class="ocw-primary-btn" type="button" data-action="detail-voucher">${ocTranslate("+ 新增凭证对比")}</button></div>
         <div class="ocw-detail-voucher-list">
-          ${items.length ? items.map((row) => this.renderTaxCertificateRecord(row)).join("") : `<div class="ocw-detail-empty"><strong>当前批次暂无凭证记录</strong><span>可上传完税凭证 PDF 与系统税费进行对比。</span></div>`}
+          ${items.length ? items.map((row) => this.renderTaxCertificateRecord(row)).join("") : `<div class="ocw-detail-empty"><strong>${ocTranslate("当前批次暂无凭证记录")}</strong><span>${ocTranslate("可上传完税凭证 PDF 与系统税费进行对比。")}</span></div>`}
         </div>
       `);
     } catch (error) {
@@ -443,8 +443,8 @@
       this.auditEvents = [...auditEvents, ...usageEvents].sort((left, right) => String(right.time || "").localeCompare(String(left.time || "")));
       const events = this.buildAuditSummaryEvents(this.auditEvents);
       this.$root.find("[data-area='detail-content']").html(`
-        <div class="ocw-detail-section-head"><div><span>可追溯</span><h2>操作记录</h2></div><span>${events.length} 条</span></div>
-        <ul class="ocw-audit-list ocw-detail-audit-list">${events.length ? events.map((event) => this.renderAuditEvent(event)).join("") : `<li class="ocw-audit-empty">当前批次暂无操作记录</li>`}</ul>
+        <div class="ocw-detail-section-head"><div><span>${ocTranslate("可追溯")}</span><h2>${ocTranslate("操作记录")}</h2></div><span>${ocTranslate("{0} 条", [events.length])}</span></div>
+        <ul class="ocw-audit-list ocw-detail-audit-list">${events.length ? events.map((event) => this.renderAuditEvent(event)).join("") : `<li class="ocw-audit-empty">${ocTranslate("当前批次暂无操作记录")}</li>`}</ul>
       `);
     } catch (error) {
       this.renderDetailTabError("操作记录", error);
@@ -453,7 +453,7 @@
 
   renderDetailTabError(label, error) {
     this.$root.find("[data-area='detail-content']").html(`
-      <div class="ocw-detail-empty is-error"><strong>${this.escape(label)}加载失败</strong><span>${this.escape(this.normalizeErrorMessage(error))}</span><button class="ocw-outline-btn" type="button" data-action="retry-detail-tab">重试</button></div>
+      <div class="ocw-detail-empty is-error"><strong>${ocTranslate("{0}加载失败", [this.escape(ocTranslate(label))])}</strong><span>${this.escape(this.normalizeErrorMessage(error))}</span><button class="ocw-outline-btn" type="button" data-action="retry-detail-tab">${ocTranslate("重试")}</button></div>
     `);
   }
 
@@ -499,31 +499,31 @@
     const header = columns.map((column, index) => {
       const sortable = ["material_code", "product_name", "quantity", "goods_value", "total_cost_rmb", "total_unit_rmb"].includes(column.fieldname);
       const sortMark = sku.sortBy === column.fieldname ? (sku.sortOrder === "asc" ? " ↑" : " ↓") : "";
-      return `<th class="${index < 2 ? `ocw-sku-sticky ocw-sku-sticky-${index}` : ""}" title="${this.escape(`${column.excel_col} ${column.label}`)}">${sortable ? `<button type="button" data-action="sku-sort" data-sort-by="${this.escape(column.fieldname)}">` : ""}<span>${this.escape(column.excel_col)}</span>${this.escape(column.label)}${sortMark}${sortable ? "</button>" : ""}</th>`;
+      return `<th class="${index < 2 ? `ocw-sku-sticky ocw-sku-sticky-${index}` : ""}" title="${this.escape(`${column.excel_col} ${column.label}`)}">${sortable ? `<button type="button" data-action="sku-sort" data-sort-by="${this.escape(column.fieldname)}">` : ""}<span>${this.escape(column.excel_col)}</span>${this.escape(ocTranslate(column.label))}${sortMark}${sortable ? "</button>" : ""}</th>`;
     }).join("");
     const body = items.map((row) => `<tr class="${this.approvalLinkNeedsReview(row.approval_link) ? "ocw-approval-row" : ""}">${columns.map((column, index) => this.renderSkuPageCell(row, column, index)).join("")}</tr>`).join("");
     this.$root.find("[data-area='detail-content']").html(`
-      <div class="ocw-detail-section-head"><div><span>服务端分页</span><h2>SKU 明细</h2>${result.calculation_stale ? "<span>结果待更新，请先开始试算</span>" : ""}</div><strong>共 ${Number(result.total || 0)} 行</strong></div>
+      <div class="ocw-detail-section-head"><div><span>${ocTranslate("服务端分页")}</span><h2>${ocTranslate("SKU 明细")}</h2>${result.calculation_stale ? `<span>${ocTranslate("结果待更新，请先开始试算")}</span>` : ""}</div><strong>${ocTranslate("共 {0} 行", [Number(result.total || 0)])}</strong></div>
       <div class="ocw-sku-toolbar">
-        <label><span>搜索当前批次 SKU</span><input class="form-control" type="search" data-role="sku-keyword" value="${this.escape(sku.keyword)}" placeholder="物料编码或产品名称" /></label>
-        <div class="ocw-sku-groups" role="group" aria-label="SKU 字段分组">${groups.map(([key, label]) => `<button class="${sku.fieldGroup === key ? "is-active" : ""}" type="button" data-action="sku-group" data-field-group="${key}">${label}</button>`).join("")}</div>
+        <label><span>${ocTranslate("搜索当前批次 SKU")}</span><input class="form-control" type="search" data-role="sku-keyword" value="${this.escape(sku.keyword)}" placeholder="${ocTranslate('物料编码或产品名称')}" /></label>
+        <div class="ocw-sku-groups" role="group" aria-label="${ocTranslate('SKU 字段分组')}">${groups.map(([key, label]) => `<button class="${sku.fieldGroup === key ? "is-active" : ""}" type="button" data-action="sku-group" data-field-group="${key}">${ocTranslate(label)}</button>`).join("")}</div>
       </div>
       <div class="ocw-sku-table-shell">
         <div class="ocw-sku-table-wrap" data-role="sku-table-scroll">
-          <table class="ocw-sku-table"><thead><tr>${header}</tr></thead><tbody>${body || `<tr><td colspan="${Math.max(columns.length, 1)}"><div class="ocw-detail-empty">当前条件下没有 SKU</div></td></tr>`}</tbody></table>
+          <table class="ocw-sku-table"><thead><tr>${header}</tr></thead><tbody>${body || `<tr><td colspan="${Math.max(columns.length, 1)}"><div class="ocw-detail-empty">${ocTranslate("当前条件下没有 SKU")}</div></td></tr>`}</tbody></table>
         </div>
         <div class="ocw-sku-scroll-controls">
-          <button type="button" data-action="sku-scroll" data-direction="-1" aria-label="向左滚动 SKU 表">◀</button>
-          <div class="ocw-horizontal-scrollbar ocw-sku-scrollbar" data-role="sku-scrollbar" data-ocw-scrollbar tabindex="0" aria-label="SKU 明细水平滚动条"><div data-role="sku-scrollbar-spacer"></div></div>
-          <button type="button" data-action="sku-scroll" data-direction="1" aria-label="向右滚动 SKU 表">▶</button>
-          <span>当前 ${this.escape(groups.find(([key]) => key === sku.fieldGroup)?.[1] || "基础信息")} · 全部 A–BE</span>
+          <button type="button" data-action="sku-scroll" data-direction="-1" aria-label="${ocTranslate('向左滚动 SKU 表')}">◀</button>
+          <div class="ocw-horizontal-scrollbar ocw-sku-scrollbar" data-role="sku-scrollbar" data-ocw-scrollbar tabindex="0" aria-label="${ocTranslate('SKU 明细水平滚动条')}"><div data-role="sku-scrollbar-spacer"></div></div>
+          <button type="button" data-action="sku-scroll" data-direction="1" aria-label="${ocTranslate('向右滚动 SKU 表')}">▶</button>
+          <span>${ocTranslate("当前 {0} · 全部 A–BE", [this.escape(ocTranslate(groups.find(([key]) => key === sku.fieldGroup)?.[1] || "基础信息"))])}</span>
         </div>
       </div>
       <div class="ocw-sku-pagination">
-        <span>每页 ${sku.pageLength} 行</span>
-        <button class="ocw-outline-btn" type="button" data-action="sku-page" data-page="${Number(result.page || 1) - 1}" ${Number(result.page || 1) <= 1 ? "disabled" : ""}>上一页</button>
-        <strong>第 ${Number(result.page || 1)} / ${Math.max(Number(result.page_count || 0), 1)} 页</strong>
-        <button class="ocw-outline-btn" type="button" data-action="sku-page" data-page="${Number(result.page || 1) + 1}" ${Number(result.page || 1) >= Number(result.page_count || 0) ? "disabled" : ""}>下一页</button>
+        <span>${ocTranslate("每页 {0} 行", [sku.pageLength])}</span>
+        <button class="ocw-outline-btn" type="button" data-action="sku-page" data-page="${Number(result.page || 1) - 1}" ${Number(result.page || 1) <= 1 ? "disabled" : ""}>${ocTranslate("上一页")}</button>
+        <strong>${ocTranslate("第 {0} / {1} 页", [Number(result.page || 1), Math.max(Number(result.page_count || 0), 1)])}</strong>
+        <button class="ocw-outline-btn" type="button" data-action="sku-page" data-page="${Number(result.page || 1) + 1}" ${Number(result.page || 1) >= Number(result.page_count || 0) ? "disabled" : ""}>${ocTranslate("下一页")}</button>
       </div>
     `);
     requestAnimationFrame(() => this.bindSkuScrollControls());
@@ -531,7 +531,7 @@
 
   renderSkuPageCell(row, column, index) {
     if (column.fieldname === "approval_link") {
-      return `<td class="ocw-readonly-cell" data-editable-cell="0">${this.renderApprovalLinkMarker(row.approval_link) || this.escape(row.approval_link?.approval_no || (row.approval_link?.status === "linked" ? "已关联" : "--"))}</td>`;
+      return `<td class="ocw-readonly-cell" data-editable-cell="0">${this.renderApprovalLinkMarker(row.approval_link) || this.escape(row.approval_link?.approval_no || (row.approval_link?.status === "linked" ? ocTranslate("已关联") : "--"))}</td>`;
     }
     const editable = column.fieldname !== "transport_mode" && this.isEditableColumn(column);
     const rawValue = this.shouldShowEmptyZeroFee(column.fieldname, row[column.fieldname]) ? "" : this.normalizeEditorValue(row[column.fieldname]);
@@ -542,7 +542,7 @@
         title="${this.escape(displayValue || "")}" data-editable-cell="${editable ? "1" : "0"}"
         data-batch-name="${this.escape(this.detailState.batchName)}" data-item-name="${this.escape(row.name || "")}"
         data-version-name="${this.escape(this.detailState.versionName || "")}" data-fieldname="${this.escape(column.fieldname)}"
-        data-field-label="${this.escape(column.label)}" data-raw-value="${this.escape(rawValue)}"
+        data-field-label="${this.escape(ocTranslate(column.label))}" data-raw-value="${this.escape(rawValue)}"
         data-special-override="${this.specialOverrideFields.has(column.fieldname) ? "1" : "0"}">${index < 2 ? `<span class="ocw-sku-sticky-content">${content}</span>` : content}${column.fieldname === "product_name" ? (this.renderReviewFeedbackButton?.({ target_tab: "items", target_field: column.fieldname, target_item: row.name }, "反馈此行") || "") : ""}</td>
     `;
   }
@@ -590,9 +590,9 @@
       this.detailState.readonly = true;
       const lockedBy = (result && result.locked_by) || "其他用户";
       const expiresAt = this.formatDateTimeMinute((result && result.expires_at) || "") || "租约过期";
-      this.$root.find("[data-area='edit-lease-status']").addClass("is-locked").text(`只读 · 由 ${lockedBy} 编辑至 ${expiresAt}`);
+      this.$root.find("[data-area='edit-lease-status']").addClass("is-locked").text(ocTranslate("只读 · 由 {0} 编辑至 {1}", [lockedBy, expiresAt]));
       this.$root.find("[data-area='detail-content'] [data-editable-cell='1']").attr("data-editable-cell", "0").addClass("ocw-readonly-cell");
-      frappe.show_alert({ message: (result && result.message) || `当前批次正在被 ${lockedBy} 编辑。`, indicator: "orange" });
+      frappe.show_alert({ message: (result && result.message) || ocTranslate("当前批次正在被 {0} 编辑。", [lockedBy]), indicator: "orange" });
       return false;
     }
     this.detailState.readonly = false;
@@ -621,13 +621,13 @@
       this.detailState.renewTimer = null;
       this.detailState.editToken = "";
       this.detailState.readonly = true;
-      this.$root.find("[data-area='edit-lease-status']").addClass("is-locked").text("编辑权已失效 · 请重新点击要修改的单元格");
+      this.$root.find("[data-area='edit-lease-status']").addClass("is-locked").text(ocTranslate("编辑权已失效 · 请重新点击要修改的单元格"));
     }
   }
 
   updateEditLeaseStatus() {
     const expiresAt = this.formatDateTimeMinute(this.detailState.editExpiresAt || "") || "5 分钟后";
-    this.$root.find("[data-area='edit-lease-status']").removeClass("is-locked").addClass("is-editing").text(`已获得编辑权 · 自动续租至 ${expiresAt}`);
+    this.$root.find("[data-area='edit-lease-status']").removeClass("is-locked").addClass("is-editing").text(ocTranslate("已获得编辑权 · 自动续租至 {0}", [expiresAt]));
   }
 
   async releaseEditSession() {

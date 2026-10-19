@@ -17,20 +17,20 @@
     if (role === "finance") {
       return {
         key: "finance",
-        label: "财务",
-        title: "财务待核算",
-        blockName: "待核算批次",
-        description: "处理数据已完整批次：核对费用、重新试算并确认结果。",
-        empty: "当前没有数据已完整的待核算批次",
+        label: ocTranslate("财务"),
+        title: ocTranslate("财务待核算"),
+        blockName: ocTranslate("待核算批次"),
+        description: ocTranslate("处理数据已完整批次：核对费用、重新试算并确认结果。"),
+        empty: ocTranslate("当前没有数据已完整的待核算批次"),
       };
     }
     return {
       key: "purchase",
-      label: "采购",
-      title: "采购待补资料",
-      blockName: "待补资料批次",
-      description: "处理数据不完整批次：补齐采购、装箱单和物流资料。",
-      empty: "当前没有数据不完整的待补资料批次",
+      label: ocTranslate("采购"),
+      title: ocTranslate("采购待补资料"),
+      blockName: ocTranslate("待补资料批次"),
+      description: ocTranslate("处理数据不完整批次：补齐采购、装箱单和物流资料。"),
+      empty: ocTranslate("当前没有数据不完整的待补资料批次"),
     };
   }
 
@@ -52,16 +52,16 @@
       const missingItem = itemRows.filter((row) => !this.hasText(row.material_code) || !this.hasText(row.product_name) || !this.isPositive(row.quantity)).length;
       const missingPurchase = itemRows.filter((row) => !this.isPositive(this.purchasePriceValue(row)) || !this.hasText(this.purchasePriceCurrency(row)) || !this.isPositive(row.goods_value)).length;
       const missingShipping = itemRows.filter((row) => !this.isPositive(row.actual_shipped_qty) || !this.isPositive(row.gross_weight_kg)).length;
-      if (missingItem) reasons.push(`物料基础字段缺 ${missingItem} 行`);
-      if (missingPurchase) reasons.push(`采购金额字段缺 ${missingPurchase} 行`);
-      if (missingShipping) reasons.push(`实际数量/毛重缺 ${missingShipping} 行`);
+      if (missingItem) reasons.push(ocTranslate("物料基础字段缺 {0} 行", [missingItem]));
+      if (missingPurchase) reasons.push(ocTranslate("采购金额字段缺 {0} 行", [missingPurchase]));
+      if (missingShipping) reasons.push(ocTranslate("实际数量/毛重缺 {0} 行", [missingShipping]));
     } else if (itemCount) {
       reasons.push("待展开明细核对");
     }
 
     return {
       value: reasons.length ? "数据不完整" : "数据已完整",
-      hint: reasons.length ? reasons.join("；") : "业务主体、采购审批、物料、采购金额和发货基础数据已具备",
+      hint: reasons.length ? reasons.join("；") : ocTranslate("业务主体、采购审批、物料、采购金额和发货基础数据已具备"),
       className: reasons.length ? "warn" : "ok",
       complete: !reasons.length,
       reasons,
@@ -91,7 +91,7 @@
       if (businessType && this.batchBusinessType(batch, items) !== businessType) return false;
       if (calculationStatus) {
         const confirmed = String(batch.confirm_status || batch.status || "").toLowerCase().includes("confirmed");
-        const statusText = `${batch.status || ""} ${batch.confirm_status || ""} ${this.batchStatusInfo(batch.status, batch, items.length).label} ${
+        const statusText = `${batch.status || ""} ${batch.confirm_status || ""} ${this.batchStatusInfo(batch.status, batch, items.length).sourceLabel} ${
           confirmed ? "已确认" : ""
         }`;
         if (!this.lower(statusText).includes(calculationStatus)) return false;
@@ -184,11 +184,11 @@
 
   businessTypeLabel(value) {
     const labels = {
-      SEA_STANDARD: "\u6d77\u8fd0\u6b63\u62a5\u6b63\u6e05",
-      SEA_DDP: "\u6d77\u8fd0 DDP\uff08\u53cc\u6e05\u5305\u7a0e\uff09",
-      AIR_DDP: "\u7a7a\u8fd0 DDP\uff08\u53cc\u6e05\u5305\u7a0e\uff09",
-      AIR_STANDARD: "\u6b63\u5e38\u7a7a\u8fd0",
-      EXPRESS: "\u5feb\u9012",
+      SEA_STANDARD: ocTranslate("海运正报正清"),
+      SEA_DDP: ocTranslate("海运 DDP（双清包税）"),
+      AIR_DDP: ocTranslate("空运 DDP（双清包税）"),
+      AIR_STANDARD: ocTranslate("正常空运"),
+      EXPRESS: ocTranslate("快递"),
     };
     const key = String(value || "").trim().toUpperCase();
     return labels[key] || String(value || "");
@@ -196,11 +196,11 @@
 
   businessTypeCompactLabel(value) {
     const labels = {
-      SEA_STANDARD: "\u6d77\u8fd0\u6b63\u6e05",
-      SEA_DDP: "\u6d77\u8fd0\u53cc\u6e05",
-      AIR_DDP: "\u7a7a\u8fd0\u53cc\u6e05",
-      AIR_STANDARD: "\u6b63\u5e38\u7a7a\u8fd0",
-      EXPRESS: "\u5feb\u9012",
+      SEA_STANDARD: ocTranslate("海运正清"),
+      SEA_DDP: ocTranslate("海运双清"),
+      AIR_DDP: ocTranslate("空运双清"),
+      AIR_STANDARD: ocTranslate("正常空运"),
+      EXPRESS: ocTranslate("快递"),
     };
     const key = String(value || "").trim().toUpperCase();
     return labels[key] || this.businessTypeLabel(value);
@@ -211,7 +211,7 @@
   }
 
   currentBatchLabel() {
-    return this.currentBatchNo() ? `${this.currentBatchNo()} 明细` : "明细";
+    return this.currentBatchNo() ? ocTranslate("{0} 明细", [this.currentBatchNo()]) : ocTranslate("明细");
   }
 
   currentBatchNo() {
@@ -220,14 +220,14 @@
   }
 
   batchReferenceLabel(batch) {
-    if (!batch) return "未选择批次";
-    return batch.customs_no || batch.waybill_no || batch.batch_no || batch.name || "未命名批次";
+    if (!batch) return ocTranslate("未选择批次");
+    return batch.customs_no || batch.waybill_no || batch.batch_no || batch.name || ocTranslate("未命名批次");
   }
 
   voucherBatchHint(batch) {
     return batch
-      ? "文件会优先按报关单号或柜号自动匹配；所选批次用于当前对比和查看已保存记录。"
-      : "文件会按报关单号或柜号自动尝试匹配批次。";
+      ? ocTranslate("文件会优先按报关单号或柜号自动匹配；所选批次用于当前对比和查看已保存记录。")
+      : ocTranslate("文件会按报关单号或柜号自动尝试匹配批次。");
   }
 
   renderBatchOptions(selectedBatchName = "") {
@@ -262,7 +262,7 @@
 
   renderSelectableBatchOptions(selectedBatchName = "", batches = null) {
     const options = batches || this.getSelectableBatches();
-    if (!options.length) return `<option value="">当前筛选无批次</option>`;
+    if (!options.length) return `<option value="">${ocTranslate("当前筛选无批次")}</option>`;
     return options
       .map((batch) => {
         const selected = batch.name === selectedBatchName ? " selected" : "";
@@ -273,8 +273,8 @@
 
   scopedBatchHint() {
     return this.hasActiveFilters()
-      ? "仅显示当前筛选范围内的批次；可输入批次号、报关单号或钉钉审批编号查询历史批次。"
-      : `默认显示最近 ${this.defaultRecentDays} 天批次；可输入批次号、报关单号或钉钉审批编号查询历史批次。`;
+      ? ocTranslate("仅显示当前筛选范围内的批次；可输入批次号、报关单号或钉钉审批编号查询历史批次。")
+      : ocTranslate("默认显示最近 {0} 天批次；可输入批次号、报关单号或钉钉审批编号查询历史批次。", [this.defaultRecentDays]);
   }
 
   renderVisibleBatchOptions(selectedBatchName = "") {
@@ -337,10 +337,10 @@
   versionLabel(version) {
     if (!version) return "";
     const type = version.version_type || "";
-    if (type === "ESTIMATED") return "暂估版";
-    if (type === "ACTUAL") return "实际版";
-    if (type === "Estimated") return "暂估版";
-    if (type === "Actual") return "实际版";
+    if (type === "ESTIMATED") return ocTranslate("暂估版");
+    if (type === "ACTUAL") return ocTranslate("实际版");
+    if (type === "Estimated") return ocTranslate("暂估版");
+    if (type === "Actual") return ocTranslate("实际版");
     return version.version_code || type || "";
   }
 
@@ -349,11 +349,11 @@
   }
 
   transportLabel(value) {
-    if (!value) return "未指定";
+    if (!value) return ocTranslate("未指定");
     const labels = {
-      SEA: "海运",
-      AIR: "空运",
-      EXPRESS: "快递",
+      SEA: ocTranslate("海运"),
+      AIR: ocTranslate("空运"),
+      EXPRESS: ocTranslate("快递"),
     };
     const key = this.normalizeTransportMode(value);
     return labels[key] || String(value);
@@ -370,7 +370,7 @@
     }
     const mode = summary.transport_mode || summary.transport_mode_raw;
     if (this.hasText(mode)) parts.push(this.transportLabel(mode));
-    if (this.hasText(summary.pre_delivery_date)) parts.push(`预计 ${summary.pre_delivery_date}`);
+    if (this.hasText(summary.pre_delivery_date)) parts.push(ocTranslate("预计 {0}", [summary.pre_delivery_date]));
     if (this.hasText(summary.destination)) parts.push(summary.destination);
     const grossWeight = Number(summary.gross_weight_kg);
     if (Number.isFinite(grossWeight) && grossWeight > 0) parts.push(`${this.formatNumber(grossWeight)} KG`);
@@ -419,10 +419,10 @@
   currencyLabel(value) {
     if (!value) return "";
     const labels = {
-      RMB: "人民币",
-      CNY: "人民币",
-      USD: "美元",
-      MXN: "比索",
+      RMB: ocTranslate("人民币"),
+      CNY: ocTranslate("人民币"),
+      USD: ocTranslate("美元"),
+      MXN: ocTranslate("比索"),
     };
     const code = this.normalizeCurrencyCode(value);
     return labels[code] || String(value);
@@ -436,41 +436,46 @@
     if (normalized.includes("imported")) {
       const isOaTraceOnly = sourceType === "oa_logistics" && !count;
       return {
-        label: isOaTraceOnly ? "仅拉取审批" : "已导入",
+        label: isOaTraceOnly ? ocTranslate("仅拉取审批") : ocTranslate("已导入"),
+        sourceLabel: isOaTraceOnly ? "仅拉取审批" : "已导入",
         statusClass: isOaTraceOnly ? "ocw-check-info" : "ocw-check-ok",
         needsRecalculate: false,
-        suggestion: isOaTraceOnly ? "已保存审批追溯，后续解析附件后生成明细" : "数据已导入，可继续核对或试算",
+        suggestion: isOaTraceOnly ? ocTranslate("已保存审批追溯，后续解析附件后生成明细") : ocTranslate("数据已导入，可继续核对或试算"),
       };
     }
     if (normalized.includes("dirty")) {
       return {
-        label: "待重算",
+        label: ocTranslate("待重算"),
+        sourceLabel: "待重算",
         statusClass: "ocw-check-warn",
         needsRecalculate: true,
-        suggestion: "明细已修改，重算后再复核综合成本",
+        suggestion: ocTranslate("明细已修改，重算后再复核综合成本"),
       };
     }
     if (normalized.includes("calculated")) {
       return {
-        label: "已试算",
+        label: ocTranslate("已试算"),
+        sourceLabel: "已试算",
         statusClass: "ocw-check-ok",
         needsRecalculate: false,
-        suggestion: "可继续核对运费/税费/杂费和分摊结果",
+        suggestion: ocTranslate("可继续核对运费/税费/杂费和分摊结果"),
       };
     }
     if (normalized.includes("draft")) {
       return {
-        label: "草稿",
+        label: ocTranslate("草稿"),
+        sourceLabel: "草稿",
         statusClass: "ocw-check-info",
         needsRecalculate: true,
-        suggestion: "导入或补数后点击重新试算",
+        suggestion: ocTranslate("导入或补数后点击重新试算"),
       };
     }
     return {
-      label: value || "待处理",
+      label: value || ocTranslate("待处理"),
+      sourceLabel: value || "待处理",
       statusClass: "ocw-check-info",
       needsRecalculate: false,
-      suggestion: "继续核对字段完整性",
+      suggestion: ocTranslate("继续核对字段完整性"),
     };
   }
 
@@ -592,14 +597,14 @@
     });
     if (!matches.length) return "";
     const head = matches.slice(0, limit).join("、");
-    const tail = matches.length > limit ? ` 等 ${matches.length} 行` : "";
+    const tail = matches.length > limit ? ocTranslate(" 等 {0} 行", [matches.length]) : "";
     return `${head}${tail}`;
   }
 
   itemLocationLabel(row, index = 0) {
     const rowNo = row.excel_row_no || row.row_no || index + 1;
     const material = this.materialAuditLabel(row);
-    return `第 ${rowNo} 行 ${material}`;
+    return ocTranslate("第 {0} 行 {1}", [rowNo, material]);
   }
 
   hasText(value) {
@@ -715,23 +720,23 @@
           ["范围", detail.scope],
           ["原因", detail.reason],
           ["下一步", detail.next_action],
-        ].map(([label, value]) => `<div class="ocw-error-row"><strong>${label}</strong><span>${this.escape(value)}</span></div>`).join("")
-      : `<div class="ocw-error-row"><strong>原因</strong><span>${this.escape(message)}</span></div><div class="ocw-error-row"><strong>下一步</strong><span>刷新后重试或查看当前批次的操作记录</span></div>`;
+        ].map(([label, value]) => `<div class="ocw-error-row"><strong>${ocTranslate(label)}</strong><span>${this.escape(value)}</span></div>`).join("")
+      : `<div class="ocw-error-row"><strong>${ocTranslate("原因")}</strong><span>${this.escape(message)}</span></div><div class="ocw-error-row"><strong>${ocTranslate("下一步")}</strong><span>${ocTranslate("刷新后重试或查看当前批次的操作记录")}</span></div>`;
     const dialog = new frappe.ui.Dialog({
-      title: "操作失败",
+      title: ocTranslate("操作失败"),
       fields: [
         {
           fieldtype: "HTML",
           fieldname: "error_detail",
           options: `
             <div class="ocw-error-dialog">
-              <div class="ocw-error-title">海外采购综合成本核算</div>
+              <div class="ocw-error-title">${ocTranslate("海外采购综合成本核算")}</div>
               <div class="ocw-error-message">${rows}</div>
             </div>
           `,
         },
       ],
-      primary_action_label: "我知道了",
+      primary_action_label: ocTranslate("我知道了"),
       primary_action: () => dialog.hide(),
     });
     dialog.show();

@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 from pathlib import Path
 
 from overseas_costing.services.import_service import import_yuewei_excel_file
@@ -21,13 +28,13 @@ def _resolve_workbook_file(file_path: str | None = None) -> Path:
         path = Path(file_path).expanduser()
         if path.exists():
             return path
-        raise FileNotFoundError(f"未找到 Yuewei Excel 文件：{file_path}")
+        raise FileNotFoundError(_("未找到 Yuewei Excel 文件：{0}").format(file_path))
 
     for path in DEFAULT_CANDIDATE_PATHS:
         if path.exists():
             return path
 
-    raise FileNotFoundError("未找到墨西哥进口物料综合成本核算.xlsx，请通过 file_path 参数传入。")
+    raise FileNotFoundError(_("未找到墨西哥进口物料综合成本核算.xlsx，请通过 file_path 参数传入。"))
 
 
 def preview_2026_yuewei_sea(

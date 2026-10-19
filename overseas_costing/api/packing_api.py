@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import json
 import re
 
@@ -27,22 +34,22 @@ def _json_object(value, *, label: str, max_length: int) -> dict:
     else:
         encoded = str(value or "{}")
         if len(encoded.encode("utf-8")) > max_length:
-            raise ValueError(f"{label}过大。")
+            raise ValueError(_("{0}过大。").format(label))
         try:
             payload = json.loads(encoded)
         except (TypeError, ValueError) as error:
-            raise ValueError(f"{label}不是有效 JSON。") from error
+            raise ValueError(_("{0}不是有效 JSON。").format(label)) from error
     if len(encoded.encode("utf-8")) > max_length:
-        raise ValueError(f"{label}过大。")
+        raise ValueError(_("{0}过大。").format(label))
     if not isinstance(payload, dict):
-        raise ValueError(f"{label}必须是对象。")
+        raise ValueError(_("{0}必须是对象。").format(label))
     return payload
 
 
 def _request_key(value: str) -> str:
     normalized = str(value or "").strip().lower()
     if not HASH_PATTERN.fullmatch(normalized):
-        raise ValueError("请求 ID 必须是 64 位小写 SHA-256。")
+        raise ValueError(_("请求 ID 必须是 64 位小写 SHA-256。"))
     return normalized
 
 
@@ -148,7 +155,7 @@ def _refresh_selected_wiki(batch_name, workbook_id, sheet_id, request_key):
                  if source_id.partition(':')[0] == workbook_id
                  and (sheet_id is None or source_id.partition(':')[2] == sheet_id))
     if not ids:
-        raise ValueError('该装箱表未被当前采购支出明确关联，不能刷新或采用。')
+        raise ValueError(_('该装箱表未被当前采购支出明确关联，不能刷新或采用。'))
     from overseas_costing.services.logistics_settlement.store import Store
     from overseas_costing.services.logistics_settlement.model import digest,dumps
     from overseas_costing.services.logistics_settlement.jobs import utcnow
@@ -158,7 +165,7 @@ def _refresh_selected_wiki(batch_name, workbook_id, sheet_id, request_key):
     previous = store.get('state',identity)
     if previous:
         if previous.get('source_ids') != ids or previous.get('source_context') != bundle['context']:
-            raise ValueError('刷新请求的来源已变化，请重新刷新。')
+            raise ValueError(_('刷新请求的来源已变化，请重新刷新。'))
         return {'ok':previous.get('status') == 'success','request_id':request_key,'request_key':request_key}
     for source_id in ids:
         refresh_bound_wiki_snapshot(batch_name,source_id)

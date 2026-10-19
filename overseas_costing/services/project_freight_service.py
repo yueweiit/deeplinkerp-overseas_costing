@@ -1,4 +1,11 @@
 """Server-issued project weight policy and exact two-level freight allocation."""
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 import re
 from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 from overseas_costing.services.shipment_cost_service import object_json, number
@@ -10,12 +17,12 @@ def policy_from_fee(fee):
 
 def validate_policy(policy):
     if not isinstance(policy, dict) or policy.get('method') != 'PROJECT_GROSS_WEIGHT':
-        raise ValueError('项目分摊规则无效。')
+        raise ValueError(_('项目分摊规则无效。'))
     projects = policy.get('projects')
     if not isinstance(projects, list) or len(projects) < 2 or any(not isinstance(p,str) or not p.strip() for p in projects) or len(set(projects)) != len(projects):
-        raise ValueError('项目分摊清单无效。')
+        raise ValueError(_('项目分摊清单无效。'))
     if not policy.get('source_refs'):
-        raise ValueError('项目分摊缺少可信来源。')
+        raise ValueError(_('项目分摊缺少可信来源。'))
     return policy
 
 

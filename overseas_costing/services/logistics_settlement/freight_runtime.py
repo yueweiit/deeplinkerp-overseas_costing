@@ -1,4 +1,11 @@
 """Local RPC projections and background integration for shipment freight."""
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 import re
 
 from . import freight_adoption as adoption, freight_matching as matching, freight_packing as packing
@@ -130,16 +137,16 @@ def payment_source_scope(store,candidates,version_name,items=None,requested_refs
     rows.sort(key=lambda row:(0 if row['match_strength']=='STRONG' else 1,row['approval_no'],row['candidate_id']))
     strong=[row for row in rows if row['match_strength']=='STRONG']
     if requested_refs is not None:
-        if not isinstance(requested_refs,list):raise ValueError('支付来源选择格式不正确')
+        if not isinstance(requested_refs,list):raise ValueError(_('支付来源选择格式不正确'))
         available={(row['candidate_id'],row['revision'],str(version_name or '')):row for row in rows}
         keys=[]
         for reference in requested_refs:
             if not isinstance(reference,dict) or set(reference)!={'candidate_id','revision','version'}:
-                raise ValueError('支付来源选择格式不正确')
+                raise ValueError(_('支付来源选择格式不正确'))
             key=tuple(str(reference.get(name) or '') for name in ('candidate_id','revision','version'))
-            if key not in available:raise ValueError('支付来源候选已变化，请刷新')
+            if key not in available:raise ValueError(_('支付来源候选已变化，请刷新'))
             keys.append(key)
-        if len(keys)!=len(set(keys)):raise ValueError('支付来源选择重复')
+        if len(keys)!=len(set(keys)):raise ValueError(_('支付来源选择重复'))
         selected=[available[key] for key in keys]
         status='SELECTED' if selected else 'NEEDS_SELECTION' if rows else 'UNAVAILABLE'
     else:
@@ -218,7 +225,7 @@ def batch_status(store,ledger,batch_name,version_name=None):
     from overseas_costing.services.effective_logistics_source import resolve_source_context
     batch=ledger.get('batch',batch_name) or {};vname=version_name or batch.get('current_version')
     version=ledger.get('version',vname) or {}
-    if version.get('batch')!=batch_name:raise ValueError('版本不属于当前批次')
+    if version.get('batch')!=batch_name:raise ValueError(_('版本不属于当前批次'))
     historical=vname!=batch.get('current_version')
     maps=store.find('batch_map',batch=batch_name)
     base={'ok':True,'freight_mode':True,'mapped':bool(maps),'historical':historical,'viewed_version':vname,
@@ -273,12 +280,12 @@ def manual_candidate(store,ledger,batch_name,expense_id,reason,expected_revision
     with store.atomic():
         store.get('state','match_lock',lock=True)
         maps=store.find('batch_map',batch=batch_name)
-        if not maps:raise ValueError('请先开始本票匹配')
+        if not maps:raise ValueError(_('请先开始本票匹配'))
         candidate_id=digest(matching.POLICY,maps[0]['source_id'],expense_id)
         store.get('freight_candidate',candidate_id,lock=True)
         logistics=store.get('source',maps[0]['source_id'],lock=True);expense=store.get('source',expense_id,lock=True)
         if not expense or expense['corp']!=logistics['corp'] or expense['invalid'] or not expense.get('approved') or expense['kind']!='expense':
-            raise ValueError('来源企业、类型或状态不符')
+            raise ValueError(_('来源企业、类型或状态不符'))
         lines=matching.current_lines(store,expense)
         own=matching.shipment_candidate_lines(logistics,lines)
         candidate=matching.save_candidate(store,logistics,expense,own,'manual',reason,expected_revision=expected_revision)
@@ -286,15 +293,15 @@ def manual_candidate(store,ledger,batch_name,expense_id,reason,expected_revision
 
 
 def reopen_candidate(store,ledger,batch_name,candidate_id,revision,reason,actor):
-    if not str(reason or '').strip():raise ValueError('请填写重新纳入原因')
+    if not str(reason or '').strip():raise ValueError(_('请填写重新纳入原因'))
     with store.atomic():
         store.get('state','match_lock',lock=True)
         candidate=store.get('freight_candidate',candidate_id,lock=True)
         maps=store.find('batch_map',batch=batch_name)
         if not candidate or not any(row['source_id']==candidate.get('logistics_id') for row in maps):
-            raise ValueError('候选不属于当前批次')
-        if candidate.get('revision')!=revision:raise ValueError('候选已变化，请刷新后重试')
-        if candidate.get('status')!='rejected':raise ValueError('只能重新纳入已否决候选')
+            raise ValueError(_('候选不属于当前批次'))
+        if candidate.get('revision')!=revision:raise ValueError(_('候选已变化，请刷新后重试'))
+        if candidate.get('status')!='rejected':raise ValueError(_('只能重新纳入已否决候选'))
         old_revision=candidate['revision']
         candidate.update(status='reopened',method='reopened',reason=str(reason).strip(),
                          revision=digest('payment-candidate-reopened',old_revision,str(reason).strip(),actor))
@@ -314,9 +321,9 @@ def decide_payment_candidate(store,ledger,batch_name,version_name,candidate_id,r
     """
     reason=str(reason or '').strip()
     if action not in ('reject','reopen') or not reason:
-        raise ValueError('请选择候选操作并填写核对依据')
+        raise ValueError(_('请选择候选操作并填写核对依据'))
     if not lease_check or not edit_token or expected_modified in (None,''):
-        raise ValueError('候选状态修改需要有效编辑租约')
+        raise ValueError(_('候选状态修改需要有效编辑租约'))
     with store.atomic():
         store.get('state','match_lock',lock=True)
         lease_check(batch_name,edit_token=edit_token,expected_modified=expected_modified)
@@ -324,18 +331,18 @@ def decide_payment_candidate(store,ledger,batch_name,version_name,candidate_id,r
         version=ledger.get('version',version_name,lock=True) or {}
         if (not batch or version.get('batch')!=batch_name
                 or batch.get('current_version')!=version_name):
-            raise ValueError('当前版本已变化，请刷新后重试')
+            raise ValueError(_('当前版本已变化，请刷新后重试'))
         if (version.get('status') in ('Confirmed','Archived')
                 or batch.get('confirm_status')=='Confirmed'
                 or batch.get('writeback_status')=='Success' or batch.get('is_locked')):
-            raise ValueError('历史、已确认、已回写或锁定版本不可修改')
+            raise ValueError(_('历史、已确认、已回写或锁定版本不可修改'))
 
         candidate=store.get('freight_candidate',candidate_id,lock=True)
         if not candidate or candidate.get('revision')!=revision:
-            raise ValueError('付款候选已变化，请刷新后重试')
+            raise ValueError(_('付款候选已变化，请刷新后重试'))
         maps=store.find('batch_map',batch=batch_name,source_id=candidate.get('logistics_id'))
         if not maps:
-            raise ValueError('付款候选不属于当前批次')
+            raise ValueError(_('付款候选不属于当前批次'))
         for mapping in maps:
             store.get('batch_map',mapping['id'],lock=True)
         logistics=store.get('source',candidate.get('logistics_id'),lock=True) or {}
@@ -345,17 +352,17 @@ def decide_payment_candidate(store,ledger,batch_name,version_name,candidate_id,r
                 or logistics.get('corp')!=expense.get('corp')
                 or candidate.get('logistics_snapshot')!=logistics.get('snapshot')
                 or candidate.get('expense_snapshot')!=expense.get('snapshot')):
-            raise ValueError('付款候选来源关系已变化，请重新匹配')
+            raise ValueError(_('付款候选来源关系已变化，请重新匹配'))
         for line_id in candidate.get('line_ids') or []:
             line=store.get('freight_line',line_id,lock=True) or {}
             if line.get('source_id')!=expense.get('id') or line.get('snapshot')!=expense.get('snapshot'):
-                raise ValueError('付款候选明细已变化，请重新匹配')
+                raise ValueError(_('付款候选明细已变化，请重新匹配'))
 
         status=candidate.get('status')
         if action=='reopen' and status!='rejected':
-            raise ValueError('只能重新纳入已否决候选')
+            raise ValueError(_('只能重新纳入已否决候选'))
         if action=='reject' and status not in ('pending','conflict','reopened'):
-            raise ValueError('当前付款候选不可否决')
+            raise ValueError(_('当前付款候选不可否决'))
         old_revision=candidate['revision']
         if action=='reopen':
             candidate.update(status='reopened',method='reopened',reason=reason,reopened_by=actor,
@@ -426,16 +433,16 @@ def history_status(store,job_id=None):
 def line_evidence(store,ledger,batch_name,version_name,line_id):
     """Only a shipment-owned archived row; no upstream or full-statement disclosure."""
     batch=ledger.get('batch',batch_name) or {};version=ledger.get('version',version_name) or {}
-    if version.get('batch')!=batch_name:raise ValueError('版本不属于本票')
+    if version.get('batch')!=batch_name:raise ValueError(_('版本不属于本票'))
     claims=(row_meta(version).get('freight_settlement') or {}).get('claims') or []
     allowed={c['line_id'] for c in claims}
     mappings=store.find('batch_map',batch=batch_name)
     if version_name==batch.get('current_version') and mappings:
         for candidate in matching.candidates(store,mappings[0]['source_id']):
             if candidate['status']!='rejected':allowed.update(candidate['line_ids'])
-    if line_id not in allowed:raise ValueError('此账单行不属于本票可查看的证据')
+    if line_id not in allowed:raise ValueError(_('此账单行不属于本票可查看的证据'))
     line=store.get('freight_line',line_id)
-    if not line:raise ValueError('本地证据行不存在，请核对归档状态')
+    if not line:raise ValueError(_('本地证据行不存在，请核对归档状态'))
     from .runtime import source_summary
     source=store.get('snapshot',line['snapshot']) or {}
     return {**{k:line.get(k) for k in ('amount','currency','waybill','approval_no','label','billing_weight','cargo_text','evidence')},

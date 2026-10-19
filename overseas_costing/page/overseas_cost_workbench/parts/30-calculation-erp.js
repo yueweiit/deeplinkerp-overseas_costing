@@ -8,7 +8,7 @@
     const sourceStatus = batch.source_status || {};
     if (sourceStatus.invalid_business) {
       frappe.show_alert({
-        message: sourceStatus.invalid_business_reason || "当前批次包含已拒绝、撤销或终止的审批，不能重新计算。",
+        message: sourceStatus.invalid_business_reason || ocTranslate("当前批次包含已拒绝、撤销或终止的审批，不能重新计算。"),
         indicator: "red",
       });
       return;
@@ -80,8 +80,8 @@
       this.recordUsage("RECALCULATE", { batch, remark: "重新试算批次成本" });
       frappe.show_alert({
         message: refreshWarning
-          ? `试算已保存，但工作台分类刷新失败：${refreshWarning}。已保留当前详情，请稍后刷新。`
-          : result.message || "重新试算完成",
+          ? ocTranslate("试算已保存，但工作台分类刷新失败：{0}。已保留当前详情，请稍后刷新。", [refreshWarning])
+          : result.message || ocTranslate("重新试算完成"),
         indicator: refreshWarning ? "orange" : "green",
       });
     } catch (error) {
@@ -296,9 +296,9 @@
       frappe.confirm(
         `
           <div class="ocw-confirm-copy">
-            <h4>按采购数量确认实际发货数量？</h4>
-            <p>只会处理当前缺实际发货数量、且采购数量大于 0 的物料行；已有实际发货数量的行不会覆盖。</p>
-            <div class="ocw-confirm-note">保存后会留下修改记录，并把批次标记为待重新试算。</div>
+            <h4>${ocTranslate("按采购数量确认实际发货数量？")}</h4>
+            <p>${ocTranslate("只会处理当前缺实际发货数量、且采购数量大于 0 的物料行；已有实际发货数量的行不会覆盖。")}</p>
+            <div class="ocw-confirm-note">${ocTranslate("保存后会留下修改记录，并把批次标记为待重新试算。")}</div>
           </div>
         `,
         () => resolve(true),
@@ -332,7 +332,7 @@
     this.acceptBatchWriteRevision?.(result.batch_modified);
     await this.refreshDetailSummary();
     frappe.show_alert({
-      message: result.message || "实际发货数量已确认，请重新试算",
+      message: result.message || ocTranslate("实际发货数量已确认，请重新试算"),
       indicator: Number(result.changed_count || 0) > 0 ? "green" : "blue",
     });
   }
@@ -342,7 +342,7 @@
     if (text.includes("清关") || text.includes("clearance") || text.includes("customs")) {
       return {
         feeType: "clearance",
-        title: "清关费",
+        title: ocTranslate("清关费"),
         uploadLabel: "上传清关资料",
         ruleCode: "manual_clearance_fee",
         expenseCategory: "清关费",
@@ -354,7 +354,7 @@
     if (text.includes("关税") || text.includes("税费") || text.includes("tariff") || text.includes("duty") || text.includes("tax") || text.includes("igi") || text.includes("iva")) {
       return {
         feeType: "tariff",
-        title: "关税/税费",
+        title: ocTranslate("关税/税费"),
         uploadLabel: "上传完税凭证",
         ruleCode: "manual_tariff_tax",
         expenseCategory: "关税税费",
@@ -375,7 +375,7 @@
       return;
     }
     const dialog = new frappe.ui.Dialog({
-      title: `录入${config.title}暂估`,
+      title: ocTranslate("录入{0}暂估", [config.title]),
       size: "large",
       fields: [
         {
@@ -384,22 +384,22 @@
           options: `
             <div class="ocw-purchase-preview">
               <div class="ocw-purchase-target">
-                <span>当前批次</span>
+                <span>${ocTranslate("当前批次")}</span>
                 <strong>${this.escape(batch.batch_no || batch.waybill_no || batch.name)}</strong>
-                <em>暂估金额会进入费用池参与综合单价试算；后续拿到正式资料后可再调整。</em>
+                <em>${ocTranslate("暂估金额会进入费用池参与综合单价试算；后续拿到正式资料后可再调整。")}</em>
               </div>
               <div class="ocw-manual-quote-box">
                 <div class="ocw-manual-quote-head">
-                  <strong>${this.escape(config.title)}暂估</strong>
-                  <span>适用于暂时没有完税凭证、但已有清关/税费预计金额的情况。</span>
+                  <strong>${ocTranslate("{0}暂估", [this.escape(ocTranslate(config.title))])}</strong>
+                  <span>${ocTranslate("适用于暂时没有完税凭证、但已有清关/税费预计金额的情况。")}</span>
                 </div>
                 <div class="ocw-manual-quote-grid">
                   <label>
-                    <span>金额</span>
-                    <input class="form-control" data-field="amount" type="number" step="0.000001" placeholder="请输入大于 0 的金额">
+                    <span>${ocTranslate("金额")}</span>
+                    <input class="form-control" data-field="amount" type="number" step="0.000001" placeholder="${ocTranslate('请输入大于 0 的金额')}">
                   </label>
                   <label>
-                    <span>币种</span>
+                    <span>${ocTranslate("币种")}</span>
                     <select class="form-control" data-field="currency">
                       ${this.renderManualQuoteOption("MXN", "比索 MXN", config.defaultCurrency)}
                       ${this.renderManualQuoteOption("RMB", "人民币 RMB", config.defaultCurrency)}
@@ -407,7 +407,7 @@
                     </select>
                   </label>
                   <label>
-                    <span>分摊依据</span>
+                    <span>${ocTranslate("分摊依据")}</span>
                     <select class="form-control" data-field="allocation_basis">
                       ${this.renderManualQuoteOption("goods_value", "按货值分摊", config.defaultBasis)}
                       ${this.renderManualQuoteOption("gross_weight", "按毛重分摊", config.defaultBasis)}
@@ -416,19 +416,19 @@
                     </select>
                   </label>
                   <label class="ocw-manual-quote-full">
-                    <span>依据/备注</span>
-                    <textarea class="form-control" data-field="remark" rows="3" placeholder="例如：按货代报价暂估，待完税凭证回来后对账调整"></textarea>
+                    <span>${ocTranslate("依据/备注")}</span>
+                    <textarea class="form-control" data-field="remark" rows="3" placeholder="${ocTranslate('例如：按货代报价暂估，待完税凭证回来后对账调整')}"></textarea>
                   </label>
                 </div>
                 <div class="ocw-manual-quote-actions">
-                  <button class="ocw-primary-btn" type="button" data-action="save-fee-pool-gap">保存暂估并重新试算</button>
+                  <button class="ocw-primary-btn" type="button" data-action="save-fee-pool-gap">${ocTranslate("保存暂估并重新试算")}</button>
                 </div>
               </div>
             </div>
           `,
         },
       ],
-      primary_action_label: "关闭",
+      primary_action_label: ocTranslate("关闭"),
       primary_action: () => dialog.hide(),
     });
     dialog.show();
@@ -442,18 +442,18 @@
     const amount = this.readManualQuoteValue(dialog, "amount");
     const currency = this.readManualQuoteValue(dialog, "currency") || config.defaultCurrency;
     const allocationBasis = this.readManualQuoteValue(dialog, "allocation_basis") || config.defaultBasis;
-    const remark = this.readManualQuoteValue(dialog, "remark") || `${config.title}暂估录入`;
+    const remark = this.readManualQuoteValue(dialog, "remark") || ocTranslate("{0}暂估录入", [config.title]);
     if (!this.isPositive(amount)) {
-      frappe.msgprint(`请先填写大于 0 的${config.title}金额。`);
+      frappe.msgprint(ocTranslate("请先填写大于 0 的{0}金额。", [config.title]));
       return;
     }
     const confirmed = await new Promise((resolve) => {
       frappe.confirm(
         `
           <div class="ocw-confirm-copy">
-            <h4>确认保存${this.escape(config.title)}暂估？</h4>
-            <p>系统会把 ${this.escape(this.formatMoney(amount))} ${this.escape(currency)} 写入费用池，并立即重新试算。</p>
-            <div class="ocw-confirm-note">后续拿到正式资料后，可以再次调整并保留修改记录。</div>
+            <h4>${ocTranslate("确认保存{0}暂估？", [this.escape(ocTranslate(config.title))])}</h4>
+            <p>${ocTranslate("系统会把 {0} {1} 写入费用池，并立即重新试算。", [this.escape(this.formatMoney(amount)), this.escape(currency)])}</p>
+            <div class="ocw-confirm-note">${ocTranslate("后续拿到正式资料后，可以再次调整并保留修改记录。")}</div>
           </div>
         `,
         () => resolve(true),
@@ -463,7 +463,7 @@
     if (!confirmed) return;
 
     const $button = dialog.$wrapper.find("[data-action='save-fee-pool-gap']");
-    $button.prop("disabled", true).text("保存中...");
+    $button.prop("disabled", true).text(ocTranslate("保存中..."));
     try {
       const result = await this.call(
         "overseas_costing.api.calculate.update_allocation_rule",
@@ -480,16 +480,16 @@
             is_active: 1,
             is_enabled: 1,
             priority_no: config.feeType === "tariff" ? 70 : 60,
-            remark: `${config.title}暂估 | ${remark}`,
+            remark: ocTranslate("{0}暂估 | {1}", [config.title, remark]),
           }),
         },
         true
       );
-      if (!result.ok) throw new Error(result.message || `${config.title}暂估保存失败`);
+      if (!result.ok) throw new Error(result.message || ocTranslate("{0}暂估保存失败", [config.title]));
       dialog.hide();
       await this.recalculate(batch.name);
     } finally {
-      $button.prop("disabled", false).text("保存暂估并重新试算");
+      $button.prop("disabled", false).text(ocTranslate("保存暂估并重新试算"));
     }
   }
 
@@ -505,9 +505,9 @@
       frappe.confirm(
         `
           <div class="ocw-confirm-copy">
-            <h4>确认本票${this.escape(config.title)}为 0？</h4>
-            <p>系统会写入 0 元确认记录，并重新试算；之后校验结果不会再因该项缺失被阻断。</p>
-            <div class="ocw-confirm-note">这不是暂估金额，表示人工确认当前票据该项无需计入综合成本。</div>
+            <h4>${ocTranslate("确认本票{0}为 0？", [this.escape(ocTranslate(config.title))])}</h4>
+            <p>${ocTranslate("系统会写入 0 元确认记录，并重新试算；之后校验结果不会再因该项缺失被阻断。")}</p>
+            <div class="ocw-confirm-note">${ocTranslate("这不是暂估金额，表示人工确认当前票据该项无需计入综合成本。")}</div>
           </div>
         `,
         () => resolve(true),
@@ -536,7 +536,7 @@
       },
       true
     );
-    if (!result.ok) throw new Error(result.message || `${config.title}0 元确认失败`);
+    if (!result.ok) throw new Error(result.message || ocTranslate("{0}0 元确认失败", [config.title]));
     await this.recalculate(batch.name);
   }
 
@@ -587,7 +587,7 @@
       if (authoritative.task !== "cost" || authoritative.batch?.review_state !== "ready") {
         await this.applyAuthoritativeReviewClassification(batch.name, authoritative, context);
         const destination = authoritative.task === "pending" ? "待处理" : authoritative.task === "erp" ? "ERP 队列" : "已确认记录";
-        this.showPendingFeature(`批次权威状态已变化，已切换到${destination}。`);
+        this.showPendingFeature(ocTranslate("批次权威状态已变化，已切换到{0}。", [destination]));
         return;
       }
       Object.assign(batch, authoritative.batch);
@@ -603,7 +603,7 @@
       if (!this.reviewNavigationContextMatches(context)) {
         if (result.ok && result.confirmed !== false) {
           this.recordUsage("CONFIRM_RESULT", { batch, remark: "人工校验计算结果通过（页面已切换）" });
-          frappe.show_alert({ message: `${result.message || "计算结果已确认"}，当前页面未切换。`, indicator: "green" });
+          frappe.show_alert({ message: ocTranslate("{0}，当前页面未切换。", [result.message || "计算结果已确认"]), indicator: "green" });
         }
         return;
       }
@@ -634,7 +634,7 @@
       });
       await this.loadBatches();
       this.recordUsage("CONFIRM_RESULT", { batch, remark: "人工校验计算结果通过" });
-      frappe.show_alert({ message: result.message || "计算结果已确认", indicator: "green" });
+      frappe.show_alert({ message: result.message || ocTranslate("计算结果已确认"), indicator: "green" });
     } catch (error) {
       this.recordUsage("CONFIRM_RESULT", { batch, status: "Failed", remark: error.message || "人工校验计算结果失败" });
       this.showError(error);
@@ -729,7 +729,7 @@
       await this.refreshBatch(batch.name);
       this.recordUsage("PUSH_ERP", { batch, remark: result.message || "推送 DeepLinkERP" });
       const indicator = String(result.writeback_status || "").toLowerCase().includes("success") ? "green" : "orange";
-      frappe.show_alert({ message: result.message || "DeepLinkERP 推送已处理", indicator });
+      frappe.show_alert({ message: result.message || ocTranslate("DeepLinkERP 推送已处理"), indicator });
       // 推送成功只说明"发出去了"，用户并不知道去 ERP 的哪里看；立刻把新建单据摆出来。
       // 这一步失败不能反过来把已成功的推送说成失败。
       try {
@@ -789,7 +789,7 @@
     }
     this.erpFlowBlockState = {
       batchName: batch.name,
-      title: "校验未通过",
+      title: ocTranslate("校验未通过"),
       result: readiness || {},
     };
     if (this.detailState?.batchName === batch.name) this.updateDetailErpAction?.(this.getDetailBatch());
@@ -816,13 +816,13 @@
     );
     const reasonHtml = reasons.length
       ? `<ul>${reasons.map((reason) => `<li>${this.escape(reason)}</li>`).join("")}</ul>`
-      : `<p>${this.escape(result.message || "请补齐基础数据或重新试算后再继续。")}</p>`;
+      : `<p>${this.escape(result.message || ocTranslate("请补齐基础数据或重新试算后再继续。"))}</p>`;
     return `
       <div class="ocw-erp-block-dialog">
         <div class="ocw-erp-block-head">
           <div>
-            <h5>${this.escape(title)}</h5>
-            <span>${this.escape(reasons.length ? `待补信息共 ${reasons.length} 项` : result.message || "请补齐基础数据或重新试算后再继续。")}</span>
+            <h5>${this.escape(ocTranslate(title))}</h5>
+            <span>${this.escape(reasons.length ? ocTranslate("待补信息共 {0} 项", [reasons.length]) : result.message || ocTranslate("请补齐基础数据或重新试算后再继续。"))}</span>
           </div>
         </div>
         ${gapHtml}
@@ -832,9 +832,9 @@
   }
   renderErpFieldGaps(fieldGaps = {}) {
     const sections = [
-      { key: "batch", title: "批次头待补" },
-      { key: "rules", title: "费用池待补" },
-      { key: "items", title: "明细待补" },
+      { key: "batch", title: ocTranslate("批次头待补") },
+      { key: "rules", title: ocTranslate("费用池待补") },
+      { key: "items", title: ocTranslate("明细待补") },
     ];
     const summary = fieldGaps.summary || {};
     const html = sections
@@ -853,7 +853,7 @@
           .join("");
         return `
           <div class="ocw-erp-gap-group">
-            <h5>${this.escape(section.title)}（${this.escape(String(rows.length))} 项）</h5>
+            <h5>${ocTranslate("{0}（{1} 项）", [this.escape(ocTranslate(section.title)), this.escape(String(rows.length))])}</h5>
             <ul>${list}</ul>
           </div>
         `;
@@ -864,7 +864,7 @@
     const total = summary.missing_total ?? sections.reduce((count, section) => count + ((Array.isArray(fieldGaps[section.key]) ? fieldGaps[section.key].length : 0)), 0);
     return `
       <div class="ocw-erp-gap-summary">
-        <div class="ocw-erp-gap-total">待补信息共 ${this.escape(String(total))} 项</div>
+        <div class="ocw-erp-gap-total">${ocTranslate("待补信息共 {0} 项", [this.escape(String(total))])}</div>
         ${html}
       </div>
     `;
@@ -872,9 +872,9 @@
 
   renderErpFieldGapsWithActions(fieldGaps = {}, batchName = "", readiness = {}) {
     const sections = [
-      { key: "batch", title: "批次头待补" },
-      { key: "rules", title: "费用池待补" },
-      { key: "items", title: "明细待补" },
+      { key: "batch", title: ocTranslate("批次头待补") },
+      { key: "rules", title: ocTranslate("费用池待补") },
+      { key: "items", title: ocTranslate("明细待补") },
     ];
     const batch = batchName ? this.findBatch(batchName) : this.findBatch(this.drawerBatchName || this.activeBatchName);
     const summary = fieldGaps.summary || {};
@@ -885,7 +885,7 @@
         const list = rows.map((row) => this.renderErpGapRow(section.key, row, batch, readiness)).join("");
         return `
           <div class="ocw-erp-gap-group">
-            <h5>${this.escape(section.title)}（${this.escape(String(rows.length))}项）</h5>
+            <h5>${ocTranslate("{0}（{1}项）", [this.escape(ocTranslate(section.title)), this.escape(String(rows.length))])}</h5>
             <ul>${list}</ul>
           </div>
         `;
@@ -896,9 +896,9 @@
     const total = summary.missing_total ?? sections.reduce((count, section) => count + ((Array.isArray(fieldGaps[section.key]) ? fieldGaps[section.key].length : 0)), 0);
     return `
       <div class="ocw-erp-gap-summary">
-        <div class="ocw-erp-gap-total">待补信息共 ${this.escape(String(total))} 项</div>
+        <div class="ocw-erp-gap-total">${ocTranslate("待补信息共 {0} 项", [this.escape(String(total))])}</div>
         ${html}
-        ${batch ? `<div class="ocw-erp-flow-note">补齐后请使用页头计算入口开始试算或重新计算。</div>` : ""}
+        ${batch ? `<div class="ocw-erp-flow-note">${ocTranslate("补齐后请使用页头计算入口开始试算或重新计算。")}</div>` : ""}
       </div>
     `;
   }
@@ -912,24 +912,24 @@
       : null;
     const buttons = [];
     if (batch && (scope === "batch" || scope === "rules")) {
-      buttons.push(`<button class="ocw-link-btn" type="button" data-action="gap-repull-dingtalk" data-batch-name="${this.escape(batch.name)}">重拉钉钉</button>`);
+      buttons.push(`<button class="ocw-link-btn" type="button" data-action="gap-repull-dingtalk" data-batch-name="${this.escape(batch.name)}">${ocTranslate("重拉钉钉")}</button>`);
     }
     if (batch && scope === "rules") {
       const feeConfig = this.feeGapConfig(row);
       if (feeConfig) {
         buttons.push(`<button class="ocw-link-btn" type="button" data-action="gap-open-source-center" data-batch-name="${this.escape(batch.name)}" data-gap-fieldname="${this.escape(row.fieldname || "")}" data-gap-label="${this.escape(row.label || "")}">${this.escape(feeConfig.uploadLabel)}</button>`);
-        buttons.push(`<button class="ocw-link-btn" type="button" data-action="gap-open-fee-pool" data-batch-name="${this.escape(batch.name)}" data-gap-fieldname="${this.escape(row.fieldname || "")}" data-gap-label="${this.escape(row.label || "")}">录入暂估</button>`);
-        buttons.push(`<button class="ocw-link-btn" type="button" data-action="gap-confirm-zero-fee" data-batch-name="${this.escape(batch.name)}" data-gap-fieldname="${this.escape(row.fieldname || "")}" data-gap-label="${this.escape(row.label || "")}">确认为0</button>`);
+        buttons.push(`<button class="ocw-link-btn" type="button" data-action="gap-open-fee-pool" data-batch-name="${this.escape(batch.name)}" data-gap-fieldname="${this.escape(row.fieldname || "")}" data-gap-label="${this.escape(row.label || "")}">${ocTranslate("录入暂估")}</button>`);
+        buttons.push(`<button class="ocw-link-btn" type="button" data-action="gap-confirm-zero-fee" data-batch-name="${this.escape(batch.name)}" data-gap-fieldname="${this.escape(row.fieldname || "")}" data-gap-label="${this.escape(row.label || "")}">${ocTranslate("确认为0")}</button>`);
       } else {
-        buttons.push(`<button class="ocw-link-btn" type="button" data-action="gap-open-source-center" data-batch-name="${this.escape(batch.name)}" data-gap-fieldname="${this.escape(row.fieldname || "")}" data-gap-label="${this.escape(row.label || "")}">去补资料</button>`);
+        buttons.push(`<button class="ocw-link-btn" type="button" data-action="gap-open-source-center" data-batch-name="${this.escape(batch.name)}" data-gap-fieldname="${this.escape(row.fieldname || "")}" data-gap-label="${this.escape(row.label || "")}">${ocTranslate("去补资料")}</button>`);
       }
     }
     if (batch && scope === "items") {
       if (row.fieldname === "actual_shipped_qty") {
-        buttons.push(`<button class="ocw-link-btn" type="button" data-action="gap-open-source-center" data-batch-name="${this.escape(batch.name)}" data-gap-fieldname="${this.escape(row.fieldname || "")}" data-gap-label="${this.escape(row.label || "")}">上传装箱单</button>`);
-        buttons.push(`<button class="ocw-link-btn" type="button" data-action="gap-confirm-actual-qty" data-batch-name="${this.escape(batch.name)}">按采购数量确认</button>`);
+        buttons.push(`<button class="ocw-link-btn" type="button" data-action="gap-open-source-center" data-batch-name="${this.escape(batch.name)}" data-gap-fieldname="${this.escape(row.fieldname || "")}" data-gap-label="${this.escape(row.label || "")}">${ocTranslate("上传装箱单")}</button>`);
+        buttons.push(`<button class="ocw-link-btn" type="button" data-action="gap-confirm-actual-qty" data-batch-name="${this.escape(batch.name)}">${ocTranslate("按采购数量确认")}</button>`);
       }
-      buttons.push(`<button class="ocw-link-btn" type="button" data-action="gap-open-item-edit" data-batch-name="${this.escape(batch.name)}" data-item-name="${this.escape((matchedExample && matchedExample.item_name) || row.item_name || "")}" data-fieldname="${this.escape(row.fieldname || "")}">去补录</button>`);
+      buttons.push(`<button class="ocw-link-btn" type="button" data-action="gap-open-item-edit" data-batch-name="${this.escape(batch.name)}" data-item-name="${this.escape((matchedExample && matchedExample.item_name) || row.item_name || "")}" data-fieldname="${this.escape(row.fieldname || "")}">${ocTranslate("去补录")}</button>`);
     }
     return `
       <li class="ocw-erp-gap-row">
@@ -960,7 +960,7 @@
           <td>${this.escape(this.formatValue(item.material_code || "--"))}</td>
           <td>${this.escape(this.formatValue(item.__company || item.subsidiary_code || "--"))}</td>
           <td>${this.escape(this.formatValue(item.__supplier || item.supplier || "--"))}</td>
-          <td>${this.escape(this.formatMoney(item.adopted_price?.value ?? item.original_unit_price ?? formula.original_unit_price ?? "--"))}${derivedPrice ? '<small class="ocw-result-source">按货值÷采购数量计算</small>' : ""}</td>
+          <td>${this.escape(this.formatMoney(item.adopted_price?.value ?? item.original_unit_price ?? formula.original_unit_price ?? "--"))}${derivedPrice ? `<small class="ocw-result-source">${ocTranslate("按货值÷采购数量计算")}</small>` : ""}</td>
           <td>${this.escape(this.formatMoney(item.comprehensive_unit_price ?? formula.comprehensive_unit_price ?? "--"))}</td>
           <td>${this.escape(this.formatValue(item.source_quantity ?? item.outbound_quantity ?? formula.quantity ?? "--"))}</td>
           <td>${this.escape(this.formatMoney(item.total_cost_rmb ?? formula.total_cost ?? "--"))}</td>
@@ -970,7 +970,7 @@
     }).join("");
     const jsonText = JSON.stringify(payload, null, 2);
     const dialog = new frappe.ui.Dialog({
-      title: "DeepLinkERP 报文预览",
+      title: ocTranslate("DeepLinkERP 报文预览"),
       size: "extra-large",
       fields: [
         {
@@ -979,34 +979,34 @@
           options: `
             <div class="ocw-erp-preview">
               <div class="ocw-erp-preview-summary">
-                <div><span>目标系统</span><strong>${this.escape(payload.target_system || "DeepLinkERP")}</strong></div>
-                <div><span>ERP 公司</span><strong>${this.escape(companies.length ? `${companies.length} 家` : payload.subsidiary_code || "--")}</strong></div>
-                <div><span>批次</span><strong>${this.escape(payload.batch_no || payload.batch_name || result.batch_name || "--")}</strong></div>
-                <div><span>版本</span><strong>${this.escape(payload.version_name || result.version_name || "--")}</strong></div>
-                <div><span>物料行数</span><strong>${this.escape(this.formatValue(payload.item_count || items.length || 0))}</strong></div>
-                <div><span>综合成本</span><strong>${this.escape(this.formatMoney(payload.total_cost_rmb || 0))} RMB</strong></div>
+                <div><span>${ocTranslate("目标系统")}</span><strong>${this.escape(payload.target_system || "DeepLinkERP")}</strong></div>
+                <div><span>${ocTranslate("ERP 公司")}</span><strong>${this.escape(companies.length ? ocTranslate("{0} 家", [companies.length]) : payload.subsidiary_code || "--")}</strong></div>
+                <div><span>${ocTranslate("批次")}</span><strong>${this.escape(payload.batch_no || payload.batch_name || result.batch_name || "--")}</strong></div>
+                <div><span>${ocTranslate("版本")}</span><strong>${this.escape(payload.version_name || result.version_name || "--")}</strong></div>
+                <div><span>${ocTranslate("物料行数")}</span><strong>${this.escape(this.formatValue(payload.item_count || items.length || 0))}</strong></div>
+                <div><span>${ocTranslate("综合成本")}</span><strong>${this.escape(this.formatMoney(payload.total_cost_rmb || 0))} RMB</strong></div>
               </div>
               <div class="ocw-erp-pool-strip">
-                <span>站点 ${this.escape(this.formatValue(sites.length || 0))} 个</span>
-                <span>Company ${this.escape(this.formatValue(companies.length || payload.company_count || 0))} 家</span>
-                <span>采购单分组 ${this.escape(this.formatValue(groups.length || payload.group_count || 0))} 组</span>
-                <span>分摊费用 ${this.escape(this.formatMoney(payload.allocated_fee_rmb || 0))} RMB</span>
+                <span>${ocTranslate("站点 {0} 个", [this.escape(this.formatValue(sites.length || 0))])}</span>
+                <span>${ocTranslate("Company {0} 家", [this.escape(this.formatValue(companies.length || payload.company_count || 0))])}</span>
+                <span>${ocTranslate("采购单分组 {0} 组", [this.escape(this.formatValue(groups.length || payload.group_count || 0))])}</span>
+                <span>${ocTranslate("分摊费用 {0} RMB", [this.escape(this.formatMoney(payload.allocated_fee_rmb || 0))])}</span>
               </div>
               <div class="ocw-erp-preview-table-wrap">
                 <table class="ocw-erp-preview-table">
-                  <thead><tr><th>#</th><th>物料编码</th><th>ERP 公司</th><th>供应商</th><th>原始单价</th><th>综合单价</th><th>采购数量</th><th>综合成本</th><th>分摊费用</th></tr></thead>
-                  <tbody>${rows || `<tr><td colspan="9">暂无物料明细</td></tr>`}</tbody>
+                  <thead><tr><th>#</th><th>${ocTranslate("物料编码")}</th><th>${ocTranslate("ERP 公司")}</th><th>${ocTranslate("供应商")}</th><th>${ocTranslate("原始单价")}</th><th>${ocTranslate("综合单价")}</th><th>${ocTranslate("采购数量")}</th><th>${ocTranslate("综合成本")}</th><th>${ocTranslate("分摊费用")}</th></tr></thead>
+                  <tbody>${rows || `<tr><td colspan="9">${ocTranslate("暂无物料明细")}</td></tr>`}</tbody>
                 </table>
               </div>
               <details class="ocw-erp-json-detail">
-                <summary>查看技术报文 JSON</summary>
+                <summary>${ocTranslate("查看技术报文 JSON")}</summary>
                 <pre class="ocw-erp-json-preview">${this.escape(jsonText)}</pre>
               </details>
             </div>
           `,
         },
       ],
-      primary_action_label: "关闭",
+      primary_action_label: ocTranslate("关闭"),
       primary_action: () => dialog.hide(),
     });
     dialog.show();

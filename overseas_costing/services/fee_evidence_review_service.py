@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _ as _i18n
+except ImportError:
+    def _i18n(message):
+        return message
+
+
 import hashlib
 import json
 import secrets
@@ -403,7 +410,7 @@ def _build_component_store(components: list[dict]) -> dict:
 
     fieldnames: dict[str, None] = {}
     if any(not isinstance(row, dict) for row in components):
-        raise ValueError("费用凭证分项草稿包含无效记录。")
+        raise ValueError(_i18n("费用凭证分项草稿包含无效记录。"))
     rows = [dict(row) for row in components]
     for row in rows:
         for fieldname in row:
@@ -474,7 +481,7 @@ def _validate_component_store(component_store: dict) -> dict[str, int]:
     if not isinstance(component_store, dict) or str(
         component_store.get("format") or ""
     ) != "INDEXED_COLUMNS_V1":
-        raise ValueError("费用凭证分项索引存储结构无效。")
+        raise ValueError(_i18n("费用凭证分项索引存储结构无效。"))
     count = component_store.get("count")
     if (
         isinstance(count, bool)
@@ -483,23 +490,23 @@ def _validate_component_store(component_store: dict) -> dict[str, int]:
         or count > FEE_EVIDENCE_COMPONENT_PROPOSAL_LIMIT
     ):
         raise ValueError(
-            "费用凭证分项索引 count 数量无效或超过安全上限。"
+            _i18n("费用凭证分项索引 count 数量无效或超过安全上限。")
         )
     columns = component_store.get("columns")
     if not isinstance(columns, dict) or any(
         not isinstance(fieldname, str) or not isinstance(column, dict)
         for fieldname, column in (columns or {}).items()
     ):
-        raise ValueError("费用凭证分项索引 columns 结构无效。")
+        raise ValueError(_i18n("费用凭证分项索引 columns 结构无效。"))
 
     allowed_keys = {"rows", "constant", "values", "dictionary", "indices"}
     for fieldname, column in columns.items():
         if set(column) - allowed_keys:
-            raise ValueError(f"分项索引列 {fieldname} 结构包含未知字段。")
+            raise ValueError(_i18n("分项索引列 {0} 结构包含未知字段。").format(fieldname))
         positions = column.get("rows")
         if "rows" in column:
             if not isinstance(positions, list):
-                raise ValueError(f"分项索引列 {fieldname} rows 必须为列表。")
+                raise ValueError(_i18n("分项索引列 {0} rows 必须为列表。").format(fieldname))
             previous = -1
             for row_index in positions:
                 if (
@@ -509,7 +516,7 @@ def _validate_component_store(component_store: dict) -> dict[str, int]:
                     or row_index >= count
                 ):
                     raise ValueError(
-                        f"分项索引列 {fieldname} rows 行索引必须严格递增且在范围内。"
+                        _i18n("分项索引列 {0} rows 行索引必须严格递增且在范围内。").format(fieldname)
                     )
                 previous = row_index
             value_count = len(positions)
@@ -520,13 +527,13 @@ def _validate_component_store(component_store: dict) -> dict[str, int]:
         has_values = "values" in column
         has_dictionary = "dictionary" in column or "indices" in column
         if sum((has_constant, has_values, has_dictionary)) != 1:
-            raise ValueError(f"分项索引列 {fieldname} 值编码结构无效。")
+            raise ValueError(_i18n("分项索引列 {0} 值编码结构无效。").format(fieldname))
         if has_constant:
             continue
         if has_values:
             values = column.get("values")
             if not isinstance(values, list) or len(values) != value_count:
-                raise ValueError(f"分项索引列 {fieldname} values 长度无效。")
+                raise ValueError(_i18n("分项索引列 {0} values 长度无效。").format(fieldname))
             continue
         dictionary = column.get("dictionary")
         indices = column.get("indices")
@@ -536,7 +543,7 @@ def _validate_component_store(component_store: dict) -> dict[str, int]:
             or len(indices) != value_count
             or (value_count and not dictionary)
         ):
-            raise ValueError(f"分项索引列 {fieldname} dictionary 长度无效。")
+            raise ValueError(_i18n("分项索引列 {0} dictionary 长度无效。").format(fieldname))
         for dictionary_index in indices:
             if (
                 isinstance(dictionary_index, bool)
@@ -544,13 +551,13 @@ def _validate_component_store(component_store: dict) -> dict[str, int]:
                 or dictionary_index < 0
                 or dictionary_index >= len(dictionary)
             ):
-                raise ValueError(f"分项索引列 {fieldname} dictionary 索引无效。")
+                raise ValueError(_i18n("分项索引列 {0} dictionary 索引无效。").format(fieldname))
 
     if count == 0:
         return {}
     proposal_column = columns.get("proposal_id")
     if not isinstance(proposal_column, dict) or "rows" in proposal_column:
-        raise ValueError("分项索引 proposal_id 必须是完整密集列。")
+        raise ValueError(_i18n("分项索引 proposal_id 必须是完整密集列。"))
     proposal_lookup = {}
     for row_index in range(count):
         proposal_id = _component_store_value(
@@ -564,7 +571,7 @@ def _validate_component_store(component_store: dict) -> dict[str, int]:
             or not proposal_id.strip()
             or proposal_id in proposal_lookup
         ):
-            raise ValueError("分项索引 proposal_id 必须非空、唯一且完整。")
+            raise ValueError(_i18n("分项索引 proposal_id 必须非空、唯一且完整。"))
         proposal_lookup[proposal_id] = row_index
     return proposal_lookup
 
@@ -594,14 +601,13 @@ def _finalize_component_contract(draft: dict) -> dict:
         _validate_component_store(component_store)
         existing_count = int(component_store.get("count") or 0)
         if int(contract.get("component_count") or 0) != existing_count:
-            raise ValueError("费用凭证分项索引数量不一致，请重新发起审核。")
+            raise ValueError(_i18n("费用凭证分项索引数量不一致，请重新发起审核。"))
         additions = draft.get("components") or []
         if any(not isinstance(row, dict) for row in additions):
-            raise ValueError("费用凭证分项草稿包含无效记录。")
+            raise ValueError(_i18n("费用凭证分项草稿包含无效记录。"))
         if existing_count + len(additions) > FEE_EVIDENCE_COMPONENT_PROPOSAL_LIMIT:
             raise ValueError(
-                f"费用凭证分项数量超过安全上限 "
-                f"{FEE_EVIDENCE_COMPONENT_PROPOSAL_LIMIT}。"
+                _i18n("费用凭证分项数量超过安全上限 {0}。").format(FEE_EVIDENCE_COMPONENT_PROPOSAL_LIMIT)
             )
         result = draft
         if additions:
@@ -610,7 +616,7 @@ def _finalize_component_contract(draft: dict) -> dict:
                 for row_index in range(existing_count)
             ]
             if any(not row for row in merged):
-                raise ValueError("费用凭证分项索引存储结构无效，请重新发起审核。")
+                raise ValueError(_i18n("费用凭证分项索引存储结构无效，请重新发起审核。"))
             merged.extend(dict(row) for row in additions)
             result = {
                 **draft,
@@ -627,16 +633,15 @@ def _finalize_component_contract(draft: dict) -> dict:
             }
             _validate_component_store(result["component_store"])
         if _serialized_payload_size(result) > FEE_EVIDENCE_DRAFT_MAX_BYTES:
-            raise ValueError("费用凭证审核草稿超过安全上限，请缩小本次审核范围。")
+            raise ValueError(_i18n("费用凭证审核草稿超过安全上限，请缩小本次审核范围。"))
         return result
 
     raw_components = draft.get("components") or []
     if any(not isinstance(row, dict) for row in raw_components):
-        raise ValueError("费用凭证分项草稿包含无效记录。")
+        raise ValueError(_i18n("费用凭证分项草稿包含无效记录。"))
     if len(raw_components) > FEE_EVIDENCE_COMPONENT_PROPOSAL_LIMIT:
         raise ValueError(
-            f"费用凭证分项数量超过安全上限 "
-            f"{FEE_EVIDENCE_COMPONENT_PROPOSAL_LIMIT}。"
+            _i18n("费用凭证分项数量超过安全上限 {0}。").format(FEE_EVIDENCE_COMPONENT_PROPOSAL_LIMIT)
         )
     components = [dict(row) for row in raw_components]
     if len(components) <= LEGACY_COMPONENT_LIMIT:
@@ -657,7 +662,7 @@ def _finalize_component_contract(draft: dict) -> dict:
     }
     _validate_component_store(result["component_store"])
     if _serialized_payload_size(result) > FEE_EVIDENCE_DRAFT_MAX_BYTES:
-        raise ValueError("费用凭证审核草稿超过安全上限，请缩小本次审核范围。")
+        raise ValueError(_i18n("费用凭证审核草稿超过安全上限，请缩小本次审核范围。"))
     return result
 
 
@@ -1088,8 +1093,7 @@ def _validate_component_expansion_budget(
         proposal_count += match_count
         if proposal_count > FEE_EVIDENCE_COMPONENT_PROPOSAL_LIMIT:
             raise ValueError(
-                f"费用凭证分项展开数量 {proposal_count} 超过安全上限 "
-                f"{FEE_EVIDENCE_COMPONENT_PROPOSAL_LIMIT}，请缩小明细与物料的多对多匹配范围。"
+                _i18n("费用凭证分项展开数量 {0} 超过安全上限 {1}，请缩小明细与物料的多对多匹配范围。").format(proposal_count, FEE_EVIDENCE_COMPONENT_PROPOSAL_LIMIT)
             )
         evidence_bytes = len(_dedupe_key(evidence).encode("utf-8"))
         estimated_bytes += (
@@ -1099,8 +1103,7 @@ def _validate_component_expansion_budget(
         )
         if estimated_bytes > FEE_EVIDENCE_COMPONENT_EXPANSION_MAX_BYTES:
             raise ValueError(
-                f"费用凭证分项展开预算 {estimated_bytes} 字节超过安全上限 "
-                f"{FEE_EVIDENCE_COMPONENT_EXPANSION_MAX_BYTES} 字节。"
+                _i18n("费用凭证分项展开预算 {0} 字节超过安全上限 {1} 字节。").format(estimated_bytes, FEE_EVIDENCE_COMPONENT_EXPANSION_MAX_BYTES)
             )
 
     for line in line_items or []:
@@ -1226,7 +1229,7 @@ def allocate_tax_certificate_components(
     if not isinstance(by_name, dict) or not isinstance(planned_matches, list) or len(
         planned_matches
     ) != len(line_items or []):
-        raise ValueError("费用凭证税费分项匹配计划无效。")
+        raise ValueError(_i18n("费用凭证税费分项匹配计划无效。"))
     components: list[dict] = []
     unmatched: list[dict] = []
     bases: set[str] = set()
@@ -1242,7 +1245,7 @@ def allocate_tax_certificate_components(
             continue
         matches = planned_matches[line_index]
         if not isinstance(matches, list):
-            raise ValueError("费用凭证税费分项匹配计划无效。")
+            raise ValueError(_i18n("费用凭证税费分项匹配计划无效。"))
         if not matches:
             unmatched.append(
                 {
@@ -1342,7 +1345,7 @@ def allocate_service_fee_components(
     if not isinstance(by_name, dict) or not isinstance(planned_matches, list) or len(
         planned_matches
     ) != len(service_fees or []):
-        raise ValueError("费用凭证清关服务费匹配计划无效。")
+        raise ValueError(_i18n("费用凭证清关服务费匹配计划无效。"))
     rmb_to_mxn = _positive((fx_context or {}).get("fx_rmb_to_mxn"))
     components = []
     unmatched = []
@@ -1390,7 +1393,7 @@ def allocate_service_fee_components(
                 continue
         matches = planned_matches[index]
         if not isinstance(matches, list):
-            raise ValueError("费用凭证清关服务费匹配计划无效。")
+            raise ValueError(_i18n("费用凭证清关服务费匹配计划无效。"))
         weights = [
             (str(row.get("name") or ""), _positive(row.get("goods_value")))
             for row in matches
@@ -1458,7 +1461,7 @@ def build_refund_reversal_components(
     weighted = [(key, value) for key, value in weighted if key and value > 0]
     original_total = sum((value for _, value in weighted), Decimal("0"))
     if amount is None or amount <= 0 or not weighted or amount > original_total:
-        raise ValueError("退款金额必须为正数且不能超过原分项合计。")
+        raise ValueError(_i18n("退款金额必须为正数且不能超过原分项合计。"))
     by_name = {str(row.get("name") or ""): row for row in original_components or []}
     original_allocations = _allocate_money(amount, weighted)
     original_rmb_total = sum(
@@ -1508,23 +1511,23 @@ def validate_refund_parent(refund: dict, payment: dict) -> dict:
         str(refund.get("evidence_type") or "").upper() != "REFUND"
         or str(refund.get("accounting_role") or "").upper() != "SETTLEMENT"
     ):
-        raise ValueError("只有退款结算凭证可以关联原付款。")
+        raise ValueError(_i18n("只有退款结算凭证可以关联原付款。"))
     if (
         not payment
         or str(payment.get("evidence_type") or "").upper() != "PAYMENT"
         or str(payment.get("accounting_role") or "").upper() != "SETTLEMENT"
         or str(payment.get("validation_status") or "").upper() != "VALID"
     ):
-        raise ValueError("关联的原付款凭证必须是已核对的付款结算凭证。")
+        raise ValueError(_i18n("关联的原付款凭证必须是已核对的付款结算凭证。"))
     if any(
         str(refund.get(field) or "") != str(payment.get(field) or "")
         for field in ("batch", "version", "fee_rule")
     ):
-        raise ValueError("关联的原付款凭证必须属于同一批次、版本和费用。")
+        raise ValueError(_i18n("关联的原付款凭证必须属于同一批次、版本和费用。"))
     refund_currency = str(refund.get("currency") or "RMB").upper().replace("CNY", "RMB")
     payment_currency = str(payment.get("currency") or "RMB").upper().replace("CNY", "RMB")
     if refund_currency != payment_currency:
-        raise ValueError("退款与原付款凭证的币种必须一致。")
+        raise ValueError(_i18n("退款与原付款凭证的币种必须一致。"))
     return dict(payment)
 
 
@@ -2135,7 +2138,7 @@ def assert_no_duplicate_evidence(candidate: dict, existing_rows: list[dict]) -> 
             and _decimal(row.get("original_amount")) == candidate_amount
         )
         if same_business_evidence:
-            raise ValueError("检测到重复凭证，请核对已确认的附件记录。")
+            raise ValueError(_i18n("检测到重复凭证，请核对已确认的附件记录。"))
 
 
 def _now() -> str:
@@ -2230,7 +2233,7 @@ def _semantic_ai_review(parsed: dict, attachment: dict, items: list[dict]) -> di
         content = allocation_service._call_chat_completions(config, messages)
         raw = allocation_service._extract_json_object(content)
         if not isinstance(raw, dict):
-            raise ValueError("DeepSeek 返回的语义结果不是 JSON 对象。")
+            raise ValueError(_i18n("DeepSeek 返回的语义结果不是 JSON 对象。"))
     except Exception as exc:
         return {
             "ok": False,
@@ -2285,11 +2288,11 @@ class FrappeFeeEvidenceReviewRepository:
             as_dict=True,
         ) or {}
         if not batch or str(version.get("batch") or "") != str(batch.get("name") or ""):
-            raise ValueError("成本版本不属于当前批次。")
+            raise ValueError(_i18n("成本版本不属于当前批次。"))
         if str(batch.get("current_version") or "") != str(version_name or ""):
-            raise ValueError("只能审核当前成本版本的凭证。")
+            raise ValueError(_i18n("只能审核当前成本版本的凭证。"))
         if str(version.get("status") or "") in {"Confirmed", "Archived"} or batch.get("is_locked"):
-            raise ValueError("已确认或归档版本不能写入凭证审核结果。")
+            raise ValueError(_i18n("已确认或归档版本不能写入凭证审核结果。"))
         return {
             **batch,
             "batch": batch_name,
@@ -2313,12 +2316,12 @@ class FrappeFeeEvidenceReviewRepository:
             as_dict=True,
         ) or {}
         if str(row.get("batch") or "") != str(batch_name or ""):
-            raise ValueError("凭证附件不属于当前批次。")
+            raise ValueError(_i18n("凭证附件不属于当前批次。"))
         # 附件自带的版本必须落在正在审核的成本版本内：历史版本的附件不能
         # 冒名参与当前版本的凭证解析。空版本视为未绑定版本的手工凭证，允许通过。
         attachment_version = str(row.get("version") or "")
         if version_name and attachment_version and attachment_version != str(version_name):
-            raise ValueError("凭证附件不属于当前成本版本。")
+            raise ValueError(_i18n("凭证附件不属于当前成本版本。"))
         bundle = effective_source.current_source_bundle(batch_name)
         if bundle and bundle['context']['root_kind'] == 'expense':
             effective_source.require_readable(bundle['context'])
@@ -2435,7 +2438,7 @@ class FrappeFeeEvidenceReviewRepository:
             as_dict=True,
         )
         if not rows:
-            raise ValueError("未找到费用凭证 AI 审核任务。")
+            raise ValueError(_i18n("未找到费用凭证 AI 审核任务。"))
         return self.get_run(run_id)
 
     def lock_apply_context(self, context: dict, run: Any):
@@ -2644,7 +2647,7 @@ class FrappeFeeEvidenceReviewRepository:
             rows.extend(page or [])
             if len(rows) > EVIDENCE_COMPONENT_READ_LIMIT:
                 raise ValueError(
-                    "单张凭证的有效 SKU 分项不能超过 60,000 条，请拆分凭证后重试。"
+                    _i18n("单张凭证的有效 SKU 分项不能超过 60,000 条，请拆分凭证后重试。")
                 )
             if len(page or []) < page_length:
                 break
@@ -2711,7 +2714,7 @@ class FrappeFeeEvidenceReviewRepository:
         if not result.get('ok'):
             return result, {}
         if result['version'] != context['version']:
-            raise ValueError('成本版本已调整，请先打开当前草稿重新核对费用凭证。')
+            raise ValueError(_i18n('成本版本已调整，请先打开当前草稿重新核对费用凭证。'))
         rules = fee_service._query_rules(context['batch'],result['version'])
         by_key = {}
         for row in fees:
@@ -2719,7 +2722,7 @@ class FrappeFeeEvidenceReviewRepository:
             code = 'settlement_freight_'+digest(context['effective_source']['binding_id'],line_key)[:20]
             matched = next((rule for rule in rules if rule.get('rule_code')==code and rule.get('is_enabled')),None)
             if not matched:
-                raise ValueError('审核费用没有生成当前最终费用，事务已撤回。')
+                raise ValueError(_i18n('审核费用没有生成当前最终费用，事务已撤回。'))
             by_key[row['logical_fee_key']]=matched
         return result, by_key
 
@@ -2871,7 +2874,7 @@ class FrappeFeeEvidenceReviewRepository:
         components: list[dict],
     ) -> None:
         if len(components) > EVIDENCE_COMPONENT_READ_LIMIT:
-            raise ValueError("单次保存的 SKU 分项不能超过 60,000 条。")
+            raise ValueError(_i18n("单次保存的 SKU 分项不能超过 60,000 条。"))
         bulk_insert = getattr(getattr(frappe, "db", None), "bulk_insert", None)
         if not callable(bulk_insert) and len(components) > COMPONENT_ORM_FALLBACK_LIMIT:
             raise RuntimeError(
@@ -3047,7 +3050,7 @@ class FrappeFeeEvidenceReviewRepository:
         )
         if not rows:
             frappe.db.rollback()
-            raise ValueError("未找到费用凭证 AI 审核任务。")
+            raise ValueError(_i18n("未找到费用凭证 AI 审核任务。"))
         row = rows[0]
         legacy = str(row.get("status") or "") == "RUNNING" and not row.get("execution_token")
         if str(row.get("status") or "") != "QUEUED" and not legacy:
@@ -3431,7 +3434,7 @@ def get_fee_evidence_review_status(
     repo = repository or FrappeFeeEvidenceReviewRepository()
     run = repo.get_run(str(run_id or ""))
     if str(_run_value(run, "batch") or "") != str(batch_name or ""):
-        raise ValueError("费用凭证审核任务不属于当前批次。")
+        raise ValueError(_i18n("费用凭证审核任务不属于当前批次。"))
     revision = int(_run_value(run, "progress_revision", 0) or 0)
     status = str(_run_value(run, "status") or "")
     if after_revision is not None and int(after_revision) == revision and status in RUNNING_STATUSES:
@@ -3534,14 +3537,14 @@ def validate_review_selections(evidence: dict, fee_rows: list[dict], components:
     """Keep every applied amount and SKU component attached to an accepted source document."""
 
     if (fee_rows or components) and not evidence.get("selected"):
-        raise ValueError("请先确认凭证，再保存费用拆分或 SKU 税费分项。")
+        raise ValueError(_i18n("请先确认凭证，再保存费用拆分或 SKU 税费分项。"))
     role = str(evidence.get("accounting_role") or "REFERENCE").upper()
     evidence["is_final"] = 1 if _checked(evidence.get("is_final")) else 0
     if evidence["is_final"] and role != "FINAL_BILL":
-        raise ValueError("只有最终账单会计作用可以标记为最终凭证。")
+        raise ValueError(_i18n("只有最终账单会计作用可以标记为最终凭证。"))
     if any(str(row.get("amount_status") or "ESTIMATED").upper() == "ACTUAL" for row in fee_rows):
         if role != "FINAL_BILL" or not evidence["is_final"]:
-            raise ValueError("凭证审核草稿只有确认最终账单后才能保存为实际费用；否则请保留暂估。")
+            raise ValueError(_i18n("凭证审核草稿只有确认最终账单后才能保存为实际费用；否则请保留暂估。"))
 
 
 def group_components_by_fee_key(components: list[dict]) -> dict[str, list[dict]]:
@@ -3549,7 +3552,7 @@ def group_components_by_fee_key(components: list[dict]) -> dict[str, list[dict]]
     for row in components or []:
         fee_key = str(row.get("fee_logical_key") or row.get("logical_fee_key") or "")
         if not fee_key:
-            raise ValueError("SKU 费用分项缺少逻辑费用标识。")
+            raise ValueError(_i18n("SKU 费用分项缺少逻辑费用标识。"))
         grouped.setdefault(fee_key, []).append(row)
     return {key: grouped[key] for key in sorted(grouped)}
 
@@ -3566,7 +3569,7 @@ def validate_component_amount_conservation(
     fee_currency = str(fee.get("currency") or "RMB").upper().replace("CNY", "RMB")
     fee_amount = _decimal(fee.get("amount"))
     if fee_currency not in {"RMB", "MXN", "USD"} or fee_amount is None or fee_amount < 0:
-        raise ValueError("请先确认有效的费用总额，再保存 SKU 税费分项。")
+        raise ValueError(_i18n("请先确认有效的费用总额，再保存 SKU 税费分项。"))
 
     cost_components = [
         row
@@ -3581,13 +3584,13 @@ def validate_component_amount_conservation(
         original_amount = _decimal(row.get("original_amount"))
         amount_rmb = _decimal(row.get("amount_rmb"))
         if currency not in {"RMB", "MXN", "USD"} or original_amount is None or original_amount < 0:
-            raise ValueError("SKU 税费分项原币金额或币种不合法。")
+            raise ValueError(_i18n("SKU 税费分项原币金额或币种不合法。"))
         totals = grouped.setdefault(currency, {"original": Decimal("0"), "rmb": Decimal("0")})
         totals["original"] += original_amount
         if amount_rmb is None:
             missing_rmb = True
         elif amount_rmb < 0:
-            raise ValueError("SKU 税费分项人民币金额不合法。")
+            raise ValueError(_i18n("SKU 税费分项人民币金额不合法。"))
         else:
             totals["rmb"] += amount_rmb
             component_total_rmb += amount_rmb
@@ -3599,41 +3602,41 @@ def validate_component_amount_conservation(
     if set(grouped) == {fee_currency} and same_currency_total - fee_amount > Decimal(
         "0.005"
     ):
-        raise ValueError("SKU 税费分项合计超过费用总额。")
+        raise ValueError(_i18n("SKU 税费分项合计超过费用总额。"))
     if not fee_result.get("ok"):
         if fee_result.get("reason_code") == "FX_RATE_MISSING":
             if set(grouped) - {fee_currency}:
-                raise ValueError("缺少汇率时，SKU 分项必须与费用使用同一原币。")
+                raise ValueError(_i18n("缺少汇率时，SKU 分项必须与费用使用同一原币。"))
             if any(
                 row.get("amount_rmb") not in (None, "")
                 or row.get("exchange_rate") not in (None, "")
                 for row in cost_components
             ):
-                raise ValueError("缺少可验证的汇率快照，不能接受人民币换算金额。")
+                raise ValueError(_i18n("缺少可验证的汇率快照，不能接受人民币换算金额。"))
             original_total = grouped.get(fee_currency, {}).get("original", Decimal("0"))
             if original_total - fee_amount > Decimal("0.005"):
-                raise ValueError("SKU 税费分项合计超过费用总额。")
+                raise ValueError(_i18n("SKU 税费分项合计超过费用总额。"))
             return {
                 "original_currency": fee_currency,
                 "original_total": _money(original_total),
                 "missing_fx": True,
             }
-        raise ValueError("请先确认有效的进口税费总额，再保存 SKU 税费分项。")
+        raise ValueError(_i18n("请先确认有效的进口税费总额，再保存 SKU 税费分项。"))
     if missing_rmb:
-        raise ValueError("SKU 税费分项缺少有效汇率换算金额。")
+        raise ValueError(_i18n("SKU 税费分项缺少有效汇率换算金额。"))
 
     for currency, totals in grouped.items():
         converted = convert_fee_amount_to_rmb(
             {"amount": totals["original"], "currency": currency}, fx_context or {}
         )
         if not converted.get("ok"):
-            raise ValueError(f"缺少 {currency} 汇率，无法验证 SKU 税费分项。")
+            raise ValueError(_i18n("缺少 {0} 汇率，无法验证 SKU 税费分项。").format(currency))
         if abs(totals["rmb"] - Decimal(converted["amount_rmb"])) > Decimal("0.005"):
-            raise ValueError("SKU 税费分项的原币金额与人民币换算金额不守恒。")
+            raise ValueError(_i18n("SKU 税费分项的原币金额与人民币换算金额不守恒。"))
 
     fee_total_rmb = Decimal(fee_result["amount_rmb"])
     if component_total_rmb - fee_total_rmb > Decimal("0.005"):
-        raise ValueError("SKU 税费分项合计超过费用总额。")
+        raise ValueError(_i18n("SKU 税费分项合计超过费用总额。"))
     return {
         "fee_total_rmb": _money(fee_total_rmb),
         "component_total_rmb": _money(component_total_rmb),
@@ -3655,15 +3658,15 @@ def normalize_evidence_for_apply(
     currency = str(evidence.get("currency") or "RMB").upper().replace("CNY", "RMB")
     amount = _decimal(evidence.get("original_amount"))
     if evidence_type not in EVIDENCE_TYPES or accounting_role not in ACCOUNTING_ROLES:
-        raise ValueError("凭证类型或会计作用不合法。")
+        raise ValueError(_i18n("凭证类型或会计作用不合法。"))
     if direction not in {"DEBIT", "CREDIT"} or currency not in {"RMB", "MXN", "USD"}:
-        raise ValueError("凭证方向或币种不合法。")
+        raise ValueError(_i18n("凭证方向或币种不合法。"))
     if amount is not None and amount < 0:
-        raise ValueError("凭证金额不能小于 0，请通过付款／退款方向表达正负。")
+        raise ValueError(_i18n("凭证金额不能小于 0，请通过付款／退款方向表达正负。"))
     if evidence_type == "REFUND" and direction != "CREDIT":
-        raise ValueError("退款凭证必须使用退款方向。")
+        raise ValueError(_i18n("退款凭证必须使用退款方向。"))
     if evidence_type == "PAYMENT" and direction != "DEBIT":
-        raise ValueError("付款凭证必须使用付款方向。")
+        raise ValueError(_i18n("付款凭证必须使用付款方向。"))
     return {
         **evidence,
         "batch": context["batch"],
@@ -3692,25 +3695,25 @@ def validate_fee_split_conservation(evidence: dict, fee_rows: list[dict]) -> Non
     if not fee_rows:
         return
     if str(evidence.get("accounting_role") or "").upper() == "SETTLEMENT":
-        raise ValueError("付款和退款只记录结算流水，不能直接写入费用总额。")
+        raise ValueError(_i18n("付款和退款只记录结算流水，不能直接写入费用总额。"))
     evidence_amount = _decimal(evidence.get("original_amount"))
     evidence_currency = str(evidence.get("currency") or "RMB").upper().replace(
         "CNY", "RMB"
     )
     if evidence_amount is None:
-        raise ValueError("请先确认凭证总额，再保存费用拆分。")
+        raise ValueError(_i18n("请先确认凭证总额，再保存费用拆分。"))
     split_total = Decimal("0")
     for row in fee_rows:
         currency = str(row.get("currency") or "RMB").upper().replace("CNY", "RMB")
         amount = _decimal(row.get("amount"))
         status = str(row.get("amount_status") or "ESTIMATED").upper()
         if currency != evidence_currency:
-            raise ValueError("费用拆分必须与凭证总额使用同一币种。")
+            raise ValueError(_i18n("费用拆分必须与凭证总额使用同一币种。"))
         if amount is None or amount < 0 or status not in {"ESTIMATED", "ACTUAL"}:
-            raise ValueError("费用拆分金额、币种或状态不合法。")
+            raise ValueError(_i18n("费用拆分金额、币种或状态不合法。"))
         split_total += amount
     if split_total - evidence_amount > Decimal("0.005"):
-        raise ValueError("费用拆分合计不能超过凭证总额。")
+        raise ValueError(_i18n("费用拆分合计不能超过凭证总额。"))
 
 
 def normalize_component_for_apply(
@@ -3732,15 +3735,15 @@ def normalize_component_for_apply(
         "OTHER",
         "REFUND_REVERSAL",
     }:
-        raise ValueError("SKU 费用分项类型不合法。")
+        raise ValueError(_i18n("SKU 费用分项类型不合法。"))
     if accounting_role not in {"ESTIMATE", "FINAL_BILL", "SETTLEMENT"}:
-        raise ValueError("SKU 费用分项会计作用不合法。")
+        raise ValueError(_i18n("SKU 费用分项会计作用不合法。"))
     if cost_effect not in {"COST", "LEDGER_ONLY"} or currency not in {
         "RMB",
         "MXN",
         "USD",
     }:
-        raise ValueError("SKU 费用分项成本作用或币种不合法。")
+        raise ValueError(_i18n("SKU 费用分项成本作用或币种不合法。"))
     is_reversal = (
         component_type == "REFUND_REVERSAL"
         and accounting_role == "SETTLEMENT"
@@ -3748,13 +3751,13 @@ def normalize_component_for_apply(
         and bool(reversal_link)
     )
     if original_amount is None or (original_amount < 0 and not is_reversal):
-        raise ValueError("SKU 税费分项金额不合法。")
+        raise ValueError(_i18n("SKU 税费分项金额不合法。"))
     if accounting_role == "SETTLEMENT" and cost_effect != "LEDGER_ONLY":
-        raise ValueError("结算流水 SKU 分项不能重复计入成本。")
+        raise ValueError(_i18n("结算流水 SKU 分项不能重复计入成本。"))
     if component_type == "REFUND_REVERSAL":
         parent_component = (parent_components_by_name or {}).get(reversal_link)
         if not is_reversal or not parent_component:
-            raise ValueError("退款冲回分项必须关联原付款的有效 SKU 分项。")
+            raise ValueError(_i18n("退款冲回分项必须关联原付款的有效 SKU 分项。"))
         parent_item = str(parent_component.get("item") or "")
         parent_stable_line_key = str(
             parent_component.get("stable_line_key") or ""
@@ -3773,11 +3776,11 @@ def normalize_component_for_apply(
             or item_stable_line_key != parent_stable_line_key
             or submitted_stable_line_key != parent_stable_line_key
         ):
-            raise ValueError("退款冲回分项必须与原付款分项使用同一 SKU 及稳定物料行。")
+            raise ValueError(_i18n("退款冲回分项必须与原付款分项使用同一 SKU 及稳定物料行。"))
         if rmb_amount is not None and rmb_amount > 0:
-            raise ValueError("退款冲回分项人民币金额必须为负数。")
+            raise ValueError(_i18n("退款冲回分项人民币金额必须为负数。"))
     elif rmb_amount is not None and rmb_amount < 0:
-        raise ValueError("SKU 税费分项人民币金额不合法。")
+        raise ValueError(_i18n("SKU 税费分项人民币金额不合法。"))
     source_evidence = row.get("source_evidence") or {}
     if not isinstance(source_evidence, dict):
         source_evidence = {}
@@ -3821,7 +3824,7 @@ def _material_matrix_current_items(repo: Any, context: dict) -> list[dict]:
     if callable(get_review_items):
         views = get_review_items(context["batch"], context["version"])
         if not isinstance(views, dict) or not isinstance(views.get("matrix_items"), list):
-            raise ValueError("当前物料矩阵快照无效。")
+            raise ValueError(_i18n("当前物料矩阵快照无效。"))
         return [dict(row) for row in views["matrix_items"] if isinstance(row, dict)]
     get_matrix_items = getattr(repo, "get_matrix_items", None)
     if callable(get_matrix_items):
@@ -3861,7 +3864,7 @@ def _material_matrix_component_access(draft: dict):
 
         def identity_indexed(row_index: int) -> dict:
             if row_index < 0 or row_index >= int(component_store.get("count") or 0):
-                raise ValueError("物料税费矩阵提案索引越界。")
+                raise ValueError(_i18n("物料税费矩阵提案索引越界。"))
             return {
                 "proposal_id": _component_store_value(
                     component_store, "proposal_id", row_index
@@ -3878,18 +3881,18 @@ def _material_matrix_component_access(draft: dict):
     if not isinstance(components, list) or any(
         not isinstance(row, dict) for row in components
     ):
-        raise ValueError("费用凭证分项草稿包含无效记录。")
+        raise ValueError(_i18n("费用凭证分项草稿包含无效记录。"))
     lookup: dict[str, dict] = {}
     for row in components:
         proposal_id = row.get("proposal_id")
         if not isinstance(proposal_id, str) or not proposal_id.strip():
             continue
         if proposal_id in lookup:
-            raise ValueError("费用凭证分项提案标识重复。")
+            raise ValueError(_i18n("费用凭证分项提案标识重复。"))
         lookup[proposal_id] = dict(row)
     def identity_legacy(row_index: int) -> dict:
         if row_index < 0 or row_index >= len(components):
-            raise ValueError("物料税费矩阵提案索引越界。")
+            raise ValueError(_i18n("物料税费矩阵提案索引越界。"))
         row = components[row_index]
         return {
             "proposal_id": row.get("proposal_id"),
@@ -3913,46 +3916,46 @@ def _material_matrix_allowed_proposals(
         return {}
     rows = matrix.get("rows")
     if not isinstance(rows, list):
-        raise ValueError("费用凭证草稿的物料矩阵行无效。")
+        raise ValueError(_i18n("费用凭证草稿的物料矩阵行无效。"))
     allowed_columns = {str(column["key"]) for column in MATERIAL_MATRIX_COLUMNS}
     allowed: dict[tuple[str, str], set[str]] = {}
     seen_items = set()
     for matrix_row in rows:
         if not isinstance(matrix_row, dict):
-            raise ValueError("费用凭证草稿的物料矩阵行无效。")
+            raise ValueError(_i18n("费用凭证草稿的物料矩阵行无效。"))
         row_item_name = str(matrix_row.get("item") or "")
         current_item = item_by_name.get(row_item_name)
         if current_item is None or row_item_name in seen_items:
-            raise ValueError("费用凭证草稿的物料矩阵行归属无效。")
+            raise ValueError(_i18n("费用凭证草稿的物料矩阵行归属无效。"))
         seen_items.add(row_item_name)
         matrix_stable_key = str(matrix_row.get("stable_line_key") or "")
         current_stable_key = str(current_item.get("stable_line_key") or row_item_name)
         if matrix_stable_key and matrix_stable_key != current_stable_key:
-            raise ValueError("费用凭证草稿的物料矩阵行已过期。")
+            raise ValueError(_i18n("费用凭证草稿的物料矩阵行已过期。"))
         compact_cells = matrix_row.get("cells") or {}
         if not isinstance(compact_cells, dict) or set(compact_cells) - allowed_columns:
-            raise ValueError("费用凭证草稿的物料矩阵列无效。")
+            raise ValueError(_i18n("费用凭证草稿的物料矩阵列无效。"))
         for column_key, compact_cell in compact_cells.items():
             if not isinstance(compact_cell, dict):
-                raise ValueError("费用凭证草稿的物料矩阵单元格无效。")
+                raise ValueError(_i18n("费用凭证草稿的物料矩阵单元格无效。"))
             proposal_indexes = compact_cell.get("proposals") or []
             if not isinstance(proposal_indexes, list):
-                raise ValueError("费用凭证草稿的提案索引无效。")
+                raise ValueError(_i18n("费用凭证草稿的提案索引无效。"))
             if any(
                 isinstance(row_index, bool) or not isinstance(row_index, int)
                 for row_index in proposal_indexes
             ):
-                raise ValueError("费用凭证草稿的提案索引无效。")
+                raise ValueError(_i18n("费用凭证草稿的提案索引无效。"))
             if len(set(proposal_indexes)) != len(proposal_indexes):
-                raise ValueError("费用凭证草稿的提案索引重复。")
+                raise ValueError(_i18n("费用凭证草稿的提案索引重复。"))
             member_ids = allowed.setdefault((row_item_name, str(column_key)), set())
             for row_index in proposal_indexes:
                 if row_index < 0 or row_index >= component_count:
-                    raise ValueError("费用凭证草稿的提案索引越界。")
+                    raise ValueError(_i18n("费用凭证草稿的提案索引越界。"))
                 identity = identity_at(row_index)
                 proposal_id = identity.get("proposal_id")
                 if not isinstance(proposal_id, str) or not proposal_id:
-                    raise ValueError("费用凭证草稿的提案标识无效。")
+                    raise ValueError(_i18n("费用凭证草稿的提案标识无效。"))
                 proposal_item = item_by_name.get(str(identity.get("item") or ""))
                 stable_key = identity.get("stable_line_key")
                 if proposal_item is None and stable_key is not _MISSING_COMPONENT_VALUE:
@@ -3961,36 +3964,36 @@ def _material_matrix_allowed_proposals(
                     proposal_item is None
                     or str(proposal_item.get("name") or "") != row_item_name
                 ):
-                    raise ValueError("费用凭证草稿的提案物料归属无效。")
+                    raise ValueError(_i18n("费用凭证草稿的提案物料归属无效。"))
                 member_ids.add(proposal_id)
     return allowed
 
 
 def _bounded_material_matrix_amount_text(raw_amount: Any) -> str:
     if isinstance(raw_amount, bool) or raw_amount in (None, ""):
-        raise ValueError("物料税费单元格金额必须是有限非负数。")
+        raise ValueError(_i18n("物料税费单元格金额必须是有限非负数。"))
     if isinstance(raw_amount, str):
         if len(raw_amount) > MATERIAL_MATRIX_AMOUNT_TEXT_LENGTH_LIMIT:
-            raise ValueError("物料税费单元格金额文本过长。")
+            raise ValueError(_i18n("物料税费单元格金额文本过长。"))
         amount_text = raw_amount
     elif isinstance(raw_amount, int):
         if abs(raw_amount) >= 10**MATERIAL_MATRIX_AMOUNT_DIGIT_LIMIT:
-            raise ValueError("物料税费单元格金额数字位数过多。")
+            raise ValueError(_i18n("物料税费单元格金额数字位数过多。"))
         amount_text = str(raw_amount)
     elif isinstance(raw_amount, Decimal):
         if len(raw_amount.as_tuple().digits) > MATERIAL_MATRIX_AMOUNT_DIGIT_LIMIT:
-            raise ValueError("物料税费单元格金额数字位数过多。")
+            raise ValueError(_i18n("物料税费单元格金额数字位数过多。"))
         amount_text = str(raw_amount)
     elif isinstance(raw_amount, float):
         amount_text = str(raw_amount)
     else:
-        raise ValueError("物料税费单元格金额必须是有限非负数。")
+        raise ValueError(_i18n("物料税费单元格金额必须是有限非负数。"))
     if len(amount_text) > MATERIAL_MATRIX_AMOUNT_TEXT_LENGTH_LIMIT:
-        raise ValueError("物料税费单元格金额文本过长。")
+        raise ValueError(_i18n("物料税费单元格金额文本过长。"))
     if sum(character.isdigit() for character in amount_text) > (
         MATERIAL_MATRIX_AMOUNT_DIGIT_LIMIT
     ):
-        raise ValueError("物料税费单元格金额数字位数过多。")
+        raise ValueError(_i18n("物料税费单元格金额数字位数过多。"))
     return amount_text.replace(",", "")
 
 
@@ -4001,16 +4004,15 @@ def validate_material_matrix_submission(
     items: list[dict],
 ) -> list[dict]:
     if not isinstance(component_matrix, dict):
-        raise ValueError("物料税费矩阵必须是对象。")
+        raise ValueError(_i18n("物料税费矩阵必须是对象。"))
     if set(component_matrix) != {"cells"}:
-        raise ValueError("物料税费矩阵顶层包含未知字段。")
+        raise ValueError(_i18n("物料税费矩阵顶层包含未知字段。"))
     cells = component_matrix.get("cells")
     if not isinstance(cells, list):
-        raise ValueError("物料税费矩阵 cells 必须是列表。")
+        raise ValueError(_i18n("物料税费矩阵 cells 必须是列表。"))
     if len(cells) > MATERIAL_MATRIX_APPLY_CELL_LIMIT:
         raise ValueError(
-            f"物料税费矩阵单元格数量不能超过 "
-            f"{MATERIAL_MATRIX_APPLY_CELL_LIMIT}。"
+            _i18n("物料税费矩阵单元格数量不能超过 {0}。").format(MATERIAL_MATRIX_APPLY_CELL_LIMIT)
         )
 
     item_by_name = {
@@ -4048,18 +4050,18 @@ def validate_material_matrix_submission(
     normalized = []
     for raw_cell in cells:
         if not isinstance(raw_cell, dict):
-            raise ValueError("物料税费矩阵单元格必须是对象。")
+            raise ValueError(_i18n("物料税费矩阵单元格必须是对象。"))
         if set(raw_cell) != MATERIAL_MATRIX_CELL_FIELDS:
-            raise ValueError("物料税费矩阵单元格字段不合法。")
+            raise ValueError(_i18n("物料税费矩阵单元格字段不合法。"))
         item_name = raw_cell.get("item")
         column_key = raw_cell.get("column_key")
         if not isinstance(item_name, str) or item_name not in item_by_name:
-            raise ValueError("物料税费矩阵关联的 SKU 不属于当前批次版本。")
+            raise ValueError(_i18n("物料税费矩阵关联的 SKU 不属于当前批次版本。"))
         if not isinstance(column_key, str) or column_key not in columns:
-            raise ValueError("物料税费矩阵列不合法。")
+            raise ValueError(_i18n("物料税费矩阵列不合法。"))
         cell_key = (item_name, column_key)
         if cell_key in seen_cells:
-            raise ValueError("同一物料税费单元格不能重复提交。")
+            raise ValueError(_i18n("同一物料税费单元格不能重复提交。"))
         seen_cells.add(cell_key)
 
         raw_amount = raw_cell.get("original_amount")
@@ -4067,41 +4069,41 @@ def validate_material_matrix_submission(
         try:
             amount = Decimal(amount_text)
         except (InvalidOperation, TypeError, ValueError):
-            raise ValueError("物料税费单元格金额必须是有限非负数。") from None
+            raise ValueError(_i18n("物料税费单元格金额必须是有限非负数。")) from None
         if not amount.is_finite() or amount < 0:
-            raise ValueError("物料税费单元格金额必须是有限非负数。")
+            raise ValueError(_i18n("物料税费单元格金额必须是有限非负数。"))
         try:
             normalized_amount = amount.quantize(Decimal("0.01"))
         except InvalidOperation:
-            raise ValueError("物料税费单元格金额超出可支持范围。") from None
+            raise ValueError(_i18n("物料税费单元格金额超出可支持范围。")) from None
         if amount != normalized_amount:
-            raise ValueError("物料税费单元格金额最多保留两位小数精度。")
+            raise ValueError(_i18n("物料税费单元格金额最多保留两位小数精度。"))
 
         source_ids = raw_cell.get("source_proposal_ids")
         if not isinstance(source_ids, list) or len(source_ids) > (
             MATERIAL_MATRIX_SOURCE_IDS_PER_CELL_LIMIT
         ):
-            raise ValueError("物料税费单元格来源提案列表无效或过大。")
+            raise ValueError(_i18n("物料税费单元格来源提案列表无效或过大。"))
         if any(
             not isinstance(proposal_id, str)
             or not proposal_id
             or len(proposal_id) > MATERIAL_MATRIX_SOURCE_ID_LENGTH_LIMIT
             for proposal_id in source_ids
         ):
-            raise ValueError("物料税费单元格来源提案标识无效。")
+            raise ValueError(_i18n("物料税费单元格来源提案标识无效。"))
         if len(set(source_ids)) != len(source_ids):
-            raise ValueError("物料税费单元格来源提案标识重复。")
+            raise ValueError(_i18n("物料税费单元格来源提案标识重复。"))
         proposals = []
         for proposal_id in source_ids:
             proposal = resolve_proposal(proposal_id)
             if proposal is None:
-                raise ValueError(f"来源提案 {proposal_id} 不存在于当前草稿。")
+                raise ValueError(_i18n("来源提案 {0} 不存在于当前草稿。").format(proposal_id))
             if proposal_id not in allowed_proposals.get(cell_key, set()):
-                raise ValueError("来源提案不属于当前物料税费单元格。")
+                raise ValueError(_i18n("来源提案不属于当前物料税费单元格。"))
             route = _matrix_component_route(proposal)
             problem = _matrix_component_problem(proposal, route=route)
             if problem:
-                raise ValueError(f"来源提案包含不可应用的分项：{problem[1]}")
+                raise ValueError(_i18n("来源提案包含不可应用的分项：{0}").format(problem[1]))
             proposal_item = item_by_name.get(str(proposal.get("item") or ""))
             if proposal_item is None:
                 proposal_item = item_by_stable_key.get(
@@ -4113,7 +4115,7 @@ def validate_material_matrix_submission(
                 or route[1]
                 or route[0] != column_key
             ):
-                raise ValueError("来源提案与所提交的物料税费单元格不匹配。")
+                raise ValueError(_i18n("来源提案与所提交的物料税费单元格不匹配。"))
             proposals.append(dict(proposal))
         normalized.append(
             {
@@ -4246,7 +4248,7 @@ def normalize_material_matrix_component(
 
     currency = str(fee_rule.get("currency") or "RMB").upper().replace("CNY", "RMB")
     if currency not in MATERIAL_MATRIX_CURRENCIES:
-        raise ValueError("物料税费对应费用的币种不合法。")
+        raise ValueError(_i18n("物料税费对应费用的币种不合法。"))
     amount = cell["original_amount"]
     converted = convert_fee_amount_to_rmb(
         {"amount": amount, "currency": currency}, fx_context or {}
@@ -4258,7 +4260,7 @@ def normalize_material_matrix_component(
         amount_rmb = None
         exchange_rate = None
     else:
-        raise ValueError("无法使用当前费用币种换算物料税费。")
+        raise ValueError(_i18n("无法使用当前费用币种换算物料税费。"))
 
     proposals = cell["source_proposals"]
     proposed_amounts = _component_amounts(proposals)
@@ -4321,7 +4323,7 @@ def apply_fee_evidence_review(
     repo = repository or FrappeFeeEvidenceReviewRepository()
     initial = repo.get_run(str(run_id or ""))
     if str(_run_value(initial, "batch") or "") != str(batch_name or ""):
-        raise ValueError("费用凭证审核任务不属于当前批次。")
+        raise ValueError(_i18n("费用凭证审核任务不属于当前批次。"))
     context = repo.get_context(str(batch_name), str(_run_value(initial, "version") or ""))
     try:
         run = repo.lock_apply_context(context, initial)
@@ -4335,7 +4337,7 @@ def apply_fee_evidence_review(
             expected_modified=expected_modified,
         )
         if str(_run_value(run, "status") or "") != "READY":
-            raise ValueError("费用凭证审核草稿尚未准备完成或已经处理。")
+            raise ValueError(_i18n("费用凭证审核草稿尚未准备完成或已经处理。"))
         attachment = repo.get_attachment(
             context["batch"], str(_run_value(run, "attachment")), context["version"]
         )
@@ -4373,7 +4375,7 @@ def apply_fee_evidence_review(
             components = legacy_components
         evidence_name = str(_run_value(run, "evidence") or "")
         if not evidence_name:
-            raise ValueError("凭证关联记录缺失，请重新发起审核。")
+            raise ValueError(_i18n("凭证关联记录缺失，请重新发起审核。"))
         selected_external_components: list[dict] = []
         preserved_external_components: list[dict] = []
         if matrix_cells is not None:
@@ -4393,11 +4395,10 @@ def apply_fee_evidence_review(
             components = [*matrix_cells, *preserved_external_components]
         if len(components) > EVIDENCE_COMPONENT_READ_LIMIT:
             raise ValueError(
-                f"单张凭证的有效 SKU 分项不能超过 "
-                f"{EVIDENCE_COMPONENT_READ_LIMIT:,} 条。"
+                _i18n("单张凭证的有效 SKU 分项不能超过 {0:,} 条。").format(EVIDENCE_COMPONENT_READ_LIMIT)
             )
         if not evidence_values.get("selected") and not fee_rows and not components:
-            raise ValueError("请至少选择一项凭证审核草稿。")
+            raise ValueError(_i18n("请至少选择一项凭证审核草稿。"))
         validate_review_selections(evidence_values, fee_rows, components)
         normalized_evidence = normalize_evidence_for_apply(
             evidence_values,
@@ -4434,7 +4435,7 @@ def apply_fee_evidence_review(
                 else components
             )
             if any(str(component.get('fee_logical_key') or component.get('logical_fee_key') or '') not in reviewed_rules for component in adoption_components):
-                raise ValueError('费用分项必须对应本次已采用的最终费用拆分。')
+                raise ValueError(_i18n('费用分项必须对应本次已采用的最终费用拆分。'))
 
         parent_components: list[dict] = []
         if normalized_evidence["evidence_type"] == "REFUND" and normalized_evidence.get(
@@ -4538,7 +4539,7 @@ def apply_fee_evidence_review(
                     for row in grouped_external_components.get(fee_key, []):
                         item = (valid_items or {}).get(str(row.get("item") or ""))
                         if not item:
-                            raise ValueError("矩阵外分项关联的 SKU 不属于当前批次。")
+                            raise ValueError(_i18n("矩阵外分项关联的 SKU 不属于当前批次。"))
                         normalized_components.append(
                             normalize_component_for_apply(
                                 row,
@@ -4551,7 +4552,7 @@ def apply_fee_evidence_review(
                     for row in fee_components:
                         item = (valid_items or {}).get(str(row.get("item") or ""))
                         if not item:
-                            raise ValueError("凭证分项关联的 SKU 不属于当前批次。")
+                            raise ValueError(_i18n("凭证分项关联的 SKU 不属于当前批次。"))
                         normalized_components.append(
                             normalize_component_for_apply(
                                 row,
@@ -4613,14 +4614,14 @@ def discard_fee_evidence_review(
     repo = repository or FrappeFeeEvidenceReviewRepository()
     run = repo.lock_run(str(run_id or ""))
     if str(_run_value(run, "batch") or "") != str(batch_name or ""):
-        raise ValueError("费用凭证审核任务不属于当前批次。")
+        raise ValueError(_i18n("费用凭证审核任务不属于当前批次。"))
     status = str(_run_value(run, "status") or "")
     if status == "APPLIED":
         repo.rollback()
-        raise ValueError("已保存的凭证草稿不能放弃。")
+        raise ValueError(_i18n("已保存的凭证草稿不能放弃。"))
     if status not in {"READY", "DISCARDED", "FAILED", "STALE"}:
         repo.rollback()
-        raise ValueError("凭证审核任务仍在运行，请稍后再放弃。")
+        raise ValueError(_i18n("凭证审核任务仍在运行，请稍后再放弃。"))
     if status != "DISCARDED":
         repo.finish_run(
             str(run_id),

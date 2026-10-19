@@ -10,6 +10,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import frappe
 
 from overseas_costing.services import batch_service
@@ -146,7 +153,7 @@ def open_dingtalk_order(batch_name: str) -> None:
     result = batch_service.get_dingtalk_order_link(batch_name=batch_name)
     open_url = result.get("dingtalk_order", {}).get("open_url", "")
     if not open_url:
-        frappe.throw("当前批次缺少钉钉实例ID或官方链接，无法打开钉钉订单。")
+        frappe.throw(_("当前批次缺少钉钉实例ID或官方链接，无法打开钉钉订单。"))
 
     frappe.local.response["type"] = "redirect"
     frappe.local.response["location"] = open_url

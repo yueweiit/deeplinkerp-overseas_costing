@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import json
 import os
 import re
@@ -302,7 +309,7 @@ def resolve_costing_fx(
 
     normalized_date = normalize_payment_date(calculation_date)
     if not normalized_date:
-        raise ValueError("缺少计算日期，无法自动取得汇率。")
+        raise ValueError(_("缺少计算日期，无法自动取得汇率。"))
     version_fx = dict(version_fx or {})
     repository = repository or FrappeCurrencyExchangeRepository()
     rates: dict[str, dict] = {}
@@ -432,13 +439,13 @@ def persist_costing_fx_resolution(
     calculation_date = normalize_payment_date(resolution.get("calculation_date"))
     normalized_current_date = normalize_payment_date(current_date)
     if not calculation_date or calculation_date != normalized_current_date:
-        raise ValueError("试算汇率已跨日，请重新生成预览。")
+        raise ValueError(_("试算汇率已跨日，请重新生成预览。"))
 
     version = repository.get_version_for_update(version_name) or {}
     if str(version.get("batch") or "") != str(batch_name or ""):
-        raise ValueError("成本版本不属于当前批次。")
+        raise ValueError(_("成本版本不属于当前批次。"))
     if str(version.get("status") or "") in {"Confirmed", "Archived"}:
-        raise PermissionError("已确认或归档版本不能自动补汇率。")
+        raise PermissionError(_("已确认或归档版本不能自动补汇率。"))
 
     stored_resolution = json.loads(json.dumps(resolution, ensure_ascii=False, default=str))
     rates = stored_resolution.get("rates") if isinstance(stored_resolution.get("rates"), dict) else {}
@@ -453,16 +460,16 @@ def persist_costing_fx_resolution(
             record = repository.find_exact_buying_rate(currency_code, calculation_date) or None
             if record:
                 if not _numbers_close(record.get("exchange_rate"), expected):
-                    raise ValueError(f"{currency_code} 当日汇率已变化，请重新预览。")
+                    raise ValueError(_("{0} 当日汇率已变化，请重新预览。").format(currency_code))
             else:
                 record = repository.insert_api_buying_rate(currency_code, calculation_date, float(expected))
                 if not _numbers_close((record or {}).get("exchange_rate"), expected):
-                    raise ValueError(f"{currency_code} 当日汇率被并发写入不同数值，请重新预览。")
+                    raise ValueError(_("{0} 当日汇率被并发写入不同数值，请重新预览。").format(currency_code))
         elif source in {"currency_exchange", "historical_currency_exchange"}:
             record_name = str(rate.get("record_name") or "")
             record = repository.get_buying_rate(record_name) if record_name else None
             if not record or not _numbers_close(record.get("exchange_rate"), expected):
-                raise ValueError(f"{currency_code} 汇率记录已变化，请重新预览。")
+                raise ValueError(_("{0} 汇率记录已变化，请重新预览。").format(currency_code))
         if record:
             rate["record_name"] = str(record.get("name") or "")
             rate["rate_date"] = normalize_payment_date(record.get("date") or rate.get("rate_date"))
@@ -473,7 +480,7 @@ def persist_costing_fx_resolution(
         "fx_rmb_to_mxn": _positive_decimal(stored_resolution.get("fx_rmb_to_mxn")),
     }
     if target_values["fx_rmb_to_mxn"] is None:
-        raise ValueError("未取得可用的人民币兑比索汇率，本次试算未保存。")
+        raise ValueError(_("未取得可用的人民币兑比索汇率，本次试算未保存。"))
 
     updates = {}
     changed_fields = []
@@ -484,7 +491,7 @@ def persist_costing_fx_resolution(
         current = _positive_decimal(version.get(fieldname))
         if current is not None:
             if not _numbers_close(current, target):
-                raise ValueError(f"{fieldname} 已被人工修改，请重新预览。")
+                raise ValueError(_("{0} 已被人工修改，请重新预览。").format(fieldname))
             continue
         value = float(target)
         updates[fieldname] = value

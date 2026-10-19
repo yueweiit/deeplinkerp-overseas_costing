@@ -1,6 +1,13 @@
 """Server-owned preview, claim, application, and correction for approved payments."""
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -41,7 +48,7 @@ def _amount(value):
             raise ValueError()
         return result
     except (InvalidOperation, ValueError, TypeError):
-        raise ValueError("金额须是有效数字，最多六位小数")
+        raise ValueError(_("金额须是有效数字，最多六位小数"))
 
 
 def _text(value):
@@ -61,9 +68,9 @@ def _allowed_keys(batch):
 
 def _editable(batch, version):
     if not batch or not version or version.get("name") != batch.get("current_version"):
-        raise ValueError("成本版本已变化，请刷新")
+        raise ValueError(_("成本版本已变化，请刷新"))
     if version.get("status") in {"Confirmed", "Archived"} or batch.get("confirm_status") == "Confirmed" or batch.get("writeback_status") == "Success":
-        raise ValueError("历史、已确认或已回写版本不可修改")
+        raise ValueError(_("历史、已确认或已回写版本不可修改"))
 
 
 def _active_claims(store, **filters):
@@ -124,27 +131,27 @@ def _resolve_context(store, ledger, batch_name, version_name, candidate_id, cand
     _editable(batch, version)
     candidate = store.get("freight_candidate", candidate_id, lock=lock)
     if not candidate or candidate.get("revision") != candidate_revision or candidate.get("status") == "rejected":
-        raise ValueError("付款候选已变化或被否决，请刷新")
+        raise ValueError(_("付款候选已变化或被否决，请刷新"))
     if candidate.get("line_scope_policy") != CANDIDATE_SCOPE_POLICY:
-        raise ValueError("付款候选范围策略已更新，请重新匹配")
+        raise ValueError(_("付款候选范围策略已更新，请重新匹配"))
     if not store.find("batch_map", batch=batch_name, source_id=candidate["logistics_id"]):
-        raise ValueError("付款候选不属于当前批次")
+        raise ValueError(_("付款候选不属于当前批次"))
     source = store.get("source", candidate["expense_id"], lock=lock) or {}
     logistics = store.get("source", candidate["logistics_id"], lock=lock) or {}
     if source.get("snapshot") != candidate.get("expense_snapshot") or logistics.get("snapshot") != candidate.get("logistics_snapshot"):
-        raise ValueError("来源快照已变化，请重新核对")
+        raise ValueError(_("来源快照已变化，请重新核对"))
     if not source.get("approved") or source.get("invalid") or source.get("kind") != "expense" or logistics.get("invalid") or source.get("corp") != logistics.get("corp"):
-        raise ValueError("付款来源未批准、已失效或企业不符")
+        raise ValueError(_("付款来源未批准、已失效或企业不符"))
     current_lines = {}
     for line_id in candidate.get("line_ids") or []:
         line = store.get("freight_line", line_id, lock=lock)
         if line and line.get("source_id") == source.get("id") and line.get("snapshot") == source.get("snapshot"):
             current_lines[line_id] = line
     if candidate.get("line_ids") and set(current_lines) != set(candidate["line_ids"]):
-        raise ValueError("来源明细已变化，请重新核对")
+        raise ValueError(_("来源明细已变化，请重新核对"))
     if not current_lines:
         if source.get("amount") is None or source.get("currency") not in CURRENCIES:
-            raise ValueError("来源缺少可认领的审批总额或币种")
+            raise ValueError(_("来源缺少可认领的审批总额或币种"))
         current_lines["approval_total"] = {
             "id": "approval_total", "source_id": source["id"], "source_snapshot": source["snapshot"],
             "line_key": "approval_total", "revision": digest(source["snapshot"], source.get("amount"), source.get("currency")),
@@ -157,7 +164,7 @@ def _resolve_context(store, ledger, batch_name, version_name, candidate_id, cand
 
 def _selection_plan(store, ledger, batch, version, candidate, source, logistics, lines, selections, *, reason, negative_confirmed):
     if not isinstance(selections, list) or not selections or len(selections) > 200:
-        raise ValueError("请选择 1 至 200 条付款金额")
+        raise ValueError(_("请选择 1 至 200 条付款金额"))
     definitions = _allowed_keys(batch)
     balance = _balance_state(store, ledger, source)
     selected = []
@@ -165,52 +172,52 @@ def _selection_plan(store, ledger, batch, version, candidate, source, logistics,
     positive = Decimal("0")
     for index, raw in enumerate(selections):
         if not isinstance(raw, dict) or set(raw) - SELECTION_FIELDS:
-            raise ValueError("付款选择包含不允许的来源凭据字段")
+            raise ValueError(_("付款选择包含不允许的来源凭据字段"))
         line = lines.get(str(raw.get("source_line_id") or ""))
         if not line:
-            raise ValueError("付款明细不属于当前候选")
+            raise ValueError(_("付款明细不属于当前候选"))
         if line.get("ambiguous"):
-            raise ValueError("付款明细身份重复，需先复核")
+            raise ValueError(_("付款明细身份重复，需先复核"))
         if line.get("waybill") or line.get("approval_no"):
             verified = matching_lines(logistics, [line])
             if not verified or verified[0].get("identifier_conflict"):
-                raise ValueError("付款明细标识与本票不符")
+                raise ValueError(_("付款明细标识与本票不符"))
         key = str(raw.get("logical_fee_key") or "")
         if not key:
             key = inferred_fee_key(line.get("scope"), batch.get("transport_mode")) or ""
         if not key:
-            raise ValueError("该明细需人工选择费用分类")
+            raise ValueError(_("该明细需人工选择费用分类"))
         if key not in definitions:
-            raise ValueError("费用分类不在当前运输方式允许范围")
+            raise ValueError(_("费用分类不在当前运输方式允许范围"))
         if line.get("scope") not in (None, "", "review"):
             expected = inferred_fee_key(line.get("scope"), batch.get("transport_mode"))
             if key != expected:
-                raise ValueError("来源明细费用分类已明确，不能改分类")
+                raise ValueError(_("来源明细费用分类已明确，不能改分类"))
         value = _amount(raw.get("amount"))
         currency = str(raw.get("currency") or line.get("currency") or "").upper()
         if currency not in CURRENCIES:
-            raise ValueError("仅支持 RMB/USD/MXN 原币")
+            raise ValueError(_("仅支持 RMB/USD/MXN 原币"))
         aggregate_line = (line.get("id") == "approval_total" and line.get("line_key") == "approval_total"
                           and line.get("aggregate") is True)
         exclusive = not aggregate_line
         replacements = raw.get("replace_claim_ids") or []
         if not isinstance(replacements, list) or any(not isinstance(value, str) for value in replacements):
-            raise ValueError("待替换认领参数格式错误")
+            raise ValueError(_("待替换认领参数格式错误"))
         if exclusive and (value != _amount(line.get("amount")) or currency != line.get("currency")):
-            raise ValueError("结构化付款明细的金额和币种必须与来源明细一致")
+            raise ValueError(_("结构化付款明细的金额和币种必须与来源明细一致"))
         if exclusive:
             legacy_occupied = store.find("freight_claim", charge_key=line.get("charge_key"))
             payment_occupied = [claim for claim in _current_active_claims(store, ledger, source_id=source["id"])
                                 if claim.get("source_line_id") == line["id"] and claim["id"] not in replacements]
             if legacy_occupied or payment_occupied:
-                raise ValueError("这条结构化付款明细已采用，不能重复采用")
+                raise ValueError(_("这条结构化付款明细已采用，不能重复采用"))
         if not exclusive and currency != source.get("currency"):
-            raise ValueError("首次认领必须使用审批原币")
+            raise ValueError(_("首次认领必须使用审批原币"))
         if value < 0 and not negative_confirmed:
-            raise ValueError("请明确确认负数冲抵费用")
+            raise ValueError(_("请明确确认负数冲抵费用"))
         amount_status = str(raw.get("amount_status") or "ACTUAL").upper()
         if amount_status not in AMOUNT_STATUSES:
-            raise ValueError("费用金额状态不受支持")
+            raise ValueError(_("费用金额状态不受支持"))
         replace_ids.update(replacements)
         positive += abs(value)
         selected.append({"selection_index": index, "source_line_id": line["id"], "line_key": line["line_key"],
@@ -219,41 +226,41 @@ def _selection_plan(store, ledger, batch, version, candidate, source, logistics,
             "evidence_document_id": str((line.get("evidence") or {}).get("document_id") or ""),
             "label": line.get("label"), "waybill": line.get("waybill") or "", "replace_claim_ids": replacements})
     if len({(row["source_line_id"], row["logical_fee_key"]) for row in selected}) != len(selected):
-        raise ValueError("同一来源明细不能重复选择同一费用分类")
+        raise ValueError(_("同一来源明细不能重复选择同一费用分类"))
     for key in {row["logical_fee_key"] for row in selected}:
         grouped = [row for row in selected if row["logical_fee_key"] == key]
         if len({row["currency"] for row in grouped}) > 1:
-            raise ValueError("同一费用分类的多条来源明细币种必须一致")
+            raise ValueError(_("同一费用分类的多条来源明细币种必须一致"))
         if len({row["amount_status"] for row in grouped}) > 1:
-            raise ValueError("同一费用分类的多条来源明细金额状态必须一致")
+            raise ValueError(_("同一费用分类的多条来源明细金额状态必须一致"))
     selected_currencies = {row["currency"] for row in selected}
     source_currency = str(source.get("currency") or "").upper()
     if len(selected_currencies) != 1 or source_currency and selected_currencies != {source_currency}:
-        raise ValueError("同一审批候选的全部费用必须使用审批原币，当前不支持混合币种额度")
+        raise ValueError(_("同一审批候选的全部费用必须使用审批原币，当前不支持混合币种额度"))
     replace_claims = {row["id"]: row for row in _active_claims(
         store, batch=batch["name"], version=version["name"])}
     if replace_ids - set(replace_claims):
-        raise ValueError("待替换认领不属于当前批次")
+        raise ValueError(_("待替换认领不属于当前批次"))
     if replace_ids and not str(reason or "").strip():
-        raise ValueError("替换已有实际费用必须填写原因")
+        raise ValueError(_("替换已有实际费用必须填写原因"))
     selected_keys = {row["logical_fee_key"] for row in selected}
     freight_keys = {key for key, (_label, scope, _basis) in definitions.items() if scope == "freight"}
     if selected_keys & freight_keys and store.find("freight_claim", batch=batch["name"]):
-        raise ValueError("新旧运费认领不能混用，请先在统一付款列表更正或撤销旧认领")
+        raise ValueError(_("新旧运费认领不能混用，请先在统一付款列表更正或撤销旧认领"))
     existing = [row for row in _active_claims(store, batch=batch["name"], version=version["name"])
                 if row.get("logical_fee_key") in selected_keys]
     required = {row["id"] for row in existing}
     if required - replace_ids:
-        raise ValueError("已有实际费用认领，请明确选择替换项并填写原因")
+        raise ValueError(_("已有实际费用认领，请明确选择替换项并填写原因"))
     if any(replace_claims[cid].get("logical_fee_key") not in selected_keys for cid in replace_ids):
-        raise ValueError("只能替换与本次选择相同费用分类的认领")
+        raise ValueError(_("只能替换与本次选择相同费用分类的认领"))
     active_rules = [row for row in ledger.rows("rule", batch=batch["name"], version=version["name"])
                     if row.get("logical_fee_key") in selected_keys
                     and row.get("is_enabled") not in (0, False, "0") and row.get("is_active") not in (0, False, "0")]
     actual_rules = [row for row in active_rules if row.get("amount_status") == "ACTUAL" or row.get("is_final") in (1, True, "1")]
     replace_bindings = replace_ids | {row.get("rule_binding_id") for row in replace_claims.values() if row.get("rule_binding_id")}
     if any(not row.get("source_binding_id") or row.get("source_binding_id") not in replace_bindings for row in actual_rules):
-        raise ValueError("目标分类已有实际费用规则，需先选择可替换认领并填写原因")
+        raise ValueError(_("目标分类已有实际费用规则，需先选择可替换认领并填写原因"))
     replace_rule_names = [row["name"] for row in active_rules if row.get("source_binding_id") not in replace_bindings]
     released = sum((abs(_amount(replace_claims[cid]["amount"])) for cid in replace_ids
                     if replace_claims[cid].get("source_id") == source["id"]
@@ -261,7 +268,7 @@ def _selection_plan(store, ledger, batch, version, candidate, source, logistics,
                     and replace_claims[cid].get("currency") == source.get("currency")), Decimal("0"))
     remaining = None if balance["remaining"] is None else balance["remaining"] + released
     if remaining is not None and positive > remaining:
-        raise ValueError("本次认领超过审批来源剩余金额")
+        raise ValueError(_("本次认领超过审批来源剩余金额"))
     return selected, replace_claims, balance, definitions, remaining, replace_rule_names
 
 
@@ -318,31 +325,31 @@ def _validate_preview(store, ledger, preview, now):
     if preview.get("status") == "applied":
         return "applied"
     if preview.get("policy") != POLICY:
-        raise ValueError("付款预览策略已更新，请重新预览")
+        raise ValueError(_("付款预览策略已更新，请重新预览"))
     if _time(now) > _parse_time(preview["expires_at"]):
-        raise ValueError("付款预览已过期，请重新预览")
+        raise ValueError(_("付款预览已过期，请重新预览"))
     batch = ledger.get("batch", preview["batch"], lock=True) or {}
     if str(batch.get("modified") or "") != preview["dependencies"]["batch_modified"]:
-        raise ValueError("批次数据已变化，请重新预览")
+        raise ValueError(_("批次数据已变化，请重新预览"))
     if batch.get("current_version") != preview["dependencies"]["current_version"]:
-        raise ValueError("当前成本版本已变化，请重新预览")
+        raise ValueError(_("当前成本版本已变化，请重新预览"))
     version = ledger.get("version", preview["version"], lock=True) or {}
     _editable(batch, version)
     candidate = store.get("freight_candidate", preview["candidate_id"], lock=True) or {}
     if candidate.get("revision") != preview["dependencies"]["candidate_revision"] or candidate.get("status") == "rejected":
-        raise ValueError("付款候选已变化，请重新预览")
+        raise ValueError(_("付款候选已变化，请重新预览"))
     if candidate.get("line_scope_policy") != CANDIDATE_SCOPE_POLICY:
-        raise ValueError("付款候选范围策略已更新，请重新匹配")
+        raise ValueError(_("付款候选范围策略已更新，请重新匹配"))
     source = store.get("source", preview["source_id"], lock=True) or {}
     logistics = store.get("source", preview["logistics_id"], lock=True) or {}
     if source.get("snapshot") != preview["dependencies"]["source_snapshot"] or logistics.get("snapshot") != preview["dependencies"]["logistics_snapshot"]:
-        raise ValueError("付款来源快照已变化，请重新预览")
+        raise ValueError(_("付款来源快照已变化，请重新预览"))
     if (not source.get("approved") or source.get("invalid") or source.get("kind") != "expense"
             or logistics.get("invalid") or logistics.get("kind") != "logistics"
             or source.get("corp") != logistics.get("corp")
             or candidate.get("expense_id") != source.get("id")
             or candidate.get("logistics_id") != logistics.get("id")):
-        raise ValueError("付款来源未批准、已失效、类型或企业已变化，请重新预览")
+        raise ValueError(_("付款来源未批准、已失效、类型或企业已变化，请重新预览"))
     current_line_revisions = []
     for line_id, _revision in preview["dependencies"]["line_revisions"]:
         if line_id == "approval_total":
@@ -352,10 +359,10 @@ def _validate_preview(store, ledger, preview, now):
             current = line.get("revision")
         current_line_revisions.append((line_id, current))
     if sorted(current_line_revisions) != [tuple(row) for row in preview["dependencies"]["line_revisions"]]:
-        raise ValueError("付款明细已变化，请重新预览")
+        raise ValueError(_("付款明细已变化，请重新预览"))
     balance = _balance_state(store, ledger, source)
     if balance["fingerprint"] != preview["dependencies"]["claim_fingerprint"]:
-        raise ValueError("付款认领余额已变化，请重新预览")
+        raise ValueError(_("付款认领余额已变化，请重新预览"))
     if balance["blocking"]:
         raise ValueError(balance["blocking"][0])
     from .payment_evidence import validate_attachment_dependencies
@@ -365,7 +372,7 @@ def _validate_preview(store, ledger, preview, now):
     })
     keys = {row["logical_fee_key"] for row in preview["selections"]}
     if _rule_signature(ledger, preview["batch"], preview["version"], keys) != preview["dependencies"]["rule_fingerprint"]:
-        raise ValueError("当前费用规则已变化，请重新预览")
+        raise ValueError(_("当前费用规则已变化，请重新预览"))
     return batch, version, candidate, source, logistics, balance
 
 
@@ -394,9 +401,9 @@ def _sync_rule_groups(store, ledger, batch_name, version_name, keys, definitions
         currencies = {row.get("currency") for row in claims}
         statuses = {row.get("amount_status") or "ACTUAL" for row in claims}
         if len(currencies) > 1:
-            raise ValueError("同一费用分类的有效认领币种不一致，请先复核")
+            raise ValueError(_("同一费用分类的有效认领币种不一致，请先复核"))
         if len(statuses) > 1:
-            raise ValueError("同一费用分类的有效认领金额状态不一致，请先复核")
+            raise ValueError(_("同一费用分类的有效认领金额状态不一致，请先复核"))
         for rule in ledger.rows("rule", batch=batch_name, version=version_name):
             if (rule.get("logical_fee_key") == key and str(rule.get("rule_code") or "").startswith("payment_")
                     and rule.get("is_active") not in (0, False, "0")):
@@ -441,7 +448,7 @@ def _payment_evidence_bindings(store, ledger, batch_name, version_name, applicat
         claim = store.get("payment_claim", expected.get("id") or "", lock=True) or {}
         if (claim.get("status") != "active" or claim.get("batch") != batch_name
                 or claim.get("version") != version_name):
-            raise ValueError("付款认领已变化，不能重试附件")
+            raise ValueError(_("付款认领已变化，不能重试附件"))
         requested_keys.add(claim.get("logical_fee_key"))
     grouped = {key: [row for row in _active_claims(store, batch=batch_name, version=version_name)
                      if row.get("logical_fee_key") == key]
@@ -455,7 +462,7 @@ def _payment_evidence_bindings(store, ledger, batch_name, version_name, applicat
                  and row.get("is_enabled") not in (0, False, "0")]
         bindings = {claim.get("rule_binding_id") or claim.get("id") for claim in claims}
         if len(rules) != 1 or len(bindings) != 1 or rules[0].get("source_binding_id") not in bindings:
-            raise ValueError("付款费用规则与认领绑定已变化，不能重试附件")
+            raise ValueError(_("付款费用规则与认领绑定已变化，不能重试附件"))
         rule = rules[0]
         result[key] = {
             "claim_ids": sorted(claim["id"] for claim in claims),
@@ -520,7 +527,7 @@ def _refresh_archive_only_payment_source(store, ledger, batch_name, version_name
                  and row.get("is_active") not in (0, False, "0")
                  and row.get("is_enabled") not in (0, False, "0")]
         if len(rules) != 1:
-            raise ValueError("付款费用规则与认领绑定已变化，不能重试附件")
+            raise ValueError(_("付款费用规则与认领绑定已变化，不能重试附件"))
         snapshots = {claim.get("source_snapshot") for claim in claims}
         rule_snapshot = (next(iter(snapshots)) if len(snapshots) == 1
                          else digest(POLICY, "source-group", sorted(snapshots)))
@@ -571,9 +578,9 @@ def confirm_payment_adoption(store, ledger, batch_name, preview_id, revision, ac
         batch = ledger.get("batch", batch_name, lock=True) or {}
         preview = store.get("payment_preview", preview_id, lock=True)
         if not preview or preview.get("batch") != batch_name or preview.get("revision") != revision:
-            raise ValueError("付款预览不属于当前批次或已变化")
+            raise ValueError(_("付款预览不属于当前批次或已变化"))
         if preview.get("actor") != actor and preview.get("status") != "applied":
-            raise ValueError("付款预览属于其他操作人，请当前用户重新预览")
+            raise ValueError(_("付款预览属于其他操作人，请当前用户重新预览"))
         if preview.get("status") == "applied":
             application = store.get("payment_application", preview.get("application_id") or "")
             if application:
@@ -582,7 +589,7 @@ def confirm_payment_adoption(store, ledger, batch_name, preview_id, revision, ac
                     if row.get("preview_id") == preview.get("id") or row.get("application_id") == application.get("id")]
                 if pending_rows:
                     if preview.get("actor") != actor and not lease_check:
-                        raise ValueError("接续归档付款附件需要有效的编辑租约")
+                        raise ValueError(_("接续归档付款附件需要有效的编辑租约"))
                     if lease_check:
                         lease_check(batch_name, edit_token=edit_token, expected_modified=expected_modified)
                     current_batch = ledger.get("batch", batch_name, lock=True) or {}
@@ -593,7 +600,7 @@ def confirm_payment_adoption(store, ledger, batch_name, preview_id, revision, ac
                     if (not source.get("approved") or source.get("invalid") or source.get("kind") != "expense"
                             or logistics.get("invalid") or logistics.get("kind") != "logistics"
                             or source.get("corp") != logistics.get("corp")):
-                        raise ValueError("付款来源未批准、已失效、类型或企业已变化")
+                        raise ValueError(_("付款来源未批准、已失效、类型或企业已变化"))
                     from .document_writer import register_private_file
                     from .payment_evidence import materialize_payment_evidence, validate_pending_evidence_retry
                     seed_claim_ids = sorted({claim_id for row in pending_rows
@@ -631,7 +638,7 @@ def confirm_payment_adoption(store, ledger, batch_name, preview_id, revision, ac
                                     row["document_id"] for row in attachments),
                                 statuses={row["document_id"]: row["status"] for row in attachments})
                 return {**application["result"], "cached": True}
-            raise ValueError("付款预览已处理，请刷新")
+            raise ValueError(_("付款预览已处理，请刷新"))
         if lease_check:
             lease_check(batch_name, edit_token=edit_token, expected_modified=expected_modified)
         _batch, version, _candidate, source, _logistics, balance = _validate_preview(store, ledger, preview, now)
@@ -640,13 +647,13 @@ def confirm_payment_adoption(store, ledger, batch_name, preview_id, revision, ac
         replace_claims = {row["id"]: row for row in _active_claims(
             store, batch=batch_name, version=version["name"]) if row["id"] in replace_ids}
         if set(replace_claims) != replace_ids:
-            raise ValueError("待替换付款认领已变化，请重新预览")
+            raise ValueError(_("待替换付款认领已变化，请重新预览"))
         released = sum((abs(_amount(row["amount"])) for row in replace_claims.values()
                         if row.get("source_id") == source["id"] and row.get("source_snapshot") == source["snapshot"]
                         and row.get("currency") == source.get("currency")), Decimal("0"))
         positive = sum((abs(_amount(row["amount"])) for row in preview["selections"]), Decimal("0"))
         if balance["remaining"] is not None and positive > balance["remaining"] + released:
-            raise ValueError("付款认领余额已不足，请重新预览")
+            raise ValueError(_("付款认领余额已不足，请重新预览"))
         for old in replace_claims.values():
             changed = deepcopy(old)
             changed.update(status="replaced", active=False, replaced_at=utcnow(), replaced_by=actor,
@@ -659,7 +666,7 @@ def confirm_payment_adoption(store, ledger, batch_name, preview_id, revision, ac
         for rule_name in preview.get("replace_rule_names") or []:
             rule = ledger.get("rule", rule_name)
             if not rule or rule.get("logical_fee_key") not in selected_keys:
-                raise ValueError("待替换费用规则已变化，请重新预览")
+                raise ValueError(_("待替换费用规则已变化，请重新预览"))
             ledger.put("rule", rule_name, {"is_enabled": 0, "is_active": 0, "is_final": 0,
                 "status_change_reason": "采用已核对付款金额", "status_changed_by": actor, "status_changed_at": utcnow()})
         claims = []
@@ -680,7 +687,7 @@ def confirm_payment_adoption(store, ledger, batch_name, preview_id, revision, ac
             occupied = _current_active_claims(store, ledger, source_id=source["id"])
             legacy_occupied = store.find("freight_claim", charge_key=row.get("charge_key")) if row["exclusive"] else []
             if row["exclusive"] and (legacy_occupied or any(other.get("source_line_id") == row["source_line_id"] for other in occupied)):
-                raise ValueError("这条结构化付款明细已采用于其他批次，不能重复采用")
+                raise ValueError(_("这条结构化付款明细已采用于其他批次，不能重复采用"))
             _store_claim(store, claim)
             claims.append(claim)
         _sync_rule_groups(store, ledger, batch_name, version["name"], selected_keys, definitions, actor, "采用已核对付款金额")
@@ -717,7 +724,7 @@ def _assert_claim_capacity(store, ledger, claim, source, amount, currency):
         line = store.get("freight_line", claim.get("source_line_id") or "", lock=True) or {}
         if (line.get("source_id") != source.get("id") or line.get("snapshot") != source.get("snapshot")
                 or amount != _amount(line.get("amount")) or currency != line.get("currency")):
-            raise ValueError("结构化明细金额和币种不可脱离审批来源")
+            raise ValueError(_("结构化明细金额和币种不可脱离审批来源"))
         return
     if currency != source.get("currency"):
         return
@@ -725,19 +732,19 @@ def _assert_claim_capacity(store, ledger, claim, source, amount, currency):
                 if row["id"] != claim["id"] and row.get("source_snapshot") == source["snapshot"]
                 and row.get("currency") == currency), Decimal("0"))
     if used + abs(amount) > abs(_amount(source["amount"])):
-        raise ValueError("更正后金额超过审批来源剩余额度")
+        raise ValueError(_("更正后金额超过审批来源剩余额度"))
 
 
 def amend_payment_claim(store, ledger, batch_name, version_name, claim_id, expected_revision, action,
                         reason, edits, actor, *, now=None, lease_check=None, edit_token=None, expected_modified=None):
     if action not in {"amount", "currency", "status", "reclassify", "revoke"} or not str(reason or "").strip():
-        raise ValueError("请选择更正操作并填写原因")
+        raise ValueError(_("请选择更正操作并填写原因"))
     if not isinstance(edits, dict):
-        raise ValueError("更正参数格式错误")
+        raise ValueError(_("更正参数格式错误"))
     allowed_edits = {"amount": {"amount", "negative_confirmed"}, "currency": {"currency", "amount_status"},
                      "status": {"amount_status"}, "reclassify": {"logical_fee_key"}, "revoke": set()}
     if set(edits) - allowed_edits[action]:
-        raise ValueError("更正包含不允许的来源或审计字段")
+        raise ValueError(_("更正包含不允许的来源或审计字段"))
     with store.atomic():
         store.get("state", "match_lock", lock=True)
         if lease_check:
@@ -751,7 +758,7 @@ def amend_payment_claim(store, ledger, batch_name, version_name, claim_id, expec
             legacy = freight_adoption.context(store, ledger, batch_name, version_name, live=True)
             if any(row.get("id") == claim_id for row in legacy["claims"]):
                 if action not in {"amount", "revoke"}:
-                    raise ValueError("旧运费认领仅支持金额更正或撤销")
+                    raise ValueError(_("旧运费认领仅支持金额更正或撤销"))
                 result = freight_adoption.amend(
                     store, ledger, batch_name, version_name, claim_id, expected_revision, action, actor,
                     reason=str(reason).strip(), amount=edits.get("amount"),
@@ -759,9 +766,9 @@ def amend_payment_claim(store, ledger, batch_name, version_name, claim_id, expec
                 remaining = next((row for row in result.get("claims", []) if row.get("id") == claim_id), None)
                 return {**result, "legacy": True, "claim": remaining}
         if not claim or claim.get("batch") != batch_name or claim.get("version") != version_name or claim.get("status") != "active":
-            raise ValueError("待更正付款认领不属于当前可编辑版本")
+            raise ValueError(_("待更正付款认领不属于当前可编辑版本"))
         if claim.get("revision") != expected_revision:
-            raise ValueError("付款认领已变化，请刷新")
+            raise ValueError(_("付款认领已变化，请刷新"))
         source = store.get("source", claim["source_id"], lock=True) or {}
         logistics = store.get("source", claim["logistics_id"], lock=True) or {}
         stale = (source.get("snapshot") != claim.get("source_snapshot")
@@ -770,46 +777,46 @@ def amend_payment_claim(store, ledger, batch_name, version_name, claim_id, expec
                  or logistics.get("invalid") or logistics.get("kind") != "logistics"
                  or source.get("corp") != logistics.get("corp"))
         if stale and action != "revoke":
-            raise ValueError("付款来源或本票快照已变化，请先复核")
+            raise ValueError(_("付款来源或本票快照已变化，请先复核"))
         before = deepcopy(claim)
         affected_keys = {claim["logical_fee_key"]}
         if action == "amount":
             changed_amount = _amount(edits.get("amount"))
             if changed_amount < 0 and edits.get("negative_confirmed") not in (True, 1, "1", "true"):
-                raise ValueError("请明确确认负数冲抵费用")
+                raise ValueError(_("请明确确认负数冲抵费用"))
             claim["amount"] = _text(changed_amount)
         elif action == "currency":
             new_currency = str(edits.get("currency") or "").upper()
             if new_currency not in CURRENCIES:
-                raise ValueError("更正币种仅支持 RMB/USD/MXN")
+                raise ValueError(_("更正币种仅支持 RMB/USD/MXN"))
             resulting_status = str(edits.get("amount_status") or claim.get("amount_status") or "ACTUAL").upper()
             if new_currency != source.get("currency") and resulting_status == "ACTUAL":
-                raise ValueError("与审批原币不同时只能保存为非实际金额状态")
+                raise ValueError(_("与审批原币不同时只能保存为非实际金额状态"))
             if resulting_status not in AMOUNT_STATUSES:
-                raise ValueError("费用金额状态不受支持")
+                raise ValueError(_("费用金额状态不受支持"))
             claim.update(currency=new_currency, amount_status=resulting_status)
         elif action == "status":
             state = str(edits.get("amount_status") or "").upper()
             if state not in AMOUNT_STATUSES:
-                raise ValueError("费用金额状态不受支持")
+                raise ValueError(_("费用金额状态不受支持"))
             if claim.get("currency") != source.get("currency") and state == "ACTUAL":
-                raise ValueError("非审批原币不能标记为实际金额")
+                raise ValueError(_("非审批原币不能标记为实际金额"))
             claim["amount_status"] = state
         elif action == "reclassify":
             key = str(edits.get("logical_fee_key") or "")
             definitions = _allowed_keys(batch)
             if key not in definitions:
-                raise ValueError("费用重分类不在当前运输方式允许范围")
+                raise ValueError(_("费用重分类不在当前运输方式允许范围"))
             if definitions[key][1] == "freight" and store.find("freight_claim", batch=batch_name):
-                raise ValueError("新旧运费认领不能混用，请先在统一付款列表更正或撤销旧认领")
+                raise ValueError(_("新旧运费认领不能混用，请先在统一付款列表更正或撤销旧认领"))
             if claim.get("exclusive"):
                 line = store.get("freight_line", claim.get("source_line_id") or "", lock=True) or {}
                 expected_key = inferred_fee_key(line.get("scope"), batch.get("transport_mode"))
                 if expected_key and key != expected_key:
-                    raise ValueError("来源明细费用分类已明确，不能重分类")
+                    raise ValueError(_("来源明细费用分类已明确，不能重分类"))
             if any(row["id"] != claim_id and row.get("logical_fee_key") == key and row.get("amount_status") == "ACTUAL"
                    for row in _active_claims(store, batch=batch_name, version=version_name)):
-                raise ValueError("目标分类已有实际费用认领")
+                raise ValueError(_("目标分类已有实际费用认领"))
             claim["logical_fee_key"] = key
             affected_keys.add(key)
         elif action == "revoke":

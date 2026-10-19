@@ -3,6 +3,13 @@
 document_sync is a durable queue and idempotence ledger. Every cost/File/attachment
 write shares the caller's database transaction. Frozen versions remain immutable.
 """
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 from collections import Counter, defaultdict
 from copy import deepcopy
 from decimal import Decimal
@@ -231,7 +238,7 @@ def register_private_file(ledger, attachment, document):
         return
     decoded = unquote(url)
     if not decoded.startswith('/private/files/') or '..' in PurePosixPath(decoded).parts or '?' in decoded or '#' in decoded:
-        raise ValueError('归档附件必须使用本地私有缓存文件')
+        raise ValueError(_('归档附件必须使用本地私有缓存文件'))
     frappe = getattr(ledger, 'frappe', None)
     if frappe is None:
         return  # The pure ledger has no File controller; tests may inject register_file.
@@ -239,7 +246,7 @@ def register_private_file(ledger, attachment, document):
     if frappe.db.get_value('File', filters, 'name'):
         return
     if not frappe.db.get_value('File', {'file_url': url, 'is_private': 1}, 'name'):
-        raise ValueError('本地私有缓存 File 记录不存在')
+        raise ValueError(_('本地私有缓存 File 记录不存在'))
     frappe.get_doc({'doctype': 'File', **filters, 'file_name': PurePosixPath(str(document.get('file_name') or decoded)).name}).insert(ignore_permissions=True)
 
 
@@ -300,7 +307,7 @@ def save_attachment(store, ledger, source, document, batch, version, reviews, re
 
 def sync_logistics_documents(store, ledger, source, batch_name, actor, *, register_file=None):
     if source.get('kind') != 'logistics':
-        raise ValueError('只有国际物流来源可同步装箱附件')
+        raise ValueError(_('只有国际物流来源可同步装箱附件'))
     register_file = register_file or (lambda attachment, document: register_private_file(ledger, attachment, document))
     state_id = digest('logistics_documents', source['id'], batch_name)
     documents = [deepcopy(d) for d in source.get('documents') or [] if d.get('id')]
@@ -309,10 +316,10 @@ def sync_logistics_documents(store, ledger, source, batch_name, actor, *, regist
     with store.atomic():
         batch = ledger.get('batch', batch_name, lock=True)
         if not batch:
-            raise ValueError('物流来源对应批次不存在')
+            raise ValueError(_('物流来源对应批次不存在'))
         mappings = store.find('batch_map', source_id=source['id'], limit=1)
         if not mappings or mappings[0]['batch'] != batch_name:
-            raise ValueError('物流来源与成本批次不对应')
+            raise ValueError(_('物流来源与成本批次不对应'))
         version = ledger.get('version', batch['current_version'], lock=True)
         prior = store.get('document_sync', state_id, lock=True)
         items = ledger.rows('item', batch=batch_name, version=version['name'])
@@ -393,9 +400,9 @@ def sync_source_documents(store, ledger, source, batch_name, actor, *, source_co
         actual = store.get('source',binding['expense_id'],lock=True) if binding else None
         batch = ledger.get('batch',batch_name,lock=True)
         if not binding or context_for_source(actual,binding,batch['current_version'],batch_name) != source_context:
-            raise ValueError('采购支出来源已变化，装箱结果不能写回')
+            raise ValueError(_('采购支出来源已变化，装箱结果不能写回'))
         if locked(batch) and (not trusted_review_actor or batch.get('edit_lock_owner') != trusted_review_actor):
-            raise ValueError('批次正在编辑，采购支出装箱资料等待应用')
+            raise ValueError(_('批次正在编辑，采购支出装箱资料等待应用'))
         version = batch['current_version']
         state_id = digest('expense_documents',source['id'],batch_name)
         documents = [deepcopy(d) for d in source.get('documents') or [] if d.get('id')]

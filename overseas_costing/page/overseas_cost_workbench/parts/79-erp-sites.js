@@ -32,28 +32,28 @@
    */
   erpSiteStateMeta(state) {
     const table = {
-      SYNCED: { label: "已同步", tone: "done" },
-      UPDATE_REQUIRED: { label: "同步的是旧成本", tone: "warn" },
-      IN_PROGRESS: { label: "同步中", tone: "pending" },
-      ATTENTION_REQUIRED: { label: "需处理", tone: "error" },
-      NOT_PUSHED: { label: "未推送", tone: "muted" },
+      SYNCED: { label: ocTranslate("已同步"), tone: "done" },
+      UPDATE_REQUIRED: { label: ocTranslate("同步的是旧成本"), tone: "warn" },
+      IN_PROGRESS: { label: ocTranslate("同步中"), tone: "pending" },
+      ATTENTION_REQUIRED: { label: ocTranslate("需处理"), tone: "error" },
+      NOT_PUSHED: { label: ocTranslate("未推送"), tone: "muted" },
     };
     const key = String(state || "").trim().toUpperCase();
-    return table[key] || { label: key || "未知状态", tone: "muted" };
+    return table[key] || { label: key || ocTranslate("未知状态"), tone: "muted" };
   }
 
   erpSiteOverallMeta(overall) {
     const table = {
-      EMPTY: { label: "没有可推送的站点", tone: "muted" },
-      NOT_STARTED: { label: "尚未推送", tone: "muted" },
-      IN_PROGRESS: { label: "推送中", tone: "pending" },
-      PARTIAL: { label: "部分站点未推送", tone: "warn" },
-      UPDATE_REQUIRED: { label: "有站点同步的是旧成本", tone: "warn" },
-      ATTENTION_REQUIRED: { label: "有站点需要处理", tone: "error" },
-      SYNCED: { label: "全部站点已同步", tone: "done" },
+      EMPTY: { label: ocTranslate("没有可推送的站点"), tone: "muted" },
+      NOT_STARTED: { label: ocTranslate("尚未推送"), tone: "muted" },
+      IN_PROGRESS: { label: ocTranslate("推送中"), tone: "pending" },
+      PARTIAL: { label: ocTranslate("部分站点未推送"), tone: "warn" },
+      UPDATE_REQUIRED: { label: ocTranslate("有站点同步的是旧成本"), tone: "warn" },
+      ATTENTION_REQUIRED: { label: ocTranslate("有站点需要处理"), tone: "error" },
+      SYNCED: { label: ocTranslate("全部站点已同步"), tone: "done" },
     };
     const key = String(overall || "").trim().toUpperCase();
-    return table[key] || { label: key || "状态未知", tone: "muted" };
+    return table[key] || { label: key || ocTranslate("状态未知"), tone: "muted" };
   }
 
   /**
@@ -66,16 +66,16 @@
    */
   erpSiteRequestStatusMeta(status) {
     const table = {
-      PENDING: { label: "待推送", tone: "muted" },
-      RUNNING: { label: "推送中", tone: "pending" },
-      SUCCESS: { label: "已推送", tone: "done" },
-      FAILED: { label: "推送失败", tone: "error" },
-      UNCERTAIN: { label: "结果待核对", tone: "warn" },
-      SUPERSEDED: { label: "已被替代", tone: "muted" },
-      MANUAL_REQUIRED: { label: "需人工处理", tone: "error" },
+      PENDING: { label: ocTranslate("待推送"), tone: "muted" },
+      RUNNING: { label: ocTranslate("推送中"), tone: "pending" },
+      SUCCESS: { label: ocTranslate("已推送"), tone: "done" },
+      FAILED: { label: ocTranslate("推送失败"), tone: "error" },
+      UNCERTAIN: { label: ocTranslate("结果待核对"), tone: "warn" },
+      SUPERSEDED: { label: ocTranslate("已被替代"), tone: "muted" },
+      MANUAL_REQUIRED: { label: ocTranslate("需人工处理"), tone: "error" },
     };
     const key = String(status || "").trim().toUpperCase();
-    return table[key] || { label: key || "未知状态", tone: "muted" };
+    return table[key] || { label: key || ocTranslate("未知状态"), tone: "muted" };
   }
 
   /** 站点级投影：优先用分站点计划里那份（它才知道当前哈希与本次会推到哪些站点）。 */
@@ -93,9 +93,9 @@
   }
 
   renderErpSiteStateChip(site = null) {
-    if (!site) return `<span class="ocw-erp-sites-chip is-muted">状态未知</span>`;
+    if (!site) return `<span class="ocw-erp-sites-chip is-muted">${ocTranslate("状态未知")}</span>`;
     const meta = this.erpSiteStateMeta(site.state);
-    return `<span class="ocw-erp-sites-chip is-${this.escape(meta.tone)}">${this.escape(meta.label)}</span>`;
+    return `<span class="ocw-erp-sites-chip is-${this.escape(meta.tone)}">${this.escape(ocTranslate(meta.label))}</span>`;
   }
 
   /**
@@ -134,19 +134,19 @@
 
   /** 站点行上的跳转入口：没有远端单据就不给按钮，绝不给一个点了没反应的东西。 */
   renderErpSiteDocumentsCell(site = {}) {
-    if (!this.erpSiteRemoteDocsKnown()) return `<span class="ocw-erp-sites-hint">单据未读取</span>`;
+    if (!this.erpSiteRemoteDocsKnown()) return `<span class="ocw-erp-sites-hint">${ocTranslate("单据未读取")}</span>`;
     const documents = this.erpSiteRemoteDocuments(site.site_code);
-    if (!documents.length) return `<span class="ocw-erp-sites-hint">尚未在 ERP 建单</span>`;
+    if (!documents.length) return `<span class="ocw-erp-sites-hint">${ocTranslate("尚未在 ERP 建单")}</span>`;
     const title = documents.map((document) => String(document.name || "")).filter(Boolean).join("、");
     return `<button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="erp-site-documents"
-      data-site-code="${this.escape(String(site.site_code || ""))}" title="${this.escape(title)}">在 ERP 查看（${this.escape(String(documents.length))}）</button>`;
+      data-site-code="${this.escape(String(site.site_code || ""))}" title="${this.escape(ocTranslate(title))}">${ocTranslate("在 ERP 查看（{0}）", [this.escape(String(documents.length))])}</button>`;
   }
 
   erpRemoteDocstatusLabel(docstatus) {
     const value = Number(docstatus);
-    if (value === 1) return "已提交";
-    if (value === 2) return "已作废";
-    return "草稿";
+    if (value === 1) return ocTranslate("已提交");
+    if (value === 2) return ocTranslate("已作废");
+    return ocTranslate("草稿");
   }
 
   /**
@@ -174,7 +174,7 @@
       return null;
     }
     const dialog = new frappe.ui.Dialog({
-      title: `${code || "站点"} 在 ERP 的单据（${usable.length} 张）`,
+      title: ocTranslate("{0} 在 ERP 的单据（{1} 张）", [code || "站点", usable.length]),
       fields: [{ fieldtype: "HTML", fieldname: "documents", options: this.renderErpRemoteDocumentList(usable) }],
     });
     dialog.show();
@@ -189,14 +189,14 @@
         <td><strong>${this.escape(String(document.name || "--"))}</strong></td>
         <td>${this.escape(this.erpRemoteDocstatusLabel(document.docstatus))}</td>
         <td>${this.escape(String(document.line_count ?? 0))}</td>
-        <td><a class="ocw-link-btn" href="${this.escape(String(document.url || ""))}" target="_blank" rel="noopener noreferrer">打开</a></td>
+        <td><a class="ocw-link-btn" href="${this.escape(String(document.url || ""))}" target="_blank" rel="noopener noreferrer">${ocTranslate("打开")}</a></td>
       </tr>`).join("");
     return `
       <div class="ocw-erp-site-documents">
-        <p class="ocw-erp-sites-note">单号取自本批次已保存的远端单据关联记录；打开的是 ERP 里的单据页，需要该 ERP 的登录状态。</p>
+        <p class="ocw-erp-sites-note">${ocTranslate("单号取自本批次已保存的远端单据关联记录；打开的是 ERP 里的单据页，需要该 ERP 的登录状态。")}</p>
         <table class="ocw-erp-sites-table">
-          <thead><tr><th>单据类型</th><th>单号</th><th>状态</th><th>物料行</th><th>跳转</th></tr></thead>
-          <tbody>${rows || `<tr><td colspan="5" class="ocw-erp-sites-empty">没有可打开的单据</td></tr>`}</tbody>
+          <thead><tr><th>${ocTranslate("单据类型")}</th><th>${ocTranslate("单号")}</th><th>${ocTranslate("状态")}</th><th>${ocTranslate("物料行")}</th><th>${ocTranslate("跳转")}</th></tr></thead>
+          <tbody>${rows || `<tr><td colspan="5" class="ocw-erp-sites-empty">${ocTranslate("没有可打开的单据")}</td></tr>`}</tbody>
         </table>
       </div>`;
   }
@@ -227,7 +227,7 @@
     const total = groups.reduce((sum, group) => sum + group.documents.length, 0);
     try {
       const dialog = new frappe.ui.Dialog({
-        title: `已在 ERP 建立 ${total} 张单据`,
+        title: ocTranslate("已在 ERP 建立 {0} 张单据", [total]),
         fields: [
           {
             fieldtype: "HTML",
@@ -281,8 +281,8 @@
 
   renderErpSiteHash(hash = "") {
     const text = String(hash || "");
-    if (!text) return `<span class="ocw-erp-sites-hash is-muted">无结果哈希</span>`;
-    return `<span class="ocw-erp-sites-hash" title="${this.escape(text)}">结果哈希 ${this.escape(text.slice(0, 12))}</span>`;
+    if (!text) return `<span class="ocw-erp-sites-hash is-muted">${ocTranslate("无结果哈希")}</span>`;
+    return `<span class="ocw-erp-sites-hash" title="${this.escape(text)}">${ocTranslate("结果哈希 {0}", [this.escape(text.slice(0, 12))])}</span>`;
   }
 
   /**
@@ -367,22 +367,22 @@
   renderErpSiteStatusPanel() {
     const state = this.ensureErpSiteState();
     if (state.loading && !state.plan) {
-      return `<div class="ocw-erp-sites-loading">正在读取站点同步状态…</div>`;
+      return `<div class="ocw-erp-sites-loading">${ocTranslate("正在读取站点同步状态…")}</div>`;
     }
     if (state.failure) {
       return `
-        <div class="ocw-erp-sites-head"><div><span>ERP 站点推送</span><strong>状态读取失败</strong></div>
-          <div class="ocw-erp-sites-actions"><button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="erp-site-refresh">重试</button></div>
+        <div class="ocw-erp-sites-head"><div><span>${ocTranslate("ERP 站点推送")}</span><strong>${ocTranslate("状态读取失败")}</strong></div>
+          <div class="ocw-erp-sites-actions"><button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="erp-site-refresh">${ocTranslate("重试")}</button></div>
         </div>
         <p class="ocw-erp-sites-note is-error">${this.escape(state.failure)}</p>`;
     }
     const plan = state.plan;
     if (!plan) {
       return `
-        <div class="ocw-erp-sites-head"><div><span>ERP 站点推送</span><strong>尚未生成同步草稿</strong></div>
+        <div class="ocw-erp-sites-head"><div><span>${ocTranslate("ERP 站点推送")}</span><strong>${ocTranslate("尚未生成同步草稿")}</strong></div>
           <div class="ocw-erp-sites-actions">
-            <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="erp-site-refresh">刷新</button>
-            <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="erp-site-preview">站点推送预览</button>
+            <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="erp-site-refresh">${ocTranslate("刷新")}</button>
+            <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="erp-site-preview">${ocTranslate("站点推送预览")}</button>
           </div>
         </div>`;
     }
@@ -395,7 +395,7 @@
       return `
         <tr>
           <td><strong>${this.escape(site.site_code || "--")}</strong>${site.site_code ? `<small>${this.escape(companyText)}</small>` : ""}</td>
-          <td>${this.escape(String(site.groups.length))} 组 / ${this.escape(String(site.itemCount))} 行</td>
+          <td>${ocTranslate("{0} 组 / {1} 行", [this.escape(String(site.groups.length)), this.escape(String(site.itemCount))])}</td>
           <td>${this.escape(this.formatMoney(site.total_cost_rmb))}</td>
           <td>${this.escape(this.formatMoney(site.allocated_fee_rmb))}</td>
           <td>${this.renderErpSiteStateChip(siteWork)}</td>
@@ -406,29 +406,29 @@
     const overall = work ? this.erpSiteOverallMeta(work.overall) : null;
     const blockingNote = preview.complete
       ? ""
-      : `<p class="ocw-erp-sites-note is-warn">还有 ${this.escape(String(preview.blocking.length))} 个物料组未通过路由、供应商或仓库门槛，不会随本次推送发出。</p>`;
+      : `<p class="ocw-erp-sites-note is-warn">${ocTranslate("还有 {0} 个物料组未通过路由、供应商或仓库门槛，不会随本次推送发出。", [this.escape(String(preview.blocking.length))])}</p>`;
     return `
       <div class="ocw-erp-sites-head">
         <div>
-          <span>ERP 站点推送</span>
-          <strong>${this.escape(String(preview.sites.length))} 个站点 · ${this.escape(String(preview.sites.reduce((total, site) => total + site.groups.length, 0)))} 个单据组 · ${this.escape(this.formatMoney(preview.previewTotalRmb))} RMB</strong>
-          <small>${preview.ready ? "已通过推送门槛" : "存在阻断项，暂不能推送"}${preview.complete ? "" : " · 仅部分可推送"}${overall ? ` · ${this.escape(overall.label)}` : ""}</small>
+          <span>${ocTranslate("ERP 站点推送")}</span>
+          <strong>${ocTranslate("{0} 个站点 · {1} 个单据组 · {2} RMB", [this.escape(String(preview.sites.length)), this.escape(String(preview.sites.reduce((total, site) => total + site.groups.length, 0))), this.escape(this.formatMoney(preview.previewTotalRmb))])}</strong>
+          <small>${preview.ready ? ocTranslate("已通过推送门槛") : ocTranslate("存在阻断项，暂不能推送")}${preview.complete ? "" : ocTranslate(" · 仅部分可推送")}${overall ? ` · ${this.escape(ocTranslate(overall.label))}` : ""}</small>
         </div>
         <div class="ocw-erp-sites-actions">
-          <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="erp-site-refresh">刷新状态</button>
-          <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="erp-site-preview">站点推送预览</button>
+          <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="erp-site-refresh">${ocTranslate("刷新状态")}</button>
+          <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="erp-site-preview">${ocTranslate("站点推送预览")}</button>
         </div>
       </div>
       <div class="ocw-erp-sites-scroll">
         <table class="ocw-erp-sites-table">
-          <thead><tr><th>站点 / ERP 公司</th><th>目标单据</th><th>综合成本</th><th>分摊费用</th><th>同步状态</th><th>ERP 单据</th></tr></thead>
-          <tbody>${rows || `<tr><td colspan="6" class="ocw-erp-sites-empty">当前没有可推送的站点分组</td></tr>`}</tbody>
+          <thead><tr><th>${ocTranslate("站点 / ERP 公司")}</th><th>${ocTranslate("目标单据")}</th><th>${ocTranslate("综合成本")}</th><th>${ocTranslate("分摊费用")}</th><th>${ocTranslate("同步状态")}</th><th>${ocTranslate("ERP 单据")}</th></tr></thead>
+          <tbody>${rows || `<tr><td colspan="6" class="ocw-erp-sites-empty">${ocTranslate("当前没有可推送的站点分组")}</td></tr>`}</tbody>
         </table>
       </div>
       ${blockingNote}
       ${overdueSites.length ? `
         <div class="ocw-erp-sites-ledger">
-          <h4>还欠处理的站点（${this.escape(String(overdueSites.length))} 个）</h4>
+          <h4>${ocTranslate("还欠处理的站点（{0} 个）", [this.escape(String(overdueSites.length))])}</h4>
           <ul>${overdueSites.map((site) => this.renderErpSiteTodoRow(site)).join("")}</ul>
         </div>` : ""}
       ${this.renderErpSiteQueueBlock()}
@@ -450,15 +450,15 @@
     const retries = Number(site.attempt_count || 0);
     const actions = todo.action === "reconcile_erp"
       ? `
-          <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="erp-site-reconcile" data-request-id="${this.escape(requestId)}">核对远端</button>
-          <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="erp-site-retry" data-request-id="${this.escape(requestId)}">核对后重试</button>`
-      : `<span class="ocw-erp-sites-hint">${this.escape(todo.label || "请在 ERP 侧处理后刷新状态")}</span>`;
+          <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="erp-site-reconcile" data-request-id="${this.escape(requestId)}">${ocTranslate("核对远端")}</button>
+          <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="erp-site-retry" data-request-id="${this.escape(requestId)}">${ocTranslate("核对后重试")}</button>`
+      : `<span class="ocw-erp-sites-hint">${this.escape(todo.label || ocTranslate("请在 ERP 侧处理后刷新状态"))}</span>`;
     return `
       <li class="ocw-erp-sites-ledger-row">
         <div>
           <strong>${this.escape(String(site.site_code || "--"))}</strong>
           <span class="ocw-erp-sites-state is-${this.escape(meta.tone)}">${this.escape(todo.label || meta.label)}</span>
-          ${retries ? `<em>已尝试 ${this.escape(String(retries))} 次</em>` : ""}
+          ${retries ? `<em>${ocTranslate("已尝试 {0} 次", [this.escape(String(retries))])}</em>` : ""}
           <small>${this.renderErpSiteHash(site.cost_result_hash)}</small>
           ${reason ? `<p>${this.escape(reason)}</p>` : ""}
         </div>
@@ -491,10 +491,10 @@
       <li class="ocw-erp-sites-ledger-row" data-request-id="${this.escape(requestId)}">
         <div>
           <strong>${this.escape(String(item.site_code || "--"))}</strong>
-          <span class="ocw-erp-sites-state is-${this.escape(meta.tone)}">${this.escape(meta.label)}</span>
-          ${retries ? `<em>已尝试 ${this.escape(String(retries))} 次</em>` : ""}
+          <span class="ocw-erp-sites-state is-${this.escape(meta.tone)}">${this.escape(ocTranslate(meta.label))}</span>
+          ${retries ? `<em>${ocTranslate("已尝试 {0} 次", [this.escape(String(retries))])}</em>` : ""}
           <small>${this.escape(operation)} · ${this.renderErpSiteHash(item.cost_result_hash)}</small>
-          ${requestId ? `<small>请求 ${this.escape(requestId.slice(0, 12))}</small>` : ""}
+          ${requestId ? `<small>${ocTranslate("请求 {0}", [this.escape(requestId.slice(0, 12))])}</small>` : ""}
           ${reason ? `<p>${this.escape(reason)}</p>` : ""}
         </div>
       </li>`;
@@ -503,9 +503,9 @@
   renderErpSiteQueueBlock() {
     const items = this.erpSiteLedgerQueue();
     if (items === null) return "";
-    const head = `<h4>本地同步队列（${this.escape(String(items.length))} 条）</h4>`;
+    const head = `<h4>${ocTranslate("本地同步队列（{0} 条）", [this.escape(String(items.length))])}</h4>`;
     if (!items.length) {
-      return `<div class="ocw-erp-sites-ledger" data-area="erp-sync-queue">${head}<p class="ocw-erp-sites-note">尚未生成同步请求。</p></div>`;
+      return `<div class="ocw-erp-sites-ledger" data-area="erp-sync-queue">${head}<p class="ocw-erp-sites-note">${ocTranslate("尚未生成同步请求。")}</p></div>`;
     }
     return `
       <div class="ocw-erp-sites-ledger" data-area="erp-sync-queue">
@@ -525,38 +525,38 @@
           <td>${this.escape(String(group.supplier || "未设置"))}</td>
           <td>${this.escape(String(group.warehouse || "--"))}</td>
           <td>${this.escape(String(group.purchase_currency || "CNY"))} / ${this.escape(String(group.erp_stock_uom || "--"))}</td>
-          <td>${this.escape(String((group.items || []).length))} 行</td>
+          <td>${ocTranslate("{0} 行", [this.escape(String((group.items || []).length))])}</td>
           <td>${this.escape(this.formatMoney(group.total_cost_rmb))}</td>
         </tr>`).join("");
       return `
         <article class="ocw-erp-site-card">
           <header>
-            <div><span>站点</span><strong>${this.escape(site.site_code || "--")}</strong></div>
-            <div><span>ERP 公司</span><strong>${this.escape(site.companies.join(" / ") || "--")}</strong></div>
-            <div><span>单据组</span><strong>${this.escape(String(site.groups.length))}</strong></div>
-            <div><span>物料行</span><strong>${this.escape(String(site.itemCount))}</strong></div>
-            <div><span>综合成本</span><strong>${this.escape(this.formatMoney(site.total_cost_rmb))}</strong></div>
+            <div><span>${ocTranslate("站点")}</span><strong>${this.escape(site.site_code || "--")}</strong></div>
+            <div><span>${ocTranslate("ERP 公司")}</span><strong>${this.escape(site.companies.join(" / ") || "--")}</strong></div>
+            <div><span>${ocTranslate("单据组")}</span><strong>${this.escape(String(site.groups.length))}</strong></div>
+            <div><span>${ocTranslate("物料行")}</span><strong>${this.escape(String(site.itemCount))}</strong></div>
+            <div><span>${ocTranslate("综合成本")}</span><strong>${this.escape(this.formatMoney(site.total_cost_rmb))}</strong></div>
           </header>
           <table class="ocw-erp-site-groups">
-            <thead><tr><th>ERP 公司</th><th>供应商</th><th>收货仓库</th><th>币种 / 单位</th><th>行数</th><th>综合成本</th></tr></thead>
-            <tbody>${groups || `<tr><td colspan="6" class="ocw-erp-sites-empty">该站点没有可推送的分组</td></tr>`}</tbody>
+            <thead><tr><th>${ocTranslate("ERP 公司")}</th><th>${ocTranslate("供应商")}</th><th>${ocTranslate("收货仓库")}</th><th>${ocTranslate("币种 / 单位")}</th><th>${ocTranslate("行数")}</th><th>${ocTranslate("综合成本")}</th></tr></thead>
+            <tbody>${groups || `<tr><td colspan="6" class="ocw-erp-sites-empty">${ocTranslate("该站点没有可推送的分组")}</td></tr>`}</tbody>
           </table>
         </article>`;
     }).join("");
     return `
       <div class="ocw-erp-sites-preview">
         <div class="ocw-erp-sites-preview-summary">
-          <div><span>站点</span><strong>${this.escape(String(preview.sites.length))}</strong></div>
-          <div><span>单据组</span><strong>${this.escape(String(preview.sites.reduce((total, site) => total + site.groups.length, 0)))}</strong></div>
-          <div><span>物料行</span><strong>${this.escape(String(preview.sites.reduce((total, site) => total + site.itemCount, 0)))}</strong></div>
-          <div><span>综合成本</span><strong>${this.escape(this.formatMoney(preview.previewTotalRmb))} RMB</strong></div>
-          <div><span>分摊费用</span><strong>${this.escape(this.formatMoney(preview.previewFeeRmb))} RMB</strong></div>
+          <div><span>${ocTranslate("站点")}</span><strong>${this.escape(String(preview.sites.length))}</strong></div>
+          <div><span>${ocTranslate("单据组")}</span><strong>${this.escape(String(preview.sites.reduce((total, site) => total + site.groups.length, 0)))}</strong></div>
+          <div><span>${ocTranslate("物料行")}</span><strong>${this.escape(String(preview.sites.reduce((total, site) => total + site.itemCount, 0)))}</strong></div>
+          <div><span>${ocTranslate("综合成本")}</span><strong>${this.escape(this.formatMoney(preview.previewTotalRmb))} RMB</strong></div>
+          <div><span>${ocTranslate("分摊费用")}</span><strong>${this.escape(this.formatMoney(preview.previewFeeRmb))} RMB</strong></div>
         </div>
-        <p class="ocw-erp-sites-note">${this.renderErpSiteHash(preview.hash)} —— 确认后按这个哈希生成幂等请求，重复点击不会在远端多建一张采购单。</p>
+        <p class="ocw-erp-sites-note">${ocTranslate("{0} —— 确认后按这个哈希生成幂等请求，重复点击不会在远端多建一张采购单。", [this.renderErpSiteHash(preview.hash)])}</p>
         ${this.renderErpSiteOverdueNote(plan)}
-        ${estimated ? `<p class="ocw-erp-sites-note is-warn">本次含 ${this.escape(String(estimated))} 项暂估费用；实际费用出来后需要另行更新远端成本。</p>` : ""}
-        ${preview.complete ? "" : `<p class="ocw-erp-sites-note is-warn">另有 ${this.escape(String(preview.blocking.length))} 个物料组未通过路由、供应商或仓库门槛，本次不会发出；补齐后可再次推送。</p>`}
-        ${cards || `<p class="ocw-erp-sites-note is-warn">当前没有可推送的站点分组。</p>`}
+        ${estimated ? `<p class="ocw-erp-sites-note is-warn">${ocTranslate("本次含 {0} 项暂估费用；实际费用出来后需要另行更新远端成本。", [this.escape(String(estimated))])}</p>` : ""}
+        ${preview.complete ? "" : `<p class="ocw-erp-sites-note is-warn">${ocTranslate("另有 {0} 个物料组未通过路由、供应商或仓库门槛，本次不会发出；补齐后可再次推送。", [this.escape(String(preview.blocking.length))])}</p>`}
+        ${cards || `<p class="ocw-erp-sites-note is-warn">${ocTranslate("当前没有可推送的站点分组。")}</p>`}
       </div>`;
   }
 
@@ -568,7 +568,7 @@
     const text = behind
       .map((site) => `${site.todo.label}（${String(site.site_code || "--")}）`)
       .join("；");
-    return `<p class="ocw-erp-sites-note is-warn">本站点推送会处理：${this.escape(text)}。</p>`;
+    return `<p class="ocw-erp-sites-note is-warn">${ocTranslate("本站点推送会处理：{0}。", [this.escape(text)])}</p>`;
   }
 
   /** 暂估费用计数只读已加载的费用状态，不为它额外发一次请求。 */
@@ -591,9 +591,9 @@
     const sizes = this.erpSitePlanPreview(plan).sites.length;
     let pushing = false;
     const dialog = new frappe.ui.Dialog({
-      title: `ERP 站点推送预览（${sizes} 个站点）`,
+      title: ocTranslate("ERP 站点推送预览（{0} 个站点）", [sizes]),
       fields: [{ fieldtype: "HTML", fieldname: "plan", options: this.renderErpSiteSyncPreview(plan) }],
-      primary_action_label: "确认并推送",
+      primary_action_label: ocTranslate("确认并推送"),
       primary_action: async () => {
         // 双击不该变成第二次业务：第一条推送没回来之前直接吞掉后续点击。
         if (pushing) return;
@@ -621,7 +621,7 @@
       method: "overseas_costing.api.writeback.reconcile_erp_request",
       done: (result) => {
         // 核对结论由服务端给（远端到底有没有单、是草稿还是已提交），前端不复述一遍。
-        return `远端核对结果：${String(result?.message || result?.status || "已完成")}`;
+        return ocTranslate("远端核对结果：{0}", [String(result?.message || result?.status || "已完成")]);
       },
     });
   }
@@ -649,16 +649,16 @@
     const key = `${action}:${id}`;
     if (state.inFlight.has(key)) return null;
     state.inFlight.add(key);
-    frappe.show_alert?.({ message: busyLabel || "处理中", indicator: "blue" });
+    frappe.show_alert?.({ message: busyLabel || ocTranslate("处理中"), indicator: "blue" });
     try {
       const result = await this.call(method, { batch_name: state.batchName, request_id: id }, true);
       const ok = result?.ok !== false;
       frappe.show_alert?.({
-        message: ok ? (done?.(result) || "已处理") : String(result?.message || "请求未处理成功"),
+        message: ok ? (done?.(result) || ocTranslate("已处理")) : String(result?.message || "请求未处理成功"),
         indicator: ok ? "green" : "orange",
       });
       if (ok) {
-        this.recordUsage?.("PUSH_ERP", { batch: this.findBatch(state.batchName), remark: `ERP 请求${action === "retry" ? "重试" : "核对"}：${id}` });
+        this.recordUsage?.("PUSH_ERP", { batch: this.findBatch(state.batchName), remark: ocTranslate("ERP 请求{0}：{1}", [action === "retry" ? "重试" : "核对", id]) });
       }
       await this.loadErpSiteSync({ batchName: state.batchName });
       return result;

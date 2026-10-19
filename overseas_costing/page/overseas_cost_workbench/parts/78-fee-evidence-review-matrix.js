@@ -1,11 +1,11 @@
   feeEvidenceMatrixColumns() {
     return [
-      { key: "IGI", label: "IGI", feeLogicalKey: "import_tax" },
-      { key: "IVA", label: "IVA", feeLogicalKey: "import_tax" },
-      { key: "DTA", label: "DTA", feeLogicalKey: "import_tax" },
-      { key: "PRV", label: "PRV", feeLogicalKey: "import_tax" },
-      { key: "PRV_IVA", label: "PRV IVA", feeLogicalKey: "import_tax" },
-      { key: "CUSTOMS_SERVICE", label: "清关服务费", feeLogicalKey: "customs_clearance_fee" },
+      { key: "IGI", label: ocTranslate("IGI"), feeLogicalKey: "import_tax" },
+      { key: "IVA", label: ocTranslate("IVA"), feeLogicalKey: "import_tax" },
+      { key: "DTA", label: ocTranslate("DTA"), feeLogicalKey: "import_tax" },
+      { key: "PRV", label: ocTranslate("PRV"), feeLogicalKey: "import_tax" },
+      { key: "PRV_IVA", label: ocTranslate("PRV IVA"), feeLogicalKey: "import_tax" },
+      { key: "CUSTOMS_SERVICE", label: ocTranslate("清关服务费"), feeLogicalKey: "customs_clearance_fee" },
     ];
   }
 
@@ -133,9 +133,9 @@
   }
 
   feeEvidenceLedgerComponentLabel(component = {}) {
-    if (String(component.component_type || "").toUpperCase() === "REFUND_REVERSAL") return "退款／冲回";
-    if (String(component.accounting_role || "").toUpperCase() === "SETTLEMENT") return "结算台账";
-    return "仅记台账";
+    if (String(component.component_type || "").toUpperCase() === "REFUND_REVERSAL") return ocTranslate("退款／冲回");
+    if (String(component.accounting_role || "").toUpperCase() === "SETTLEMENT") return ocTranslate("结算台账");
+    return ocTranslate("仅记台账");
   }
 
   feeEvidenceStableKey(value) {
@@ -363,7 +363,7 @@
     ).map((detail) => detail.hs_code).filter(Boolean) :
       (proposalIndexes.size || savedIndexes.size ? (row.hs_suggestions || []).filter(Boolean) : []);
     const warnings = [current.warning, suggestion.warning];
-    if (hsSuggestions.length) warnings.push(`HS 差异：凭证建议 ${hsSuggestions.join("、")}，当前物料为 ${row.hs_code || "未填写"}。`);
+    if (hsSuggestions.length) warnings.push(ocTranslate("HS 差异：凭证建议 {0}，当前物料为 {1}。", [hsSuggestions.join("、"), row.hs_code || "未填写"]));
     if (current.missingFx || suggestion.missingFx) warnings.push("缺汇率");
     if (saved.length && proposals.length) warnings.push("已保存值优先，AI／规则建议仅供对照。");
     const resolved = {
@@ -410,7 +410,7 @@
     if (value) this.feeEvidenceValidateAmountBounds(value);
     this.ensureFeeEvidenceMatrixState(review, draft);
     const rowIndex = this.feeEvidenceMatrixRowIndex(draft, item);
-    if (rowIndex < 0 || !this.feeEvidenceMatrixColumns().some((column) => column.key === columnKey)) throw new Error("物料或税费列已变更，请刷新草稿。");
+    if (rowIndex < 0 || !this.feeEvidenceMatrixColumns().some((column) => column.key === columnKey)) throw new Error(ocTranslate("物料或税费列已变更，请刷新草稿。"));
     const base = this.resolveFeeEvidenceMatrixCell(draft, rowIndex, columnKey);
     this.setFeeEvidenceMatrixEdit(review, draft, rowIndex, columnKey, {
       value,
@@ -447,7 +447,7 @@
       const current = this.feeEvidenceMatrixEffectiveCell(draft, review, rowIndex, columnKey);
       const column = this.feeEvidenceMatrixColumns().find((candidate) => candidate.key === columnKey);
       const group = totalsCache.value[column?.feeLogicalKey];
-      if (!group) throw new Error("税费列已变更。");
+      if (!group) throw new Error(ocTranslate("税费列已变更。"));
       this.feeEvidenceAccumulateTotalCell(group, previous, -1);
       this.feeEvidenceAccumulateTotalCell(group, current, 1);
       this.feeEvidenceFinalizeTotalGroup(group);
@@ -575,22 +575,22 @@
 
   feeEvidenceValidateAmountBounds(rawValue) {
     const value = String(rawValue ?? "").trim();
-    if (value.length > 64) throw new Error("物料税费金额文本过长。");
-    if ((value.match(/\d/g) || []).length > 28) throw new Error("物料税费金额数字位数过多。");
+    if (value.length > 64) throw new Error(ocTranslate("物料税费金额文本过长。"));
+    if ((value.match(/\d/g) || []).length > 28) throw new Error(ocTranslate("物料税费金额数字位数过多。"));
     const decimalMatch = value.match(/^(?:\d+|\d*\.(\d*))$/);
-    if (decimalMatch && String(decimalMatch[1] || "").replace(/0+$/, "").length > 2) throw new Error("物料税费金额最多保留两位小数。");
+    if (decimalMatch && String(decimalMatch[1] || "").replace(/0+$/, "").length > 2) throw new Error(ocTranslate("物料税费金额最多保留两位小数。"));
     return value;
   }
 
   feeEvidenceAmountMinor(rawValue) {
     const value = this.feeEvidenceValidateAmountBounds(rawValue);
     if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(value)) {
-      throw new Error("物料税费金额必须是非负有限数。");
+      throw new Error(ocTranslate("物料税费金额必须是非负有限数。"));
     }
     const [integerRaw, decimalRaw = ""] = (value.startsWith(".") ? `0${value}` : value).split(".");
     const integer = integerRaw.replace(/^0+(?=\d)/, "") || "0";
     const decimal = decimalRaw.replace(/0+$/, "");
-    if (decimal.length > 2) throw new Error("物料税费金额最多保留两位小数。");
+    if (decimal.length > 2) throw new Error(ocTranslate("物料税费金额最多保留两位小数。"));
     return (BigInt(integer) * 100n) + BigInt((decimal + "00").slice(0, 2));
   }
 
@@ -677,16 +677,16 @@
   validateFeeEvidenceMatrix(draft = {}, review = {}) {
     const payload = this.serializeFeeEvidenceMatrix(draft, review);
     const totals = this.feeEvidenceMatrixTotals(draft, review);
-    const labels = { import_tax: "进口税费", customs_clearance_fee: "清关费" };
+    const labels = { import_tax: ocTranslate("进口税费"), customs_clearance_fee: ocTranslate("清关费") };
     Object.entries(totals).forEach(([key, group]) => {
       if (!group.activeCount) return;
-      if (!group.selectedCount) throw new Error(`请选择${labels[key] || key}费用拆分后再确认。`);
-      if (group.selectedCount !== 1) throw new Error(`${labels[key] || key}只能选择一条费用拆分作为金额和币种权威。`);
-      if (!group.currencyValid || !group.currency || group.currency === "MIXED") throw new Error(`${labels[key] || key}费用拆分必须使用唯一支持币种。`);
-      if (!group.amountValid) throw new Error(`${labels[key] || key}费用总额必须是有效非负金额。`);
+      if (!group.selectedCount) throw new Error(ocTranslate("请选择{0}费用拆分后再确认。", [labels[key] || key]));
+      if (group.selectedCount !== 1) throw new Error(ocTranslate("{0}只能选择一条费用拆分作为金额和币种权威。", [labels[key] || key]));
+      if (!group.currencyValid || !group.currency || group.currency === "MIXED") throw new Error(ocTranslate("{0}费用拆分必须使用唯一支持币种。", [labels[key] || key]));
+      if (!group.amountValid) throw new Error(ocTranslate("{0}费用总额必须是有效非负金额。", [labels[key] || key]));
     });
     const overage = Object.values(totals).find((group) => group.overage);
-    if (overage) throw new Error("已分摊金额超过费用总额，请调整后再确认。");
+    if (overage) throw new Error(ocTranslate("已分摊金额超过费用总额，请调整后再确认。"));
     return payload;
   }
 
@@ -695,11 +695,11 @@
     return [
       ref.file_name || ref.attachment || ref.file,
       ref.sheet,
-      ref.page ? `第 ${ref.page} 页` : "",
-      ref.text_line ? `文本第 ${ref.text_line} 行` : "",
-      ref.row ? `表格第 ${ref.row} 行` : "",
-      ref.cell ? `单元格 ${ref.cell}` : "",
-      region ? `图片区域 ${typeof region === "string" ? region : JSON.stringify(region)}` : "",
+      ref.page ? ocTranslate("第 {0} 页", [ref.page]) : "",
+      ref.text_line ? ocTranslate("文本第 {0} 行", [ref.text_line]) : "",
+      ref.row ? ocTranslate("表格第 {0} 行", [ref.row]) : "",
+      ref.cell ? ocTranslate("单元格 {0}", [ref.cell]) : "",
+      region ? ocTranslate("图片区域 {0}", [typeof region === "string" ? region : JSON.stringify(region)]) : "",
       ref.path,
     ].filter(Boolean).join(" · ");
   }
@@ -722,27 +722,27 @@
     const feeRows = draft.fee_splits || [];
     const ledgerRows = this.feeEvidenceLedgerComponents(draft);
     return `<details class="ocw-mf-voucher-details" data-mf-fee-voucher-details${open}>
-      <summary><span><b>凭证摘要</b><small>${this.escape(evidence.evidence_type || "待核对")} · ${this.escape(evidence.accounting_role || "待核对")} · ${this.escape(evidence.currency || "")} ${this.escape(evidence.original_amount || "待补录")}</small></span><em>展开核对详情</em></summary>
+      <summary><span><b>${ocTranslate("凭证摘要")}</b><small>${this.escape(evidence.evidence_type || ocTranslate("待核对"))} · ${this.escape(evidence.accounting_role || ocTranslate("待核对"))} · ${this.escape(evidence.currency || "")} ${this.escape(evidence.original_amount || ocTranslate("待补录"))}</small></span><em>${ocTranslate("展开核对详情")}</em></summary>
       <div class="ocw-mf-voucher-detail-body">
         ${this.renderCurrentSourceReviewControls(draft.source_context || {}, null, { fees: true })}
         ${this.renderFeeEvidenceReviewWarning(evidence)}
-        <label class="ocw-mf-review-choice"><input type="checkbox" data-mf-fee-review-select data-proposal-id="${evidenceId}" ${selected(evidence)}><span><strong>采纳凭证事实</strong><small>${this.escape(evidence.reason || "请核对凭证类型和会计作用")}</small></span></label>
+        <label class="ocw-mf-review-choice"><input type="checkbox" data-mf-fee-review-select data-proposal-id="${evidenceId}" ${selected(evidence)}><span><strong>${ocTranslate("采纳凭证事实")}</strong><small>${this.escape(evidence.reason || ocTranslate("请核对凭证类型和会计作用"))}</small></span></label>
         <div class="ocw-mf-review-fields">
-          <label>凭证类型<select data-mf-fee-review-edit data-proposal-id="${evidenceId}" data-fieldname="evidence_type">${[["QUOTE","报价"],["PREPAYMENT","预付款／暂缴"],["FINAL_INVOICE","最终发票／结算单"],["TAX_CERTIFICATE","完税凭证"],["PAYMENT","付款流水"],["REFUND","退款／贷项"],["OTHER","其他"]].map(([value,label]) => `<option value="${value}" ${value === editValue(evidence,"evidence_type") ? "selected" : ""}>${label}</option>`).join("")}</select></label>
-          <label>会计作用<select data-mf-fee-review-edit data-proposal-id="${evidenceId}" data-fieldname="accounting_role">${[["ESTIMATE","更新暂估"],["FINAL_BILL","最终账单"],["SETTLEMENT","付款／退款流水"],["REFERENCE","仅作参考"]].map(([value,label]) => `<option value="${value}" ${value === editValue(evidence,"accounting_role") ? "selected" : ""}>${label}</option>`).join("")}</select></label>
-          <label>凭证总额<input data-mf-fee-review-edit data-proposal-id="${evidenceId}" data-fieldname="original_amount" value="${this.escape(editValue(evidence,"original_amount"))}" inputmode="decimal"></label>
-          <label>币种<select data-mf-fee-review-edit data-proposal-id="${evidenceId}" data-fieldname="currency">${this.materialFeeCurrencyOptions().map((option) => `<option value="${option.value}" ${option.value === editValue(evidence,"currency","RMB") ? "selected" : ""}>${option.label}</option>`).join("")}</select></label>
-          <label>方向<select data-mf-fee-review-edit data-proposal-id="${evidenceId}" data-fieldname="direction"><option value="DEBIT" ${editValue(evidence,"direction","DEBIT") !== "CREDIT" ? "selected" : ""}>付款／应付</option><option value="CREDIT" ${editValue(evidence,"direction") === "CREDIT" ? "selected" : ""}>退款／冲回</option></select></label>
-          <label>关联原付款<select data-mf-fee-review-edit data-proposal-id="${evidenceId}" data-fieldname="related_evidence"><option value="">无／待核对</option>${refundParents.map((row) => `<option value="${this.escape(row.name || "")}" ${String(row.name || "") === String(editValue(evidence,"related_evidence")) ? "selected" : ""}>${this.escape([row.currency,row.original_amount,row.attachment || row.name].filter(Boolean).join(" · "))}</option>`).join("")}</select></label>
-          <label class="is-checkbox"><input type="checkbox" data-mf-fee-review-edit data-proposal-id="${evidenceId}" data-fieldname="is_final" ${Number(editValue(evidence,"is_final",0)) ? "checked" : ""}> 最终凭证</label>
+          <label>${ocTranslate("凭证类型")}<select data-mf-fee-review-edit data-proposal-id="${evidenceId}" data-fieldname="evidence_type">${[["QUOTE","报价"],["PREPAYMENT","预付款／暂缴"],["FINAL_INVOICE","最终发票／结算单"],["TAX_CERTIFICATE","完税凭证"],["PAYMENT","付款流水"],["REFUND","退款／贷项"],["OTHER","其他"]].map(([value,label]) => `<option value="${value}" ${value === editValue(evidence,"evidence_type") ? "selected" : ""}>${ocTranslate(label)}</option>`).join("")}</select></label>
+          <label>${ocTranslate("会计作用")}<select data-mf-fee-review-edit data-proposal-id="${evidenceId}" data-fieldname="accounting_role">${[["ESTIMATE","更新暂估"],["FINAL_BILL","最终账单"],["SETTLEMENT","付款／退款流水"],["REFERENCE","仅作参考"]].map(([value,label]) => `<option value="${value}" ${value === editValue(evidence,"accounting_role") ? "selected" : ""}>${ocTranslate(label)}</option>`).join("")}</select></label>
+          <label>${ocTranslate("凭证总额")}<input data-mf-fee-review-edit data-proposal-id="${evidenceId}" data-fieldname="original_amount" value="${this.escape(editValue(evidence,"original_amount"))}" inputmode="decimal"></label>
+          <label>${ocTranslate("币种")}<select data-mf-fee-review-edit data-proposal-id="${evidenceId}" data-fieldname="currency">${this.materialFeeCurrencyOptions().map((option) => `<option value="${option.value}" ${option.value === editValue(evidence,"currency","RMB") ? "selected" : ""}>${option.label}</option>`).join("")}</select></label>
+          <label>${ocTranslate("方向")}<select data-mf-fee-review-edit data-proposal-id="${evidenceId}" data-fieldname="direction"><option value="DEBIT" ${editValue(evidence,"direction","DEBIT") !== "CREDIT" ? "selected" : ""}>${ocTranslate("付款／应付")}</option><option value="CREDIT" ${editValue(evidence,"direction") === "CREDIT" ? "selected" : ""}>${ocTranslate("退款／冲回")}</option></select></label>
+          <label>${ocTranslate("关联原付款")}<select data-mf-fee-review-edit data-proposal-id="${evidenceId}" data-fieldname="related_evidence"><option value="">${ocTranslate("无／待核对")}</option>${refundParents.map((row) => `<option value="${this.escape(row.name || "")}" ${String(row.name || "") === String(editValue(evidence,"related_evidence")) ? "selected" : ""}>${this.escape([row.currency,row.original_amount,row.attachment || row.name].filter(Boolean).join(" · "))}</option>`).join("")}</select></label>
+          <label class="is-checkbox"><input type="checkbox" data-mf-fee-review-edit data-proposal-id="${evidenceId}" data-fieldname="is_final" ${Number(editValue(evidence,"is_final",0)) ? "checked" : ""}> ${ocTranslate("最终凭证")}</label>
         </div>
-        <div class="ocw-mf-voucher-fee-splits"><h4>费用拆分</h4>${feeRows.length ? feeRows.map((row) => `<label class="ocw-mf-review-choice ${row.has_conflict || row.needs_review ? "is-warning" : ""}"><input type="checkbox" data-mf-fee-review-select data-proposal-id="${this.escape(row.proposal_id || "")}" ${selected(row)}><span><strong>${this.escape(row.label || row.logical_fee_key)} · ${this.escape(editValue(row,"currency",row.currency || ""))} <input data-mf-fee-review-edit data-proposal-id="${this.escape(row.proposal_id || "")}" data-fieldname="amount" value="${this.escape(editValue(row,"amount"))}" inputmode="decimal"></strong><small><select data-mf-fee-review-edit data-proposal-id="${this.escape(row.proposal_id || "")}" data-fieldname="amount_status">${statusOptions.map(([value,label]) => `<option value="${value}" ${value === editValue(row,"amount_status",evidence.suggested_amount_status) ? "selected" : ""}>${label}</option>`).join("")}</select></small>${this.renderFeeEvidenceReviewWarning(row)}</span></label>`).join("") : "<p>未识别出可安全拆分的金额，可保留凭证后人工补录。</p>"}</div>
-        ${ledgerRows.length ? `<section class="ocw-mf-ledger-components"><header><h4>矩阵外台账分项</h4><p>结算、退款或冲回只记入台账，不重复计入物料成本。</p></header>${ledgerRows.map((row) => {
+        <div class="ocw-mf-voucher-fee-splits"><h4>${ocTranslate("费用拆分")}</h4>${feeRows.length ? feeRows.map((row) => `<label class="ocw-mf-review-choice ${row.has_conflict || row.needs_review ? "is-warning" : ""}"><input type="checkbox" data-mf-fee-review-select data-proposal-id="${this.escape(row.proposal_id || "")}" ${selected(row)}><span><strong>${this.escape(row.label || row.logical_fee_key)} · ${this.escape(editValue(row,"currency",row.currency || ""))} <input data-mf-fee-review-edit data-proposal-id="${this.escape(row.proposal_id || "")}" data-fieldname="amount" value="${this.escape(editValue(row,"amount"))}" inputmode="decimal"></strong><small><select data-mf-fee-review-edit data-proposal-id="${this.escape(row.proposal_id || "")}" data-fieldname="amount_status">${statusOptions.map(([value,label]) => `<option value="${value}" ${value === editValue(row,"amount_status",evidence.suggested_amount_status) ? "selected" : ""}>${ocTranslate(label)}</option>`).join("")}</select></small>${this.renderFeeEvidenceReviewWarning(row)}</span></label>`).join("") : `<p>${ocTranslate("未识别出可安全拆分的金额，可保留凭证后人工补录。")}</p>`}</div>
+        ${ledgerRows.length ? `<section class="ocw-mf-ledger-components"><header><h4>${ocTranslate("矩阵外台账分项")}</h4><p>${ocTranslate("结算、退款或冲回只记入台账，不重复计入物料成本。")}</p></header>${ledgerRows.map((row) => {
           const proposalId = this.escape(row.proposal_id || "");
           const refs = this.feeEvidenceComponentSourceRefs(row).map((ref) => this.feeEvidenceSourceLabel(ref)).filter(Boolean);
-          return `<label class="ocw-mf-ledger-component ${row.has_conflict || row.needs_review || row.warning ? "is-warning" : ""}"><input type="checkbox" data-mf-fee-review-select data-proposal-id="${proposalId}" ${selected(row)}><span><strong>${this.feeEvidenceLedgerComponentLabel(row)} · ${this.escape(row.currency || "")} ${this.escape(row.original_amount ?? "--")}</strong><small>${refs.map((value) => this.escape(value)).join("；") || "来源位置待核对"}</small>${this.renderFeeEvidenceReviewWarning(row)}</span></label>`;
+          return `<label class="ocw-mf-ledger-component ${row.has_conflict || row.needs_review || row.warning ? "is-warning" : ""}"><input type="checkbox" data-mf-fee-review-select data-proposal-id="${proposalId}" ${selected(row)}><span><strong>${this.feeEvidenceLedgerComponentLabel(row)} · ${this.escape(row.currency || "")} ${this.escape(row.original_amount ?? "--")}</strong><small>${refs.map((value) => this.escape(value)).join("；") || ocTranslate("来源位置待核对")}</small>${this.renderFeeEvidenceReviewWarning(row)}</span></label>`;
         }).join("")}</section>` : ""}
-        <div class="ocw-mf-voucher-unclassified"><b>凭证待归类差额</b><span>${this.escape(draft.unclassified_difference || "0.00")} ${this.escape(evidence.currency || "")}</span><small>未明确归属前不伪造物料分摊。</small></div>
+        <div class="ocw-mf-voucher-unclassified"><b>${ocTranslate("凭证待归类差额")}</b><span>${this.escape(draft.unclassified_difference || "0.00")} ${this.escape(evidence.currency || "")}</span><small>${ocTranslate("未明确归属前不伪造物料分摊。")}</small></div>
       </div>
     </details>`;
   }
@@ -754,19 +754,19 @@
     const classes = [cell.warning ? "is-warning" : "", cell.dirty ? "is-dirty" : "", cell.origin === "SAVED" ? "is-manual" : ""].filter(Boolean).join(" ");
     const rmb = cell.value ? (cell.missingFx || cell.amountRmb === null ? "缺汇率" : `¥ ${this.escape(cell.amountRmb || "0")}`) : "未分摊";
     const currencyLabel = cell.currency || "待选择费用币种";
-    const suggestion = cell.origin === "SAVED" && cell.suggestedOriginalAmount ? `<div class="ocw-mf-matrix-suggestion"><span>AI 建议 ${this.escape(cell.suggestedCurrency || cell.currency)} ${this.escape(cell.suggestedOriginalAmount)}</span><button type="button" data-action="mf-fee-matrix-use-ai" data-item="${this.escape(row.item || "")}" data-column-key="${column.key}">采用 AI 建议</button></div>` : "";
+    const suggestion = cell.origin === "SAVED" && cell.suggestedOriginalAmount ? `<div class="ocw-mf-matrix-suggestion"><span>${ocTranslate("AI 建议 {0} {1}", [this.escape(cell.suggestedCurrency || cell.currency), this.escape(cell.suggestedOriginalAmount)])}</span><button type="button" data-action="mf-fee-matrix-use-ai" data-item="${this.escape(row.item || "")}" data-column-key="${column.key}">${ocTranslate("采用 AI 建议")}</button></div>` : "";
     return `<td class="ocw-mf-matrix-cell ${classes}" data-mf-fee-matrix-cell="${this.escape(row.item || "")}:${column.key}">
-      <label><span class="sr-only">${this.escape(row.material_code || row.item || "")} ${column.label}</span><input data-mf-fee-matrix-input="1" data-item="${this.escape(row.item || "")}" data-column-key="${column.key}" inputmode="decimal" value="${this.escape(cell.value)}" placeholder="补录"></label>
+      <label><span class="sr-only">${this.escape(row.material_code || row.item || "")} ${column.label}</span><input data-mf-fee-matrix-input="1" data-item="${this.escape(row.item || "")}" data-column-key="${column.key}" inputmode="decimal" value="${this.escape(cell.value)}" placeholder="${ocTranslate('补录')}"></label>
       <small>${this.escape(currencyLabel)} · ${rmb}</small>
-      ${cell.dirty && !cell.adoptedAI ? `<b class="ocw-mf-matrix-manual-badge">人工调整</b>` : (cell.origin === "SAVED" && !cell.adoptedAI ? `<b class="ocw-mf-matrix-manual-badge">人工值</b>` : (cell.value ? `<b class="ocw-mf-matrix-ai-badge">AI／规则</b>` : ""))}
+      ${cell.dirty && !cell.adoptedAI ? `<b class="ocw-mf-matrix-manual-badge">${ocTranslate("人工调整")}</b>` : (cell.origin === "SAVED" && !cell.adoptedAI ? `<b class="ocw-mf-matrix-manual-badge">${ocTranslate("人工值")}</b>` : (cell.value ? `<b class="ocw-mf-matrix-ai-badge">${ocTranslate("AI／规则")}</b>` : ""))}
       ${suggestion}${cell.warning ? `<em>${this.escape(cell.warning)}</em>` : ""}
     </td>`;
   }
 
   renderFeeEvidenceMatrixFooter(draft, review) {
     const totals = this.feeEvidenceMatrixTotals(draft, review);
-    const render = (label, group) => `<div class="${group.overage ? "is-overage" : ""}"><b>${label}已分摊</b><span>${this.escape(group.currency || "待选择费用币种")} ${group.allocatedText}${group.missingFx ? " · RMB 缺汇率" : ` · RMB ${this.feeEvidencePlainNumber(group.allocatedRmb)}`}</span><small>费用总额 ${group.feeTotalText} · 剩余差额 ${group.remainingText}</small></div>`;
-    return `<div class="ocw-mf-matrix-totals" data-mf-fee-matrix-totals>${render("进口税费", totals.import_tax)}${render("清关费", totals.customs_clearance_fee)}<p>确认应用仅写入费用分项，不会自动试算、确认版本或推送 ERP。</p></div>`;
+    const render = (label, group) => `<div class="${group.overage ? "is-overage" : ""}"><b>${ocTranslate("{0}已分摊", [label])}</b><span>${this.escape(group.currency || ocTranslate("待选择费用币种"))} ${group.allocatedText}${group.missingFx ? ocTranslate(" · RMB 缺汇率") : ` · RMB ${this.feeEvidencePlainNumber(group.allocatedRmb)}`}</span><small>${ocTranslate("费用总额 {0} · 剩余差额 {1}", [group.feeTotalText, group.remainingText])}</small></div>`;
+    return `<div class="ocw-mf-matrix-totals" data-mf-fee-matrix-totals>${render("进口税费", totals.import_tax)}${render("清关费", totals.customs_clearance_fee)}<p>${ocTranslate("确认应用仅写入费用分项，不会自动试算、确认版本或推送 ERP。")}</p></div>`;
   }
 
   renderFeeEvidenceReviewDraft(draft = {}, review = {}) {
@@ -796,21 +796,21 @@
       const hsSuggestions = (row.hs_suggestions || []).filter(Boolean);
       return `<tr class="${hasWarning || hsSuggestions.length ? "is-warning" : ""}">
         <th scope="row"><strong>${this.escape(row.material_code || row.item || "--")}</strong><small>${this.escape(row.product_name || row.item || "")}</small></th>
-        <td class="ocw-mf-matrix-hs" data-mf-fee-matrix-hs="${this.escape(row.item || "")}"><span>${this.escape(row.hs_code || "--")}</span>${hsSuggestions.length ? `<em>HS 差异：${hsSuggestions.map((value) => this.escape(value)).join("、")}</em>` : ""}</td>
+        <td class="ocw-mf-matrix-hs" data-mf-fee-matrix-hs="${this.escape(row.item || "")}"><span>${this.escape(row.hs_code || "--")}</span>${hsSuggestions.length ? `<em>${ocTranslate("HS 差异：{0}", [hsSuggestions.map((value) => this.escape(value)).join("、")])}</em>` : ""}</td>
         ${cells}
-        <td class="ocw-mf-matrix-row-total"><strong>${originalCurrencies.length === 1 ? `${this.escape(originalCurrencies[0])} ${originalTotal}` : (active.length ? "多币种" : "--")}</strong><small>RMB ${this.feeEvidencePlainNumber(rmbTotal)}${active.some((cell) => cell.missingFx) ? " + 缺汇率" : ""}</small></td>
-        <td class="ocw-mf-matrix-status"><b>${dirty ? "已人工调整" : (hasWarning || hsSuggestions.length ? "待核对" : "已预览")}</b><small>${active.length} 个分项</small></td>
+        <td class="ocw-mf-matrix-row-total"><strong>${originalCurrencies.length === 1 ? `${this.escape(originalCurrencies[0])} ${originalTotal}` : (active.length ? ocTranslate("多币种") : "--")}</strong><small>RMB ${this.feeEvidencePlainNumber(rmbTotal)}${active.some((cell) => cell.missingFx) ? ocTranslate(" + 缺汇率") : ""}</small></td>
+        <td class="ocw-mf-matrix-status"><b>${dirty ? ocTranslate("已人工调整") : (hasWarning || hsSuggestions.length ? ocTranslate("待核对") : ocTranslate("已预览"))}</b><small>${ocTranslate("{0} 个分项", [active.length])}</small></td>
       </tr>`;
     }).join("");
-    const warnings = warningWindow.total ? `<aside class="ocw-mf-matrix-unmatched"><b>无法归属到具体物料的凭证明细（${warningWindow.total}）</b>${unmatched.map((row) => `<p>${this.escape(row.message || row.reason || row.reason_code || "请核对原附件")}</p>`).join("")}${warningWindow.pageCount > 1 ? `<nav class="ocw-mf-source-pager"><span>异常第 ${warningWindow.page + 1} / ${warningWindow.pageCount} 页</span><button type="button" data-action="mf-fee-warning-prev-page" ${warningWindow.page === 0 ? "disabled" : ""}>上一页</button><button type="button" data-action="mf-fee-warning-next-page" ${warningWindow.page >= warningWindow.pageCount - 1 ? "disabled" : ""}>下一页</button></nav>` : ""}</aside>` : "";
+    const warnings = warningWindow.total ? `<aside class="ocw-mf-matrix-unmatched"><b>${ocTranslate("无法归属到具体物料的凭证明细（{0}）", [warningWindow.total])}</b>${unmatched.map((row) => `<p>${this.escape(row.message || row.reason || row.reason_code || ocTranslate("请核对原附件"))}</p>`).join("")}${warningWindow.pageCount > 1 ? `<nav class="ocw-mf-source-pager"><span>${ocTranslate("异常第 {0} / {1} 页", [warningWindow.page + 1, warningWindow.pageCount])}</span><button type="button" data-action="mf-fee-warning-prev-page" ${warningWindow.page === 0 ? "disabled" : ""}>${ocTranslate("上一页")}</button><button type="button" data-action="mf-fee-warning-next-page" ${warningWindow.page >= warningWindow.pageCount - 1 ? "disabled" : ""}>${ocTranslate("下一页")}</button></nav>` : ""}</aside>` : "";
     return `<div class="ocw-mf-fee-review-draft ocw-mf-fee-review-a1">
       ${this.renderFeeEvidenceVoucherDetails(draft, review)}
       ${warnings}
-      ${matrix.missing_fx || draft.missing_fx ? `<div class="ocw-mf-review-warning is-block">缺汇率：可保存原币事实，RMB 小计不计入试算。</div>` : ""}
-      <section class="ocw-mf-matrix-section"><header><div><h4>物料税费预览</h4><p>每个物料一行；AI／规则建议已默认纳入，清空单元格即不采用。</p></div><nav class="ocw-mf-matrix-pager" aria-label="物料分页"><span>第 ${pageWindow.page + 1} / ${pageWindow.pageCount} 页 · 共 ${pageWindow.total} 行</span><button type="button" data-action="mf-fee-matrix-prev-page" ${pageWindow.page === 0 ? "disabled" : ""}>上一页</button><button type="button" data-action="mf-fee-matrix-next-page" ${pageWindow.page >= pageWindow.pageCount - 1 ? "disabled" : ""}>下一页</button></nav></header>
-        <div class="ocw-mf-matrix-scroll"><table class="ocw-mf-matrix-table"><thead><tr><th>物料 / SKU</th><th>HS</th>${columns.map((column) => `<th>${column.label}</th>`).join("")}<th>物料合计</th><th>核对状态</th></tr></thead><tbody>${rows || `<tr><td colspan="10">当前批次暂无物料</td></tr>`}</tbody></table></div>
+      ${matrix.missing_fx || draft.missing_fx ? `<div class="ocw-mf-review-warning is-block">${ocTranslate("缺汇率：可保存原币事实，RMB 小计不计入试算。")}</div>` : ""}
+      <section class="ocw-mf-matrix-section"><header><div><h4>${ocTranslate("物料税费预览")}</h4><p>${ocTranslate("每个物料一行；AI／规则建议已默认纳入，清空单元格即不采用。")}</p></div><nav class="ocw-mf-matrix-pager" aria-label="${ocTranslate('物料分页')}"><span>${ocTranslate("第 {0} / {1} 页 · 共 {2} 行", [pageWindow.page + 1, pageWindow.pageCount, pageWindow.total])}</span><button type="button" data-action="mf-fee-matrix-prev-page" ${pageWindow.page === 0 ? "disabled" : ""}>${ocTranslate("上一页")}</button><button type="button" data-action="mf-fee-matrix-next-page" ${pageWindow.page >= pageWindow.pageCount - 1 ? "disabled" : ""}>${ocTranslate("下一页")}</button></nav></header>
+        <div class="ocw-mf-matrix-scroll"><table class="ocw-mf-matrix-table"><thead><tr><th>${ocTranslate("物料 / SKU")}</th><th>HS</th>${columns.map((column) => `<th>${column.label}</th>`).join("")}<th>${ocTranslate("物料合计")}</th><th>${ocTranslate("核对状态")}</th></tr></thead><tbody>${rows || `<tr><td colspan="10">${ocTranslate("当前批次暂无物料")}</td></tr>`}</tbody></table></div>
       </section>
-      ${sourceWindow.total ? `<details class="ocw-mf-matrix-sources"><summary>来源证据（${sourceWindow.total}）</summary><p>${sourceRefs.map((ref) => this.escape(this.feeEvidenceSourceLabel(ref))).filter(Boolean).join("；")}</p>${sourceWindow.pageCount > 1 ? `<nav class="ocw-mf-source-pager"><span>来源第 ${sourceWindow.page + 1} / ${sourceWindow.pageCount} 页</span><button type="button" data-action="mf-fee-source-prev-page" ${sourceWindow.page === 0 ? "disabled" : ""}>上一页</button><button type="button" data-action="mf-fee-source-next-page" ${sourceWindow.page >= sourceWindow.pageCount - 1 ? "disabled" : ""}>下一页</button></nav>` : ""}</details>` : ""}
+      ${sourceWindow.total ? `<details class="ocw-mf-matrix-sources"><summary>${ocTranslate("来源证据（{0}）", [sourceWindow.total])}</summary><p>${sourceRefs.map((ref) => this.escape(this.feeEvidenceSourceLabel(ref))).filter(Boolean).join("；")}</p>${sourceWindow.pageCount > 1 ? `<nav class="ocw-mf-source-pager"><span>${ocTranslate("来源第 {0} / {1} 页", [sourceWindow.page + 1, sourceWindow.pageCount])}</span><button type="button" data-action="mf-fee-source-prev-page" ${sourceWindow.page === 0 ? "disabled" : ""}>${ocTranslate("上一页")}</button><button type="button" data-action="mf-fee-source-next-page" ${sourceWindow.page >= sourceWindow.pageCount - 1 ? "disabled" : ""}>${ocTranslate("下一页")}</button></nav>` : ""}</details>` : ""}
       ${this.renderFeeEvidenceMatrixFooter(draft, review)}
     </div>`;
   }

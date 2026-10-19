@@ -1,4 +1,11 @@
 """Apply one confirmed source atomically; freeze confirmed versions and retain beforeimages."""
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 from datetime import datetime
 from decimal import Decimal
 
@@ -74,9 +81,9 @@ def application_context(store, ledger, binding):
         return None
     batch = ledger.get('batch', mappings[0]['batch'], lock=True)
     if not batch:
-        raise ValueError('来源对应的成本批次不存在')
+        raise ValueError(_('来源对应的成本批次不存在'))
     if row_meta(ledger.get('version',batch['current_version']) or {}).get('freight_settlement'):
-        raise ValueError('本批次已采用按票费用／装箱策略，旧整单写入已停用')
+        raise ValueError(_('本批次已采用按票费用／装箱策略，旧整单写入已停用'))
     return batch
 
 
@@ -253,7 +260,7 @@ def reverse_binding(store, ledger, old, new, actor):
     if not batch:
         return
     if locked(batch):
-        raise ValueError('批次正在编辑，请结束编辑后更正关联')
+        raise ValueError(_('批次正在编辑，请结束编辑后更正关联'))
     version = mutable_version(ledger, batch)
     items = ledger.rows('item', batch=batch['name'], version=version['name'])
     baseline = old.get('baseline') or {}
@@ -384,29 +391,29 @@ def item_review(item):
 
 def resolve_item_checks(store, ledger, binding_id, expected_revision, selections, reason, actor):
     if not reason.strip() or not selections or len(selections) > 200:
-        raise ValueError('请选择待核对行并填写核对说明')
+        raise ValueError(_('请选择待核对行并填写核对说明'))
     with store.atomic():
         binding = store.get('binding', binding_id, lock=True)
         if not binding or binding['revision'] != int(expected_revision):
-            raise ValueError('关联已变化，请刷新')
+            raise ValueError(_('关联已变化，请刷新'))
         batch = application_context(store, ledger, binding)
         if not batch or locked(batch):
-            raise ValueError('批次正在编辑或尚未对应，请结束编辑后核对')
+            raise ValueError(_('批次正在编辑或尚未对应，请结束编辑后核对'))
         version = ledger.get('version', batch['current_version'], lock=True)
         if version['status'] == 'Confirmed' or batch.get('writeback_status') == 'Success' or binding.get('version') != version['name']:
-            raise ValueError('只能核对当前调整草稿，已确认版本保留历史')
+            raise ValueError(_('只能核对当前调整草稿，已确认版本保留历史'))
         for selection in selections:
             item = ledger.get('item', selection['item_name'], lock=True)
             if not item or item.get('batch') != batch['name'] or item.get('version') != version['name']:
-                raise ValueError('物料不属于当前版本')
+                raise ValueError(_('物料不属于当前版本'))
             if item_review(item)['revision'] != selection.get('expected_item_hash'):
-                raise ValueError('物料或装箱资料已变化，请刷新后核对')
+                raise ValueError(_('物料或装箱资料已变化，请刷新后核对'))
             meta = row_meta(item)
             if selection.get('packing_confirmed') is True and (meta.get('effective_logistics_source') or {}).get('root_kind') == 'expense':
                 from overseas_costing.services.effective_source_values import project_source_values
                 current_values = project_source_values(item)
                 if not any(current_values.get(key) is not None for key in ('gross_weight_kg','volume_m3','chargeable_weight_kg')):
-                    raise ValueError('采购支出尚无可采用的装箱资料，不能将旧重量确认为当前来源')
+                    raise ValueError(_('采购支出尚无可采用的装箱资料，不能将旧重量确认为当前来源'))
             for flag, check in [('settlement_packing_review', 'packing_confirmed'), ('settlement_purchase_value_review', 'goods_value_confirmed')]:
                 if selection.get(check) is True:
                     meta.pop(flag, None)
@@ -422,9 +429,9 @@ def validate_application_preview(store, ledger, binding, expected_snapshot, expe
     expense = store.get('source', binding['expense_id'], lock=True)
     batch = application_context(store, ledger, binding)
     if not expected_snapshot or expense['snapshot'] != expected_snapshot:
-        raise ValueError('采购支出已变化，请刷新明细和费用后重新确认')
+        raise ValueError(_('采购支出已变化，请刷新明细和费用后重新确认'))
     if not expected_version or not batch or batch.get('current_version') != expected_version:
-        raise ValueError('当前成本版本已变化，请刷新后重新确认')
+        raise ValueError(_('当前成本版本已变化，请刷新后重新确认'))
 
 
 def resolve_document_checks(store, batch_name, version_name, selections, actor, reason, *, ledger):

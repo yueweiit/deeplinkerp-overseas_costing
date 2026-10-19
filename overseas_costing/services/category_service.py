@@ -6,6 +6,13 @@ AI/规则只生成业务大类建议，用于查询、汇总和费用分摊参�
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import json
 import re
 
@@ -131,7 +138,7 @@ def _load_rows(rows_json: str | None) -> list[dict]:
     if isinstance(loaded, dict):
         loaded = [loaded]
     if not isinstance(loaded, list):
-        raise ValueError("rows_json 必须是 JSON 对象或对象数组。")
+        raise ValueError(_("rows_json 必须是 JSON 对象或对象数组。"))
     return [row for row in loaded if isinstance(row, dict)]
 
 

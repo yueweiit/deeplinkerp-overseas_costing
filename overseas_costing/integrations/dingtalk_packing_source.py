@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import hashlib
 import json
 import re
@@ -28,14 +35,14 @@ class PackingSnapshotNotReady(RuntimeError):
 def _validate_id(value: str, label: str) -> str:
     normalized = str(value or "").strip()
     if not ID_PATTERN.fullmatch(normalized):
-        raise ValueError(f"{label} 不合法。")
+        raise ValueError(_("{0} 不合法。").format(label))
     return normalized
 
 
 def _validate_request_key(value: str) -> str:
     normalized = str(value or "").strip().lower()
     if not REQUEST_KEY_PATTERN.fullmatch(normalized):
-        raise ValueError("刷新请求 ID 必须是 64 位小写 SHA-256。")
+        raise ValueError(_("刷新请求 ID 必须是 64 位小写 SHA-256。"))
     return normalized
 
 
@@ -276,10 +283,10 @@ class PackingSnapshotArchive:
             )
         manifest_bucket = str(manifest.get("bucket") or self.bucket)
         if manifest_bucket != self.bucket:
-            raise ArchiveIntegrityError("装箱快照 Bucket 与受控配置不一致。")
+            raise ArchiveIntegrityError(_("装箱快照 Bucket 与受控配置不一致。"))
         object_key = str(manifest.get("object_key") or "").strip()
         if not object_key:
-            raise ArchiveIntegrityError("装箱快照缺少 object_key。")
+            raise ArchiveIntegrityError(_("装箱快照缺少 object_key。"))
 
         response = self.client.get_object(self.bucket, object_key)
         try:
@@ -289,17 +296,17 @@ class PackingSnapshotArchive:
             response.release_conn()
         expected_size = manifest.get("actual_size")
         if expected_size is not None and len(content) != int(expected_size):
-            raise ArchiveIntegrityError("装箱快照大小校验失败。")
+            raise ArchiveIntegrityError(_("装箱快照大小校验失败。"))
         actual_hash = hashlib.sha256(content).hexdigest()
         expected_hash = str(manifest.get("content_sha256") or "").strip().lower()
         if expected_hash and actual_hash != expected_hash:
-            raise ArchiveIntegrityError("装箱快照 SHA-256 校验失败。")
+            raise ArchiveIntegrityError(_("装箱快照 SHA-256 校验失败。"))
         try:
             payload = json.loads(content.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise ArchiveIntegrityError("装箱快照不是有效的 UTF-8 JSON。") from error
+            raise ArchiveIntegrityError(_("装箱快照不是有效的 UTF-8 JSON。")) from error
         if not isinstance(payload, dict) or payload.get("schemaVersion") != 1:
-            raise ValueError("仅支持 schema version 1 的钉钉装箱快照。")
+            raise ValueError(_("仅支持 schema version 1 的钉钉装箱快照。"))
         return payload
 
 
@@ -380,7 +387,7 @@ def get_packing_runtime_clients() -> PackingRuntimeClients:
         bucket,
     )
     if not all(required):
-        raise ValueError("缺少钉钉装箱表缓存的 PostgreSQL 或 MinIO 服务器配置。")
+        raise ValueError(_("缺少钉钉装箱表缓存的 PostgreSQL 或 MinIO 服务器配置。"))
     minio = Minio(
         endpoint,
         access_key=access_key,

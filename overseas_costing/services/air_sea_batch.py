@@ -1,6 +1,13 @@
 """Read-only batch projection for the independent air/sea calculator."""
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import hashlib
 import hmac
 import json
@@ -88,15 +95,15 @@ def load_batch(batch_name):
     header = frappe.get_doc("Overseas Cost Batch", batch_name).as_dict()
     version = header.get("current_version")
     if not version or frappe.db.get_value("Overseas Cost Version", version, "batch") != batch_name:
-        raise ValueError("当前批次没有有效的成本版本。")
+        raise ValueError(_("当前批次没有有效的成本版本。"))
     available_fields = {field.fieldname for field in frappe.get_meta("Overseas Cost Item").fields} | {"name", "modified"}
     items = frappe.get_all("Overseas Cost Item", filters={"batch": batch_name, "version": version, "is_excluded": 0},
         fields=[field for field in ITEM_FIELDS if field in available_fields],
         order_by="row_no asc, name asc", limit_page_length=5001)
     if len(items) > 5000:
-        raise ValueError("当前批次超过 5000 行，请使用分批手动测算；未带入截断的数据。")
+        raise ValueError(_("当前批次超过 5000 行，请使用分批手动测算；未带入截断的数据。"))
     if not items:
-        raise ValueError("当前批次没有可带入的物料。")
+        raise ValueError(_("当前批次没有可带入的物料。"))
     invalid = batch_service._build_invalid_business_state(header, items)
     if invalid.get("invalid"):
         raise ValueError(invalid.get("message") or "当前批次来源已失效，不能带入。")
@@ -120,13 +127,13 @@ def validate_source(source, *, for_update=False):
     if not source:
         return None
     if not isinstance(source, dict) or not hmac.compare_digest(str(source.get("token") or ""), _signature(source)):
-        raise ValueError("批次来源信息无效，请重新从工作台带入。")
+        raise ValueError(_("批次来源信息无效，请重新从工作台带入。"))
     from overseas_costing.services.access_control import require_batch_permission
     batch_name = require_batch_permission(source["batch"], "read")
     if for_update and not frappe.db.get_value("Overseas Cost Batch", batch_name, "name", for_update=True):
         # Share the parent lock with delete_batch: either this reference saves first,
         # or a committed deletion is observed even under REPEATABLE READ.
-        raise ValueError("来源批次已被删除，不能保存此测算；请重新选择来源。")
+        raise ValueError(_("来源批次已被删除，不能保存此测算；请重新选择来源。"))
     return source
 
 

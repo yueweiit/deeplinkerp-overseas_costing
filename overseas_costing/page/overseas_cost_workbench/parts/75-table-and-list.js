@@ -26,14 +26,14 @@
       if (order.open_mode === "desktop_protocol") {
         this.closePreopenedWindow(preopenedWindow);
         window.location.href = order.open_url;
-        frappe.show_alert({ message: "正在唤起钉钉客户端", indicator: "blue" });
+        frappe.show_alert({ message: ocTranslate("正在唤起钉钉客户端"), indicator: "blue" });
         return;
       }
 
       if (!this.openBrowserTab(order.open_url, "钉钉订单", preopenedWindow)) {
         frappe.msgprint({
-          title: "钉钉订单",
-          message: `浏览器拦截了新窗口，请点击链接打开：<br><a href="${this.escape(order.open_url)}" target="_blank" rel="noopener noreferrer">${this.escape(order.open_url)}</a>`,
+          title: ocTranslate("钉钉订单"),
+          message: `${ocTranslate("浏览器拦截了新窗口，请点击链接打开：")}<br><a href="${this.escape(order.open_url)}" target="_blank" rel="noopener noreferrer">${this.escape(order.open_url)}</a>`,
           indicator: "orange",
         });
       }
@@ -54,7 +54,7 @@
   }
 
   setTableLoading() {
-    this.$root.find("[data-area='table']").html(`<div class="ocw-muted ocw-table-empty">加载中</div>`);
+    this.$root.find("[data-area='table']").html(`<div class="ocw-muted ocw-table-empty">${ocTranslate("加载中")}</div>`);
     this.$root.find("[data-area='table-count']").text("");
   }
 
@@ -62,9 +62,9 @@
     this.visibleBatches = [];
     this.batchItems = {};
     this.auditEvents = [];
-    this.$root.find("[data-area='hierarchy-summary']").text("暂无批次");
-    this.$root.find("[data-area='table']").html(`<div class="ocw-muted ocw-table-empty">暂无明细</div>`);
-    this.$root.find("[data-area='table-title']").text("报关/运单层级列表");
+    this.$root.find("[data-area='hierarchy-summary']").text(ocTranslate("暂无批次"));
+    this.$root.find("[data-area='table']").html(`<div class="ocw-muted ocw-table-empty">${ocTranslate("暂无明细")}</div>`);
+    this.$root.find("[data-area='table-title']").text(ocTranslate("报关/运单层级列表"));
     this.$root.find("[data-area='table-count']").text("");
     this.renderTransportWorkbench();
     this.renderAuditList();
@@ -86,7 +86,7 @@
     this.$root
       .find("[data-action='set-transport-filter'][data-transport-mode='']")
       .toggleClass("active", !activeMode)
-      .text(activeMode ? "全部" : `全部 ${totalCount}`);
+      .text(activeMode ? ocTranslate("全部") : ocTranslate("全部 {0}", [totalCount]));
     const html = modes
       .map((mode) => {
         const row = stats[mode.value] || { batchCount: 0, itemCount: 0 };
@@ -94,11 +94,11 @@
         return `
           <button class="ocw-logistics-card ${isActive ? "active" : ""}" type="button" data-action="set-transport-filter" data-transport-mode="${this.escape(mode.value)}">
             <span>
-              <strong>${this.escape(mode.label)}</strong>
-              <em>${this.escape(mode.tip)}</em>
+              <strong>${this.escape(ocTranslate(mode.label))}</strong>
+              <em>${this.escape(ocTranslate(mode.tip))}</em>
             </span>
             <b>${this.escape(String(row.batchCount))}</b>
-            <small>${this.escape(String(row.itemCount))} 行物料</small>
+            <small>${ocTranslate("{0} 行物料", [this.escape(String(row.itemCount))])}</small>
           </button>
         `;
       })
@@ -108,11 +108,11 @@
 
   transportWorkbenchModes() {
     return [
-      { value: "SEA_STANDARD", label: "海运正报正清", tip: "主线核算" },
-      { value: "SEA_DDP", label: "海运 DDP（双清包税）", tip: "包税双清" },
-      { value: "AIR_DDP", label: "空运 DDP（双清包税）", tip: "包税双清" },
-      { value: "AIR_STANDARD", label: "正常空运", tip: "运单与计费重量" },
-      { value: "EXPRESS", label: "快递", tip: "面单与费用补齐" },
+      { value: "SEA_STANDARD", label: ocTranslate("海运正报正清"), tip: ocTranslate("主线核算") },
+      { value: "SEA_DDP", label: ocTranslate("海运 DDP（双清包税）"), tip: ocTranslate("包税双清") },
+      { value: "AIR_DDP", label: ocTranslate("空运 DDP（双清包税）"), tip: ocTranslate("包税双清") },
+      { value: "AIR_STANDARD", label: ocTranslate("正常空运"), tip: ocTranslate("运单与计费重量") },
+      { value: "EXPRESS", label: ocTranslate("快递"), tip: ocTranslate("面单与费用补齐") },
     ];
   }
 
@@ -149,7 +149,7 @@
       return;
     }
     const options = [
-      `<option value="">全部业务主体</option>`,
+      `<option value="">${ocTranslate("全部业务主体")}</option>`,
       ...values.map((value) => `<option value="${this.escape(value)}">${this.escape(value)}</option>`),
     ];
     $select.html(options.join("")).val(selected);
@@ -161,11 +161,11 @@
     if (!$select.length) return;
     const selected = String(this.filters.business_type || "");
     const options = [
-      `<option value="">全部业务类型</option>`,
+      `<option value="">${ocTranslate("全部业务类型")}</option>`,
       ...(this.businessTypeOptions || []).map((option) => {
         const value = typeof option === "string" ? option : option.value;
         const label = typeof option === "string" ? this.businessTypeLabel(option) : option.label;
-        return `<option value="${this.escape(value)}">${this.escape(label)}</option>`;
+        return `<option value="${this.escape(value)}">${this.escape(ocTranslate(label))}</option>`;
       }),
     ];
     $select.html(options.join("")).val(selected);
@@ -190,7 +190,7 @@
         .map(
           ([label, value, fieldname]) => `
             <div class="ocw-summary-cell">
-              <span>${this.escape(label)}</span>
+              <span>${this.escape(ocTranslate(label))}</span>
               <strong>${this.escape(fieldname ? this.formatDisplayNumber(value, fieldname) : this.formatValue(value))}</strong>
             </div>
           `
@@ -210,12 +210,12 @@
     const labels = this.parentTableLabels();
     const displayBatches = this.getDisplayedBatches();
     this.$root.find("[data-area='table-title']").text(labels.title);
-    this.$root.find("[data-area='table-count']").text(`${displayBatches.length} 个${labels.blockName}`);
+    this.$root.find("[data-area='table-count']").text(ocTranslate("{0} 个{1}", [displayBatches.length, labels.blockName]));
     this.renderBatchFocusControls();
     this.updateHierarchySummary();
 
     if (!displayBatches.length) {
-      this.$root.find("[data-area='table']").html(`<div class="ocw-muted ocw-table-empty">${this.escape(this.workRoleInfo().empty)}</div>`);
+      this.$root.find("[data-area='table']").html(`<div class="ocw-muted ocw-table-empty">${this.escape(ocTranslate(this.workRoleInfo().empty))}</div>`);
       return;
     }
 
@@ -238,19 +238,19 @@
           <tr>
             <th></th>
             <th>${this.escape(labels.logisticsNo)}</th>
-            <th>采购审批</th>
-            <th>SKU数</th>
-            <th>资料状态</th>
-            <th>采购货值</th>
-            <th>已识别费用</th>
-            <th>综合成本</th>
-            <th>凭证差异</th>
-            <th>操作</th>
+            <th>${ocTranslate("采购审批")}</th>
+            <th>${ocTranslate("SKU数")}</th>
+            <th>${ocTranslate("资料状态")}</th>
+            <th>${ocTranslate("采购货值")}</th>
+            <th>${ocTranslate("已识别费用")}</th>
+            <th>${ocTranslate("综合成本")}</th>
+            <th>${ocTranslate("凭证差异")}</th>
+            <th>${ocTranslate("操作")}</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>
-      <div class="ocw-hierarchy-x-scroll" data-role="hierarchy-x-scroll" aria-label="层级列表横向滚动条">
+      <div class="ocw-hierarchy-x-scroll" data-role="hierarchy-x-scroll" aria-label="${ocTranslate('层级列表横向滚动条')}">
         <div class="ocw-hierarchy-x-scroll-spacer" data-role="hierarchy-x-scroll-spacer"></div>
       </div>
     `);
@@ -280,8 +280,8 @@
 
   renderErpQueueTable() {
     const batches = this.getErpQueueBatches();
-    this.$root.find("[data-area='table-title']").text("DeepLinkERP 待推送队列");
-    this.$root.find("[data-area='table-count']").text(`${batches.length} 个批次`);
+    this.$root.find("[data-area='table-title']").text(ocTranslate("DeepLinkERP 待推送队列"));
+    this.$root.find("[data-area='table-count']").text(ocTranslate("{0} 个批次", [batches.length]));
     this.renderBatchFocusControls();
     this.updateHierarchySummary();
 
@@ -289,7 +289,7 @@
     if (!batches.length) {
       this.$root.find("[data-area='table']").html(`
         ${filters}
-        <div class="ocw-muted ocw-table-empty">当前筛选下暂无 ERP 队列记录</div>
+        <div class="ocw-muted ocw-table-empty">${ocTranslate("当前筛选下暂无 ERP 队列记录")}</div>
       `);
       this.renderDiffPanel();
       this.updateRecalculateAction();
@@ -302,15 +302,15 @@
       <table class="ocw-erp-queue-table">
         <thead>
           <tr>
-            <th>批次</th>
-            <th>业务主体</th>
-            <th>版本</th>
-            <th>物料数</th>
-            <th>综合成本</th>
-            <th>流程阶段</th>
-            <th>回写状态</th>
-            <th>生成时间</th>
-            <th>操作</th>
+            <th>${ocTranslate("批次")}</th>
+            <th>${ocTranslate("业务主体")}</th>
+            <th>${ocTranslate("版本")}</th>
+            <th>${ocTranslate("物料数")}</th>
+            <th>${ocTranslate("综合成本")}</th>
+            <th>${ocTranslate("流程阶段")}</th>
+            <th>${ocTranslate("回写状态")}</th>
+            <th>${ocTranslate("生成时间")}</th>
+            <th>${ocTranslate("操作")}</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -336,13 +336,13 @@
             .map(
               ([value, label]) => `
                 <button class="${this.erpQueueStatus === value ? "active" : ""}" type="button" data-action="set-erp-queue-status" data-status="${this.escape(value)}">
-                  ${this.escape(label)} <span>${this.escape(String(stats[value] || 0))}</span>
+                  ${this.escape(ocTranslate(label))} <span>${this.escape(String(stats[value] || 0))}</span>
                 </button>
               `
             )
             .join("")}
         </div>
-        <p>这里展示本系统已试算、已校验、已生成报文和待正式接口推送的批次。</p>
+        <p>${ocTranslate("这里展示本系统已试算、已校验、已生成报文和待正式接口推送的批次。")}</p>
       </div>
     `;
   }
@@ -394,20 +394,20 @@
         <td>${this.escape(batch.current_version || "--")}</td>
         <td class="ocw-num-cell">${this.escape(String(itemCount || 0))}</td>
         <td>${this.escape(this.isPositive(totalCost) ? `${this.formatMoney(totalCost)} RMB` : "--")}</td>
-        <td><span class="ocw-queue-stage ${this.escape(stage.className)}">${this.escape(stage.label)}</span><small>${this.escape(stage.note)}</small></td>
-        <td><span class="ocw-queue-status ${this.escape(writebackInfo.state)}">${this.escape(writebackInfo.label)}</span><small>${this.escape(batch.writeback_message || writebackInfo.note)}</small></td>
+        <td><span class="ocw-queue-stage ${this.escape(stage.className)}">${this.escape(ocTranslate(stage.label))}</span><small>${this.escape(stage.note)}</small></td>
+        <td><span class="ocw-queue-status ${this.escape(writebackInfo.state)}">${this.escape(ocTranslate(writebackInfo.label))}</span><small>${this.escape(batch.writeback_message || writebackInfo.note)}</small></td>
         <td>${this.escape(this.formatDateTimeMinute(batch.writeback_time) || "--")}</td>
         <td>
           <div class="ocw-row-action-group">
-            <button class="ocw-outline-btn ocw-mini-btn" data-action="queue-open-batch" data-batch-name="${this.escape(batch.name)}">详情</button>
+            <button class="ocw-outline-btn ocw-mini-btn" data-action="queue-open-batch" data-batch-name="${this.escape(batch.name)}">${ocTranslate("详情")}</button>
             <span class="ocw-tooltip-wrap" data-tooltip="${this.escape(previewTip)}" title="${this.escape(previewTip)}">
               ${
                 canPreview
-                  ? `<button class="ocw-outline-btn ocw-mini-btn" data-action="queue-preview-erp" data-batch-name="${this.escape(batch.name)}">预览</button>`
-                  : `<button class="ocw-outline-btn ocw-mini-btn ocw-disabled-btn" type="button" disabled>预览</button>`
+                  ? `<button class="ocw-outline-btn ocw-mini-btn" data-action="queue-preview-erp" data-batch-name="${this.escape(batch.name)}">${ocTranslate("预览")}</button>`
+                  : `<button class="ocw-outline-btn ocw-mini-btn ocw-disabled-btn" type="button" disabled>${ocTranslate("预览")}</button>`
               }
             </span>
-            <button class="ocw-outline-btn ocw-mini-btn" data-action="queue-writeback-erp" data-batch-name="${this.escape(batch.name)}"${canPush ? "" : " disabled"}>${this.erpWritebackQueueKey(batch) === "failed" ? "重试" : "生成"}</button>
+            <button class="ocw-outline-btn ocw-mini-btn" data-action="queue-writeback-erp" data-batch-name="${this.escape(batch.name)}"${canPush ? "" : " disabled"}>${this.erpWritebackQueueKey(batch) === "failed" ? ocTranslate("重试") : ocTranslate("生成")}</button>
           </div>
         </td>
       </tr>
@@ -418,13 +418,13 @@
     const statusInfo = this.batchStatusInfo(batch.status, batch, itemCount);
     const confirmed = this.isCalculationConfirmed(batch);
     const queueKey = this.erpWritebackQueueKey(batch);
-    if (queueKey === "success") return { label: "推送成功", note: "ERP 已返回成功", className: "is-ok" };
-    if (queueKey === "failed") return { label: "推送失败", note: "可查看原因后重试", className: "is-warn" };
-    if (queueKey === "pending") return { label: "已生成报文", note: "等待正式接口推送", className: "is-info" };
-    if (confirmed) return { label: "已校验", note: "可生成 ERP 报文", className: "is-ok" };
-    if (statusInfo.needsRecalculate) return { label: "待重算", note: "先重新试算", className: "is-warn" };
-    if (this.isPositive(totalCost)) return { label: "已试算", note: "等待人工校验", className: "is-info" };
-    return { label: "待试算", note: itemCount ? "先补齐费用并试算" : "先导入物料", className: "is-muted" };
+    if (queueKey === "success") return { label: ocTranslate("推送成功"), note: ocTranslate("ERP 已返回成功"), className: "is-ok" };
+    if (queueKey === "failed") return { label: ocTranslate("推送失败"), note: ocTranslate("可查看原因后重试"), className: "is-warn" };
+    if (queueKey === "pending") return { label: ocTranslate("已生成报文"), note: ocTranslate("等待正式接口推送"), className: "is-info" };
+    if (confirmed) return { label: ocTranslate("已校验"), note: ocTranslate("可生成 ERP 报文"), className: "is-ok" };
+    if (statusInfo.needsRecalculate) return { label: ocTranslate("待重算"), note: ocTranslate("先重新试算"), className: "is-warn" };
+    if (this.isPositive(totalCost)) return { label: ocTranslate("已试算"), note: ocTranslate("等待人工校验"), className: "is-info" };
+    return { label: ocTranslate("待试算"), note: itemCount ? ocTranslate("先补齐费用并试算") : ocTranslate("先导入物料"), className: "is-muted" };
   }
 
   parentTableLabels() {
@@ -437,19 +437,19 @@
     };
     const byMode = {
       SEA: {
-        title: "海运批次列表",
+        title: ocTranslate("海运批次列表"),
         logisticsNo: "批次/柜号",
-        blockName: "海运单块",
+        blockName: ocTranslate("海运单块"),
       },
       AIR: {
-        title: "空运批次列表",
+        title: ocTranslate("空运批次列表"),
         logisticsNo: "批次/空运单号",
-        blockName: "空运单块",
+        blockName: ocTranslate("空运单块"),
       },
       EXPRESS: {
-        title: "快递批次列表",
+        title: ocTranslate("快递批次列表"),
         logisticsNo: "批次/快递单号",
-        blockName: "快递单块",
+        blockName: ocTranslate("快递单块"),
       },
     };
     return byMode[mode] || defaults;
@@ -490,14 +490,14 @@
     const importedClass = this.lastImportedBatchNames.has(batch.name) ? "imported" : "";
     const submittedAt = this.formatDateTimeMinute(batch.source_created_at);
     const sampleBadge = batch.is_classic_sample
-      ? `<span class="ocw-sample-badge">${this.escape(batch.sample_note || "历史样本")}</span>`
+      ? `<span class="ocw-sample-badge">${this.escape(batch.sample_note || ocTranslate("历史样本"))}</span>`
       : "";
     const recalculateDisabled = (batch.source_status || {}).invalid_business
-      ? `disabled title="${this.escape((batch.source_status || {}).invalid_business_reason || "已排除审批不能重算")}"`
+      ? `disabled title="${this.escape((batch.source_status || {}).invalid_business_reason || ocTranslate("已排除审批不能重算"))}"`
       : "";
     this.activeBatchName = this.activeBatchName || batch.name;
     return `
-      <tr class="ocw-parent-row ${isExpanded ? "expanded" : ""} ${importedClass}" data-batch-name="${this.escape(batch.name)}" title="单击批次可选中并锁定；双击打开详情侧边栏；字段修改请在明细区点击可编辑字段">
+      <tr class="ocw-parent-row ${isExpanded ? "expanded" : ""} ${importedClass}" data-batch-name="${this.escape(batch.name)}" title="${ocTranslate('单击批次可选中并锁定；双击打开详情侧边栏；字段修改请在明细区点击可编辑字段')}">
         <td>
           <button class="ocw-tree-toggle" data-action="toggle-batch" data-batch-name="${this.escape(batch.name)}" aria-expanded="${isExpanded ? "true" : "false"}">
             ${isExpanded ? "-" : "+"}
@@ -507,9 +507,9 @@
           <strong>${this.renderParentValue(waybillNo, "waybill_no")}</strong>
           <span class="ocw-batch-label-group">
             <span class="ocw-business-badge">${this.escape(this.businessTypeCompactLabel(batch.business_type || firstItem.business_type))}</span>
-            <span class="ocw-status ${this.escape(this.statusClass(batch.status))}">${this.escape(statusInfo.label)}</span>
+            <span class="ocw-status ${this.escape(this.statusClass(batch.status))}">${this.escape(ocTranslate(statusInfo.label))}</span>
           </span>
-          ${submittedAt ? `<small>提交时间 ${this.escape(submittedAt)}</small>` : ""}
+          ${submittedAt ? `<small>${ocTranslate("提交时间 {0}", [this.escape(submittedAt)])}</small>` : ""}
           ${sampleBadge}
         </td>
         <td>${this.renderPurchaseApprovalMetric(batch.source_status || {})}</td>
@@ -522,10 +522,10 @@
         <td class="ocw-row-actions">
           <div class="ocw-row-action-group">
             ${this.workRole === "purchase"
-              ? `<button class="ocw-outline-btn ocw-mini-btn" data-action="source-center" data-batch-name="${this.escape(batch.name)}">补资料</button>
-                 <button class="ocw-outline-btn ocw-mini-btn" data-action="recalculate" data-batch-name="${this.escape(batch.name)}" ${recalculateDisabled}>试算</button>`
-              : `<button class="ocw-outline-btn ocw-mini-btn" data-action="recalculate" data-batch-name="${this.escape(batch.name)}" ${recalculateDisabled}>重新试算</button>
-                 <button class="ocw-outline-btn ocw-mini-btn" data-action="source-center" data-batch-name="${this.escape(batch.name)}">资料</button>`}
+              ? `<button class="ocw-outline-btn ocw-mini-btn" data-action="source-center" data-batch-name="${this.escape(batch.name)}">${ocTranslate("补资料")}</button>
+                 <button class="ocw-outline-btn ocw-mini-btn" data-action="recalculate" data-batch-name="${this.escape(batch.name)}" ${recalculateDisabled}>${ocTranslate("试算")}</button>`
+              : `<button class="ocw-outline-btn ocw-mini-btn" data-action="recalculate" data-batch-name="${this.escape(batch.name)}" ${recalculateDisabled}>${ocTranslate("重新试算")}</button>
+                 <button class="ocw-outline-btn ocw-mini-btn" data-action="source-center" data-batch-name="${this.escape(batch.name)}">${ocTranslate("资料")}</button>`}
           </div>
         </td>
       </tr>
@@ -534,7 +534,7 @@
 
   renderParentMetric(metric = {}) {
     const value = metric.value || "--";
-    const hint = metric.hint ? `<small>${this.escape(metric.hint)}</small>` : "";
+    const hint = metric.hint ? `<small>${this.escape(ocTranslate(metric.hint))}</small>` : "";
     return `
       <div class="ocw-parent-metric ${this.escape(metric.className || "muted")}">
         <strong>${this.escape(value)}</strong>
@@ -550,40 +550,40 @@
     if ((state === "invalid" || state === "excluded" || sourceStatus.invalid_business) && sourceStatus.has_oa_logistics) {
       return `
         <div class="ocw-parent-metric ocw-purchase-approval-metric is-missing" title="${this.escape(reason)}">
-          <strong>资料来自国际物流审批</strong>
-          <small>关联采购审批已排除</small>
+          <strong>${ocTranslate("资料来自国际物流审批")}</strong>
+          <small>${ocTranslate("关联采购审批已排除")}</small>
         </div>
       `;
     }
     if (state === "invalid" || sourceStatus.invalid_business) {
       return `
         <div class="ocw-parent-metric ocw-purchase-approval-metric is-invalid" title="${this.escape(reason)}">
-          <strong>采购审批无效</strong>
-          <small>拒绝/撤销/终止</small>
+          <strong>${ocTranslate("采购审批无效")}</strong>
+          <small>${ocTranslate("拒绝/撤销/终止")}</small>
         </div>
       `;
     }
     if (state === "pending") {
       return `
         <div class="ocw-parent-metric ocw-purchase-approval-metric is-pending" title="${this.escape(reason)}">
-          <strong>状态未同步</strong>
-          <small>${this.escape(`${count} 条已关联`)}</small>
+          <strong>${ocTranslate("状态未同步")}</strong>
+          <small>${this.escape(ocTranslate("{0} 条已关联", [count]))}</small>
         </div>
       `;
     }
     if (state === "missing" && sourceStatus.has_oa_logistics) {
       return `
         <div class="ocw-parent-metric ocw-purchase-approval-metric is-missing" title="${this.escape(reason)}">
-          <strong>资料来自国际物流审批</strong>
-          <small>采购审批待关联</small>
+          <strong>${ocTranslate("资料来自国际物流审批")}</strong>
+          <small>${ocTranslate("采购审批待关联")}</small>
         </div>
       `;
     }
     if (state === "valid") {
       return `
         <div class="ocw-parent-metric ocw-purchase-approval-metric is-valid" title="${this.escape(reason)}">
-          <strong>已关联</strong>
-          <small>${this.escape(`${count} 条已同步`)}</small>
+          <strong>${ocTranslate("已关联")}</strong>
+          <small>${this.escape(ocTranslate("{0} 条已同步", [count]))}</small>
         </div>
       `;
     }
@@ -597,7 +597,7 @@
     const linkedPurchaseExcluded = sourceStatus.invalid_business_scope === "linked_purchase_approval" && sourceStatus.has_oa_logistics;
     return `
       <div class="ocw-invalid-business-alert">
-        <strong>${linkedPurchaseExcluded ? "关联采购审批已排除" : "采购审批无效"}</strong>
+        <strong>${linkedPurchaseExcluded ? ocTranslate("关联采购审批已排除") : ocTranslate("采购审批无效")}</strong>
         <span>${this.escape(reason)}</span>
       </div>
     `;
@@ -611,7 +611,7 @@
     return `
       <div class="ocw-invalid-business-alert is-info">
         <strong>${title}</strong>
-        <span>${this.escape(sourceStatus.purchase_approval_sync_message || "采购审批状态尚未同步。")}</span>
+        <span>${this.escape(sourceStatus.purchase_approval_sync_message || ocTranslate("采购审批状态尚未同步。"))}</span>
       </div>
     `;
   }
@@ -644,7 +644,7 @@
     if (sourceStatus.invalid_business) {
       return {
         value: "审批无效",
-        hint: sourceStatus.invalid_business_reason || "已拒绝/撤销/终止",
+        hint: sourceStatus.invalid_business_reason || ocTranslate("已拒绝/撤销/终止"),
         className: "danger",
       };
     }
@@ -660,13 +660,13 @@
       this.hasText(batch.source_dingtalk_url);
     const parts = [];
     if (hasOaSource) parts.push("OA");
-    if (attachmentCount) parts.push(`${attachmentCount}附件`);
+    if (attachmentCount) parts.push(ocTranslate("{0}附件", [attachmentCount]));
     if (packingListCount) parts.push("装箱单");
     if (itemCount) parts.push(`${itemCount}SKU`);
     if (taxCertificateCount) parts.push("凭证");
 
     if (!parts.length) {
-      return { value: "待资料", hint: "未关联 OA/附件", className: "warn" };
+      return { value: "待资料", hint: ocTranslate("未关联 OA/附件"), className: "warn" };
     }
     if (!itemCount) {
       return { value: "待解析", hint: parts.join(" / "), className: "warn" };
@@ -695,12 +695,12 @@
     const itemCount = hasLoadedItems ? items.length : Number(batch.item_count || 0);
     const goodsValue = this.batchGoodsValueNumber(batch, items, hasLoadedItems);
     if (this.isPositive(goodsValue)) {
-      return { value: `${this.formatMoney(goodsValue)} RMB`, hint: "来自采购/OA/明细", className: "ok" };
+      return { value: `${this.formatMoney(goodsValue)} RMB`, hint: ocTranslate("来自采购/OA/明细"), className: "ok" };
     }
     if (itemCount) {
-      return { value: "待补采购金额", hint: "缺少采购单价或采购金额", className: "warn" };
+      return { value: "待补采购金额", hint: ocTranslate("缺少采购单价或采购金额"), className: "warn" };
     }
-    return { value: "待物料", hint: "先生成 SKU", className: "muted" };
+    return { value: "待物料", hint: ocTranslate("先生成 SKU"), className: "muted" };
   }
 
   batchRecognizedFeeDisplay(batch, items, hasLoadedItems) {
@@ -720,12 +720,12 @@
       : 0;
     const recognizedFee = this.isPositive(feeFromTotal) ? feeFromTotal : fallbackFee;
     if (this.isPositive(recognizedFee)) {
-      return { value: `${this.formatMoney(recognizedFee)} RMB`, hint: "已计入试算", className: "ok" };
+      return { value: `${this.formatMoney(recognizedFee)} RMB`, hint: ocTranslate("已计入试算"), className: "ok" };
     }
     if (itemCount) {
-      return { value: "待费用", hint: "等运费/税费/杂费", className: "warn" };
+      return { value: "待费用", hint: ocTranslate("等运费/税费/杂费"), className: "warn" };
     }
-    return { value: "--", hint: "暂无明细", className: "muted" };
+    return { value: "--", hint: ocTranslate("暂无明细"), className: "muted" };
   }
 
   batchTotalCostDisplay(batch, items, hasLoadedItems) {
@@ -733,16 +733,16 @@
     const totalCost = this.batchTotalCostNumber(batch, items, hasLoadedItems);
     const statusInfo = this.batchStatusInfo(batch.status, batch, itemCount);
     if (statusInfo.needsRecalculate) {
-      const hint = this.isPositive(totalCost) ? `当前 ${this.formatMoney(totalCost)} RMB` : "明细已修改";
+      const hint = this.isPositive(totalCost) ? ocTranslate("当前 {0} RMB", [this.formatMoney(totalCost)]) : "明细已修改";
       return { value: "待重算", hint, className: "warn" };
     }
     if (this.isPositive(totalCost)) {
-      return { value: `${this.formatMoney(totalCost)} RMB`, hint: "已生成", className: "ok" };
+      return { value: `${this.formatMoney(totalCost)} RMB`, hint: ocTranslate("已生成"), className: "ok" };
     }
     if (itemCount) {
-      return { value: "待试算", hint: "请先确认运费/税费/杂费", className: "warn" };
+      return { value: "待试算", hint: ocTranslate("请先确认运费/税费/杂费"), className: "warn" };
     }
-    return { value: "待物料", hint: "暂无 SKU", className: "muted" };
+    return { value: "待物料", hint: ocTranslate("暂无 SKU"), className: "muted" };
   }
 
   batchVoucherDiffDisplay(batch) {
@@ -755,7 +755,7 @@
         reconciliation.manual_resolution_status_label || reconciliation.status_label || reconciliation.status || "已对账";
       if (Number.isFinite(diff)) {
         if (Math.abs(diff) <= 0.01) {
-          return { value: "一致", hint: "0 MXN", className: "ok" };
+          return { value: "一致", hint: ocTranslate("0 MXN"), className: "ok" };
         }
         return {
           value: statusLabel,
@@ -765,12 +765,12 @@
       }
       return {
         value: statusLabel,
-        hint: reconciliation.file_name || "已登记凭证",
+        hint: reconciliation.file_name || ocTranslate("已登记凭证"),
         className: String(statusLabel).includes("复核") ? "review" : "ok",
       };
     }
     if (taxCertificateCount) {
-      return { value: "待对账", hint: `${taxCertificateCount} 份凭证`, className: "warn" };
+      return { value: "待对账", hint: ocTranslate("{0} 份凭证", [taxCertificateCount]), className: "warn" };
     }
-    return { value: "待凭证", hint: "最终对账", className: "muted" };
+    return { value: "待凭证", hint: ocTranslate("最终对账"), className: "muted" };
   }

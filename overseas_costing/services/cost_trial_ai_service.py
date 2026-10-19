@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 from decimal import Decimal, InvalidOperation
 import hashlib
 import hmac
@@ -480,29 +487,29 @@ def _selection_map(draft: dict, selections: Any) -> dict[str, dict]:
         try:
             selections = json.loads(selections or "[]")
         except json.JSONDecodeError as exc:
-            raise ValueError("试算选择格式无效。") from exc
+            raise ValueError(_("试算选择格式无效。")) from exc
     if not isinstance(selections, list):
-        raise ValueError("试算选择格式无效。")
+        raise ValueError(_("试算选择格式无效。"))
     proposals = {row["suggestion_id"]: row for row in draft.get("fee_suggestions") or []}
     invalid_evidence = next(
         (row for row in proposals.values() if row.get("evidence_issue") == "SKU_MATCH_INVALID"),
         None,
     )
     if invalid_evidence:
-        raise ValueError(f"费用“{invalid_evidence['expense_category']}”的凭证 SKU 匹配无效，请先完成人工匹配。")
+        raise ValueError(_("费用“{0}”的凭证 SKU 匹配无效，请先完成人工匹配。").format(invalid_evidence['expense_category']))
     invalid_amount = next(
         (row for row in proposals.values() if row.get("evidence_issue") == "AMOUNT_INVALID"),
         None,
     )
     if invalid_amount:
-        raise ValueError(f"费用“{invalid_amount['expense_category']}”的凭证金额无效，请先处理凭证。")
+        raise ValueError(_("费用“{0}”的凭证金额无效，请先处理凭证。").format(invalid_amount['expense_category']))
     selected: dict[str, dict] = {}
 
     def select(proposal: dict, raw: dict) -> None:
         basis = str(raw.get("basis") or "")
         available = {value["basis"] for value in proposal.get("available_alternatives") or []}
         if basis not in available:
-            raise ValueError(f"分摊口径 {basis or '-'} 当前不可用。")
+            raise ValueError(_("分摊口径 {0} 当前不可用。").format(basis or '-'))
         reason = str(raw.get("reason") or "").strip()[:500]
         default_basis = str(proposal.get("default_basis") or proposal.get("recommended_basis") or "")
         modified = basis != default_basis
@@ -524,7 +531,7 @@ def _selection_map(draft: dict, selections: Any) -> dict[str, dict]:
         row = dict(raw or {})
         proposal = proposals.get(str(row.get("suggestion_id") or ""))
         if not proposal:
-            raise ValueError("试算建议已失效，请重新运行 AI。")
+            raise ValueError(_("试算建议已失效，请重新运行 AI。"))
         select(proposal, row)
     for proposal in proposals.values():
         if proposal.get("evidence_locked"):
@@ -543,7 +550,7 @@ def _selection_map(draft: dict, selections: Any) -> dict[str, dict]:
         elif proposal.get("requires_user_choice") and proposal["fee_key"] not in selected:
             if proposal.get("blocked") or not proposal.get("default_basis"):
                 missing = "、".join(proposal.get("missing_fields") or [])
-                raise ValueError(f"费用“{proposal['expense_category']}”没有完整可用的分摊口径，请补充：{missing or '分摊数据'}。")
+                raise ValueError(_("费用“{0}”没有完整可用的分摊口径，请补充：{1}。").format(proposal['expense_category'], missing or '分摊数据'))
             select(proposal, {"basis": proposal["default_basis"], "reason": ""})
     return selected
 
@@ -727,13 +734,13 @@ def _assert_trial_writable_context(context: dict) -> None:
     version = str(context.get("version") or context.get("version_name") or "")
     current_version = str(context.get("current_version") or "")
     if current_version != version:
-        raise ValueError("只能试算当前版本，请刷新批次。")
+        raise ValueError(_("只能试算当前版本，请刷新批次。"))
     if (
         str(context.get("version_status") or "") in {"Confirmed", "Archived"}
         or str(context.get("confirm_status") or "") == "Confirmed"
         or bool(context.get("is_locked"))
     ):
-        raise PermissionError("已确认或归档版本不能覆盖，请先创建调整版本。")
+        raise PermissionError(_("已确认或归档版本不能覆盖，请先创建调整版本。"))
 
 
 def _ready_matches_previous_review(run: dict, previous_review: dict) -> bool:
@@ -781,7 +788,7 @@ def start_cost_trial_ai_review(
     if not cost_trial_ai_enabled():
         raise RuntimeError("AI 成本试算功能开关未启用，请暂用兼容计算接口。")
     if force and reuse_only:
-        raise ValueError("重新让 AI 判断与仅复用已有口径不能同时执行。")
+        raise ValueError(_("重新让 AI 判断与仅复用已有口径不能同时执行。"))
     repo = _repo(repository)
     try:
         fx_resolution = _prepare_fx_resolution(repo, str(batch_name), str(version_name or "") or None)
@@ -1061,7 +1068,7 @@ def get_cost_trial_ai_review_status(
 ) -> dict:
     run = _repo(repository).get_run(str(run_id or ""))
     if str(run.get("batch") or "") != str(batch_name or ""):
-        raise ValueError("AI 试算任务不属于当前批次。")
+        raise ValueError(_("AI 试算任务不属于当前批次。"))
     revision = int(run.get("progress_revision") or 0)
     status = str(run.get("status") or "")
     if after_revision is not None and int(after_revision) == revision and status in {"QUEUED", "RUNNING", "CONFIRMING"}:
@@ -1096,7 +1103,7 @@ def _load_current_run_inputs(repo: Any, batch_name: str, run: dict, *, write: bo
     if _input_fingerprint(inputs) != str(run.get("input_fingerprint") or ""):
         repo.save_run(str(run.get("name") or ""), status="STALE", progress_step="试算输入已变化", progress_percent=100)
         repo.commit()
-        raise ValueError("试算输入已变化，请重新运行 AI。")
+        raise ValueError(_("试算输入已变化，请重新运行 AI。"))
     return inputs
 
 
@@ -1110,9 +1117,9 @@ def preview_cost_trial(
     repo = _repo(repository)
     run = repo.get_run(str(run_id or ""))
     if str(run.get("batch") or "") != str(batch_name or ""):
-        raise ValueError("AI 试算任务不属于当前批次。")
+        raise ValueError(_("AI 试算任务不属于当前批次。"))
     if str(run.get("status") or "") != "READY":
-        raise ValueError("AI 试算建议尚未就绪。")
+        raise ValueError(_("AI 试算建议尚未就绪。"))
     inputs = _load_current_run_inputs(repo, batch_name, run)
     draft = _json_dict(run.get("draft_json"))
     preview = preview_selected_cost_trial(
@@ -1140,9 +1147,9 @@ def confirm_cost_trial(
     repo = _repo(repository)
     run = repo.get_run(str(run_id or ""))
     if str(run.get("batch") or "") != str(batch_name or ""):
-        raise ValueError("AI 试算任务不属于当前批次。")
+        raise ValueError(_("AI 试算任务不属于当前批次。"))
     if str(run.get("status") or "") != "READY":
-        raise ValueError("AI 试算建议已不可确认。")
+        raise ValueError(_("AI 试算建议已不可确认。"))
     claimed = _save_run_if_status(
         repo,
         str(run_id),
@@ -1153,7 +1160,7 @@ def confirm_cost_trial(
     )
     if not claimed:
         repo.commit()
-        raise ValueError("AI 试算建议已不可确认。")
+        raise ValueError(_("AI 试算建议已不可确认。"))
     try:
         run = repo.get_run(str(run_id))
         inputs = _load_current_run_inputs(
@@ -1172,7 +1179,7 @@ def confirm_cost_trial(
             str(run_id), draft, preview["trial_review"]["fee_choices"],
         )
         if not hmac.compare_digest(expected_token, str(preview_token or "")):
-            raise ValueError("试算预览已失效，请重新预览。")
+            raise ValueError(_("试算预览已失效，请重新预览。"))
         fx_resolution = dict(draft.get("fx_resolution") or {})
         persister = getattr(repo, "persist_fx_resolution", None)
         if callable(persister) and fx_resolution:
@@ -1232,12 +1239,12 @@ def discard_cost_trial_ai_review(
     for _attempt in range(2):
         run = repo.get_run(str(run_id or ""))
         if str(run.get("batch") or "") != str(batch_name or ""):
-            raise ValueError("AI 试算任务不属于当前批次。")
+            raise ValueError(_("AI 试算任务不属于当前批次。"))
         status = str(run.get("status") or "")
         if status in {"CONFIRMED", "DISCARDED"}:
             return {"ok": True, "run_id": str(run_id), "status": status}
         if status == "CONFIRMING":
-            raise ValueError("试算结果正在保存，暂时不能放弃。")
+            raise ValueError(_("试算结果正在保存，暂时不能放弃。"))
         discarded = _save_run_if_status(
             repo,
             str(run_id),
@@ -1253,7 +1260,7 @@ def discard_cost_trial_ai_review(
     current = repo.get_run(str(run_id or ""))
     current_status = str(current.get("status") or "")
     if current_status == "CONFIRMING":
-        raise ValueError("试算结果正在保存，暂时不能放弃。")
+        raise ValueError(_("试算结果正在保存，暂时不能放弃。"))
     return {"ok": True, "run_id": str(run_id), "status": current_status}
 
 
@@ -1375,7 +1382,7 @@ class FrappeCostTrialAIRepository:  # pragma: no cover - exercised in Frappe int
     def get_run(self, run_id):
         row = frappe.db.get_value(self.RUN_DOCTYPE, run_id, self.RUN_FIELDS, as_dict=True)
         if not row:
-            raise ValueError("未找到 AI 试算任务。")
+            raise ValueError(_("未找到 AI 试算任务。"))
         return self._present(row)
 
     def save_run(self, run_id, **values):
@@ -1384,7 +1391,7 @@ class FrappeCostTrialAIRepository:  # pragma: no cover - exercised in Frappe int
             (run_id,), as_dict=True,
         )
         if not locked:
-            raise ValueError("未找到 AI 试算任务。")
+            raise ValueError(_("未找到 AI 试算任务。"))
         payload = {key: _json(value) if key.endswith("_json") and not isinstance(value, str) else value
                    for key, value in values.items()}
         payload["progress_revision"] = int(locked[0].get("progress_revision") or 0) + 1
@@ -1397,7 +1404,7 @@ class FrappeCostTrialAIRepository:  # pragma: no cover - exercised in Frappe int
             (run_id,), as_dict=True,
         )
         if not locked:
-            raise ValueError("未找到 AI 试算任务。")
+            raise ValueError(_("未找到 AI 试算任务。"))
         if str(locked[0].get("status") or "") != str(expected_status or ""):
             return False
         payload = {

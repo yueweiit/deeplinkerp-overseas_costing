@@ -1,4 +1,11 @@
 """Transactional row adoption, version preservation and scoped evidence."""
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 from copy import deepcopy
 from datetime import datetime
 
@@ -14,7 +21,7 @@ def write_rows(store,ledger,preview,context):
     batch_name=preview['batch'];old_version=ledger.get('version',preview['version'],lock=True)
     batch=ledger.get('batch',batch_name,lock=True)
     if batch.get('current_version')!=old_version['name'] or old_version.get('status')!='Active' or batch.get('confirm_status')=='Confirmed' or batch.get('writeback_status')=='Success':
-        raise ValueError('当前版本已变化或被冻结，不能覆盖；请刷新后重新预览。')
+        raise ValueError(_('当前版本已变化或被冻结，不能覆盖；请刷新后重新预览。'))
     old_items=ledger.rows('item',batch=batch_name,version=old_version['name'])
     originals={i['name']:i for i in old_items};version=old_version
     copies={'item':{i['name']:i['name'] for i in old_items}}
@@ -100,7 +107,7 @@ def write_rows(store,ledger,preview,context):
             amount=trusted_valuation.get('amount_rmb') if isinstance(trusted_valuation,dict) else None
             if (amount is None or trusted_valuation.get('error')
                     or str(amount) != str(incoming.get('shipment_value_rmb'))):
-                raise ValueError('发货货值凭据已变化，请重新预览。')
+                raise ValueError(_('发货货值凭据已变化，请重新预览。'))
             valuation=deepcopy(trusted_valuation)
             valuation.update(status='automatic',trusted_shipment_source=True)
             meta['shipment_valuation']=deepcopy(valuation)
@@ -129,7 +136,7 @@ def write_rows(store,ledger,preview,context):
         if str(name or '')
     }
     if scope_excluded - originals.keys() or scope_excluded & kept:
-        raise ValueError('国际物流物料范围已变化，请重新预览。')
+        raise ValueError(_('国际物流物料范围已变化，请重新预览。'))
     if scope_excluded:
         from .logistics_autofill_service import AUTO_SCOPE_EXCLUSION_REASON
         excluded_at = datetime.now().isoformat(timespec='seconds')

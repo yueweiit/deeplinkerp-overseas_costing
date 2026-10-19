@@ -1,4 +1,11 @@
 """Choose one archived shipment source and replace the current packing dataset."""
+
+try:
+    from frappe import _ as _i18n
+except ImportError:
+    def _i18n(message):
+        return message
+
 from collections import Counter
 from copy import deepcopy
 from datetime import datetime
@@ -64,9 +71,9 @@ def _stable(goods, source_key):
 
 def _catalog(store,ledger,batch_name,version_name):
     batch=ledger.get('batch',batch_name) or {};version=ledger.get('version',version_name) or {}
-    if version.get('batch')!=batch_name:raise ValueError('成本版本不属于本票')
+    if version.get('batch')!=batch_name:raise ValueError(_i18n('成本版本不属于本票'))
     maps=store.find('batch_map',batch=batch_name)
-    if len(maps)!=1:raise ValueError('本票国际物流来源待初始化')
+    if len(maps)!=1:raise ValueError(_i18n('本票国际物流来源待初始化'))
     logistics=store.get('source',maps[0]['source_id'])
     body_ids=_body(logistics)['identifiers']
     body_waybills=[t for t in body_ids if t[0]=='waybill']
@@ -175,7 +182,7 @@ def _mapping(goods,items):
 def preview_selection(store,ledger,batch_name,version_name,source_id,source_revision):
     logistics,rows=_catalog(store,ledger,batch_name,version_name)
     chosen=next((r for r in rows if r['id']==source_id and r['revision']==source_revision),None)
-    if not chosen:raise ValueError('资料来源已变化，请刷新来源列表')
+    if not chosen:raise ValueError(_i18n('资料来源已变化，请刷新来源列表'))
     items=ledger.rows('item',batch=batch_name,version=version_name)
     mapping=_mapping(chosen['goods'],items);freight=context(store,ledger,batch_name,version_name)
     revision=digest(POLICY,chosen['revision'],item_fingerprint(items),freight['revision'])
@@ -192,20 +199,20 @@ def preview_selection(store,ledger,batch_name,version_name,source_id,source_revi
 
 
 def confirm_selection(store,ledger,batch_name,version_name,preview_id,revision,actor,*,replace_all=False):
-    if replace_all is not True:raise ValueError('请确认采用此来源并整份替换本票装箱资料')
+    if replace_all is not True:raise ValueError(_i18n('请确认采用此来源并整份替换本票装箱资料'))
     with store.atomic():
         store.get('state','match_lock',lock=True)
         review=store.get('packing_review',preview_id,lock=True) or {};batch=ledger.get('batch',batch_name,lock=True) or {}
-        if review.get('batch')!=batch_name or review.get('revision')!=revision or not review.get('selection'):raise ValueError('装箱预览已变化或不属于本票')
+        if review.get('batch')!=batch_name or review.get('revision')!=revision or not review.get('selection'):raise ValueError(_i18n('装箱预览已变化或不属于本票'))
         if review.get('status')=='applied' and review.get('applied_version')==batch.get('current_version'):
             return {'status':'applied','version':batch['current_version'],'cached':True}
-        if batch.get('current_version')!=version_name or review['version']!=version_name:raise ValueError('成本版本已变化，请重新预览')
+        if batch.get('current_version')!=version_name or review['version']!=version_name:raise ValueError(_i18n('成本版本已变化，请重新预览'))
         olditems=ledger.rows('item',batch=batch_name,version=version_name)
-        if item_fingerprint(olditems)!=review['item_fingerprint'] or context(store,ledger,batch_name,version_name)['revision']!=review['freight_revision']:raise ValueError('当前物料或费用已变化，请重新预览')
+        if item_fingerprint(olditems)!=review['item_fingerprint'] or context(store,ledger,batch_name,version_name)['revision']!=review['freight_revision']:raise ValueError(_i18n('当前物料或费用已变化，请重新预览'))
         store.get('source',review['source_id'],lock=True)
         _,rows=_catalog(store,ledger,batch_name,version_name)
         selected=next((r for r in rows if r['id']==review['selection']['id'] and r['revision']==review['selection']['revision']),None)
-        if not selected or not selected['can_adopt']:raise ValueError('来源已变化、未批准或没有可采用物料')
+        if not selected or not selected['can_adopt']:raise ValueError(_i18n('来源已变化、未批准或没有可采用物料'))
         if locked(batch):
             save(store,{'id':digest(POLICY,'queue',preview_id),'kind':'packing_replace','status':'queued','request':dict(batch_name=batch_name,version_name=version_name,preview_id=preview_id,revision=revision,actor=actor,replace_all=True)})
             return {'status':'queued','version':version_name,'message':'批次正在编辑，装箱替换已排队'}

@@ -6,6 +6,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _ as _i18n
+except ImportError:
+    def _i18n(message):
+        return message
+
+
 from . import material_ai_fee_policy
 
 import hashlib
@@ -900,30 +907,30 @@ def _materialization_only_source_change(before: list[dict], after: list[dict]) -
 
 def validate_apply_updates(updates: list[dict], items: list[dict]) -> list[dict]:
     if not isinstance(updates, list) or len(updates) > MAX_UPDATES:
-        raise ValueError("AI 草稿更新格式不合法或数量过多。")
+        raise ValueError(_i18n("AI 草稿更新格式不合法或数量过多。"))
     items_by_name = {str(row.get("name") or ""): row for row in items or []}
     item_names = set(items_by_name)
     normalized = []
     seen = set()
     for raw in updates:
         if not isinstance(raw, dict):
-            raise ValueError("AI 草稿更新行格式不合法。")
+            raise ValueError(_i18n("AI 草稿更新行格式不合法。"))
         item_name = str(raw.get("item_name") or "").strip()
         fieldname = str(raw.get("fieldname") or "").strip()
         if fieldname not in ALLOWED_FIELDS:
-            raise ValueError(f"不允许 AI 修改字段：{fieldname or '--'}。")
+            raise ValueError(_i18n("不允许 AI 修改字段：{0}。").format(fieldname or '--'))
         if item_name not in item_names:
-            raise ValueError(f"物料行 {item_name or '--'} 不属于当前批次。")
+            raise ValueError(_i18n("物料行 {0} 不属于当前批次。").format(item_name or '--'))
         if (item_name, fieldname) in seen:
-            raise ValueError("AI 草稿包含重复字段更新。")
+            raise ValueError(_i18n("AI 草稿包含重复字段更新。"))
         seen.add((item_name, fieldname))
         value = raw.get("value")
         if fieldname in NUMERIC_FIELDS and not _is_blank(value):
             number = _decimal(value)
             if number is None:
-                raise ValueError(f"{fieldname} 必须是有效数字。")
+                raise ValueError(_i18n("{0} 必须是有效数字。").format(fieldname))
             if number < 0:
-                raise ValueError(f"{fieldname} 不能为负数。")
+                raise ValueError(_i18n("{0} 不能为负数。").format(fieldname))
             value = format(number, "f")
         elif fieldname not in NUMERIC_FIELDS:
             value = str(value or "").strip()[:500]
@@ -1637,7 +1644,7 @@ def _canonical_review_ref(
 def _review_number(fieldname: str, value: Any) -> str:
     number = _decimal(value)
     if number is None or number < 0:
-        raise ValueError(f"{fieldname} 必须是大于或等于 0 的有效数字。")
+        raise ValueError(_i18n("{0} 必须是大于或等于 0 的有效数字。").format(fieldname))
     return format(number.normalize(), "f")
 
 
@@ -1645,22 +1652,22 @@ def _normalize_review_item_values(
     values: Any, *, partial: bool = False, fx_rates: dict | None = None
 ) -> dict:
     if not isinstance(values, dict):
-        raise ValueError("物料提案字段必须是对象。")
+        raise ValueError(_i18n("物料提案字段必须是对象。"))
     normalized = {}
     for fieldname, value in values.items():
         if fieldname not in REVIEW_REPLACEMENT_FIELDS:
-            raise ValueError(f"不允许 AI 修改字段：{fieldname or '--'}。")
+            raise ValueError(_i18n("不允许 AI 修改字段：{0}。").format(fieldname or '--'))
         if fieldname in REVIEW_NUMERIC_FIELDS and not _is_blank(value):
             normalized[fieldname] = _review_number(fieldname, value)
         elif fieldname == "purchase_currency":
             currency = str(value or "").strip().upper().replace("CNY", "RMB")
             if currency not in REVIEW_CURRENCIES:
-                raise ValueError("采购币种只能是 RMB、MXN 或 USD。")
+                raise ValueError(_i18n("采购币种只能是 RMB、MXN 或 USD。"))
             normalized[fieldname] = currency
         else:
             normalized[fieldname] = str(value or "").strip()[:500]
     if not partial and not str(normalized.get("product_name") or "").strip():
-        raise ValueError("临时物料明细必须填写物料名称。")
+        raise ValueError(_i18n("临时物料明细必须填写物料名称。"))
     if str(normalized.get("unit_price_uom") or "").upper() in REVIEW_CURRENCIES:
         normalized["unit_price_uom"] = str(normalized.get("purchase_uom") or "").strip()
     if not partial and all(
@@ -1678,43 +1685,43 @@ def _normalize_review_item_values(
             if _is_blank(normalized.get("goods_value")):
                 normalized["goods_value"] = format(computed, "f")
             elif abs(Decimal(normalized["goods_value"]) - computed) > Decimal("0.02"):
-                raise ValueError("人民币货值与数量、原币单价和当前汇率不一致。")
+                raise ValueError(_i18n("人民币货值与数量、原币单价和当前汇率不一致。"))
     return normalized
 
 
 def _normalize_review_item_update_values(values: Any) -> dict:
     if not isinstance(values, dict):
-        raise ValueError("物料更新字段必须是对象。")
+        raise ValueError(_i18n("物料更新字段必须是对象。"))
     readonly = set(values) - REVIEW_ITEM_UPDATE_FIELDS
     if readonly:
-        raise ValueError(f"物料更新不能修改只读字段：{sorted(readonly)[0]}。")
+        raise ValueError(_i18n("物料更新不能修改只读字段：{0}。").format(sorted(readonly)[0]))
     return _normalize_review_item_values(values, partial=True)
 
 
 def _normalize_fee_values(values: Any, *, partial: bool = False) -> dict:
     if not isinstance(values, dict):
-        raise ValueError("费用提案字段必须是对象。")
+        raise ValueError(_i18n("费用提案字段必须是对象。"))
     allowed = {
         "logical_fee_key", "expense_category", "amount_status", "amount", "currency",
         "scope_type", "allocation_basis", "remark",
     }
     unknown = set(values) - allowed
     if unknown:
-        raise ValueError(f"不允许 AI 修改费用字段：{sorted(unknown)[0]}。")
+        raise ValueError(_i18n("不允许 AI 修改费用字段：{0}。").format(sorted(unknown)[0]))
     normalized = {key: values.get(key) for key in values}
     if "logical_fee_key" in normalized:
         fee_key = str(normalized.get("logical_fee_key") or "")
         if fee_key not in REVIEW_FEE_KEYS:
-            raise ValueError("逻辑费用不属于当前草稿允许范围。")
+            raise ValueError(_i18n("逻辑费用不属于当前草稿允许范围。"))
         normalized["logical_fee_key"] = fee_key
     elif not partial:
-        raise ValueError("费用提案缺少逻辑费用标识。")
+        raise ValueError(_i18n("费用提案缺少逻辑费用标识。"))
     if "amount" in normalized:
         normalized["amount"] = _review_number("amount", normalized["amount"])
     if "currency" in normalized:
         currency = str(normalized.get("currency") or "RMB").upper().replace("CNY", "RMB")
         if currency not in REVIEW_CURRENCIES:
-            raise ValueError("费用币种只能是 RMB、MXN 或 USD。")
+            raise ValueError(_i18n("费用币种只能是 RMB、MXN 或 USD。"))
         normalized["currency"] = currency
     for key in ("expense_category", "amount_status", "scope_type", "allocation_basis", "remark"):
         if key in normalized:
@@ -2610,7 +2617,7 @@ def validate_source_review_application(
     fx_rates: dict | None = None,
 ) -> list[dict]:
     if not isinstance(selections, list) or not isinstance(edits, dict) or len(selections) > MAX_UPDATES:
-        raise ValueError("AI 审核选择格式不合法或数量过多。")
+        raise ValueError(_i18n("AI 审核选择格式不合法或数量过多。"))
     by_id = {str(row.get("proposal_id") or ""): row for row in proposals or []}
     selected = []
     seen = set()
@@ -2621,21 +2628,21 @@ def validate_source_review_application(
             continue
         seen.add(proposal_id)
         if proposal_id not in by_id:
-            raise ValueError(f"提案 {proposal_id or '--'} 不属于当前草稿。")
+            raise ValueError(_i18n("提案 {0} 不属于当前草稿。").format(proposal_id or '--'))
         proposal = deepcopy(by_id[proposal_id])
         conflict_group = str(proposal.get("conflict_group") or "")
         if conflict_group and conflict_group in selected_groups:
-            raise ValueError("同一互斥候选组只能选择一项。")
+            raise ValueError(_i18n("同一互斥候选组只能选择一项。"))
         if conflict_group:
             selected_groups[conflict_group] = proposal_id
         proposal_edit = edits.get(proposal_id) or {}
         if proposal_edit and proposal["proposal_type"] == "logistics_reconcile":
-            raise ValueError("物流行由服务器生成，不接受浏览器修改来源或采购事实。")
+            raise ValueError(_i18n("物流行由服务器生成，不接受浏览器修改来源或采购事实。"))
         if proposal_edit:
             if proposal["proposal_type"] == "material_replace":
                 edit_rows = proposal_edit.get("replacement_rows") or []
                 if len(edit_rows) != len(proposal["payload"]["replacement_rows"]):
-                    raise ValueError("拆分物料的编辑行数与草稿不一致。")
+                    raise ValueError(_i18n("拆分物料的编辑行数与草稿不一致。"))
                 for index, row_edit in enumerate(edit_rows):
                     if (
                         any(fieldname in row_edit for fieldname in ("quantity", "unit_price", "purchase_currency"))
@@ -2659,7 +2666,7 @@ def validate_source_review_application(
                 proposal["payload"] = _normalize_fee_values(proposal["payload"])
                 if server_scope:
                     if proposal['payload'].get('scope_type') != 'ALL_ITEMS' or proposal['payload'].get('allocation_basis') != 'gross_weight':
-                        raise ValueError('项目毛重分摊规则需要重新分析资料后调整。')
+                        raise ValueError(_i18n('项目毛重分摊规则需要重新分析资料后调整。'))
                     proposal['payload']['scope_value_json'] = server_scope
         selected.append(proposal)
     return selected
@@ -2671,24 +2678,24 @@ def validate_source_review_manual_updates(
     """Validate grid edits that are independent from model proposals."""
 
     if not isinstance(updates or [], list) or len(updates or []) > MAX_UPDATES:
-        raise ValueError("人工草稿更新格式不合法或数量过多。")
+        raise ValueError(_i18n("人工草稿更新格式不合法或数量过多。"))
     items_by_name = {str(row.get("name") or ""): row for row in items or []}
     normalized = []
     seen = set()
     for raw in updates or []:
         if not isinstance(raw, dict):
-            raise ValueError("人工草稿更新必须是对象。")
+            raise ValueError(_i18n("人工草稿更新必须是对象。"))
         item_name = str(raw.get("item_name") or "").strip()
         fieldname = str(raw.get("fieldname") or "").strip()
         if item_name not in items_by_name:
-            raise ValueError(f"物料 {item_name or '--'} 不属于当前批次。")
+            raise ValueError(_i18n("物料 {0} 不属于当前批次。").format(item_name or '--'))
         if fieldname not in MANUAL_REVIEW_FIELDS:
-            raise ValueError(f"不允许人工修改字段：{fieldname or '--'}。")
+            raise ValueError(_i18n("不允许人工修改字段：{0}。").format(fieldname or '--'))
         values = _normalize_review_item_values(
             {fieldname: raw.get("value")}, partial=True
         )
         if fieldname not in values:
-            raise ValueError(f"字段 {fieldname} 的值不合法。")
+            raise ValueError(_i18n("字段 {0} 的值不合法。").format(fieldname))
         value = values[fieldname]
         reason = str(raw.get("reason") or raw.get("manual_override_reason") or "").strip()[:1000]
         item = items_by_name[item_name]
@@ -2699,10 +2706,10 @@ def validate_source_review_manual_updates(
             and not _is_effectively_missing(fieldname, item.get(fieldname), item)
             and not reason
         ):
-            raise ValueError(f"{fieldname} 已有有效采购值，修改时必须填写修改原因。")
+            raise ValueError(_i18n("{0} 已有有效采购值，修改时必须填写修改原因。").format(fieldname))
         key = (item_name, fieldname)
         if key in seen:
-            raise ValueError(f"物料 {item_name} 的字段 {fieldname} 重复提交。")
+            raise ValueError(_i18n("物料 {0} 的字段 {1} 重复提交。").format(item_name, fieldname))
         seen.add(key)
         normalized.append(
             {
@@ -2999,7 +3006,7 @@ def _review_sources(repo: Any, batch_name: str, version_name: str, *, original_s
     if payment_candidate_refs is not None and not original_sources:
         reader = getattr(repo, "list_sources_with_payment_references", None)
         if not callable(reader):
-            raise ValueError("当前资料存储不支持支付来源选择，请刷新后重试。")
+            raise ValueError(_i18n("当前资料存储不支持支付来源选择，请刷新后重试。"))
         return reader(batch_name, version_name, deepcopy(payment_candidate_refs))
     reader = getattr(repo, "list_original_sources", None) if original_sources else None
     return reader(batch_name, version_name) if callable(reader) else repo.list_sources(batch_name, version_name)
@@ -3090,7 +3097,7 @@ def start_source_ai_review(
                                   original_sources=reanalyze_original_sources)
     request_key = str(request_id or '')
     if request_key and not re.fullmatch(r'[A-Za-z0-9_-]{8,100}', request_key):
-        raise ValueError('分析请求标识不合法，请重新打开分析。')
+        raise ValueError(_i18n('分析请求标识不合法，请重新打开分析。'))
     from .logistics_settlement.model import digest
     if payment_candidate_refs is not None:
         if (not isinstance(payment_candidate_refs, list)
@@ -3099,13 +3106,13 @@ def start_source_ai_review(
                        or not all(str(row.get(key) or "") for key in ("candidate_id", "revision", "version"))
                        or str(row.get("version")) != str(context["version"])
                        for row in payment_candidate_refs)):
-            raise ValueError("支付来源选择已变化，请重新打开预览。")
+            raise ValueError(_i18n("支付来源选择已变化，请重新打开预览。"))
         payment_candidate_refs = [
             {key: str(row[key]) for key in ("candidate_id", "revision", "version")}
             for row in payment_candidate_refs
         ]
         if len({tuple(row.values()) for row in payment_candidate_refs}) != len(payment_candidate_refs):
-            raise ValueError("支付来源选择重复，请重新打开预览。")
+            raise ValueError(_i18n("支付来源选择重复，请重新打开预览。"))
     request_fingerprint = digest(context["version"], clarification_text, expected_clarification_revision,
                                  selected_source_ids, payment_candidate_refs, force, trigger_mode)
     if request_key and callable(getattr(repo, 'find_start_request', None)):
@@ -3427,7 +3434,7 @@ def _public_ai_payload(value: Any) -> Any:
 
 def _assert_run_batch(run: Any, batch_name: str) -> None:
     if str(_record_value(run, "batch") or "") != str(batch_name or ""):
-        raise ValueError("AI 草稿任务不属于当前批次。")
+        raise ValueError(_i18n("AI 草稿任务不属于当前批次。"))
 
 
 def get_source_ai_process_open_target(
@@ -3810,7 +3817,7 @@ def apply_source_ai_review(
     if str(_record_value(run, "status") or "") == "APPLIED":
         application = _load_json(_record_value(run, "draft_json"), {}).get("application") or {}
         if str(application.get("fingerprint") or "") != application_fingerprint:
-            raise ValueError("同一 AI 审核任务已以不同内容确认，不能重复提交。")
+            raise ValueError(_i18n("同一 AI 审核任务已以不同内容确认，不能重复提交。"))
         return {
             "ok": True,
             "run_id": str(run_id),
@@ -3871,7 +3878,7 @@ def apply_source_ai_review(
     from .material_ai_fee_policy import assert_allowed
     assert_allowed(selected, current_fees, context.get("effective_source") or {})
     if getattr(repo, "supports_row_selection", False):
-        raise ValueError("请刷新 AI 预览并勾选物料或费用后确认，旧的整批提案不能直接写入。")
+        raise ValueError(_i18n("请刷新 AI 预览并勾选物料或费用后确认，旧的整批提案不能直接写入。"))
     normalized_manual_updates = validate_source_review_manual_updates(
         loaded_manual_updates, items
     )
@@ -3881,7 +3888,7 @@ def apply_source_ai_review(
         if proposal.get("proposal_type") == "material_replace"
     }
     if any(update["item_name"] in replaced_targets for update in normalized_manual_updates):
-        raise ValueError("人工修改的物料行同时被拆分提案替换，请先完成拆分后再补充该行。")
+        raise ValueError(_i18n("人工修改的物料行同时被拆分提案替换，请先完成拆分后再补充该行。"))
     if not hasattr(repo, "apply_source_review"):
         raise RuntimeError("当前存储层尚未支持统一 AI 资料审核。")
     try:
@@ -4402,13 +4409,13 @@ def _ensure_local_attachment(source: dict) -> dict:
     if bound:
         if (source.get('download_required')
                 and (source.get('source_context') or {}).get('fingerprint') == bundle['context']['fingerprint']):
-            raise ValueError('当前采购支出附件尚未完成本地归档，请等待同步。')
+            raise ValueError(_i18n('当前采购支出附件尚未完成本地归档，请等待同步。'))
     if source.get("download_required"):
         process_id = str(source.get("process_instance_id") or "")
         file_id = str(source.get("file_id") or "")
         if source_id.startswith("oa:"):
             if not process_id or not file_id:
-                raise EvidenceIntegrityError("钉钉附件缺少审批实例或文件标识，请先刷新资料来源。")
+                raise EvidenceIntegrityError(_i18n("钉钉附件缺少审批实例或文件标识，请先刷新资料来源。"))
             materialized = dingtalk_approval_service.materialize_batch_dingtalk_attachment(
                 str(source.get("batch") or ""), process_id, file_id
             )
@@ -4435,7 +4442,7 @@ def _ensure_local_attachment(source: dict) -> dict:
         as_dict=True,
     ) or {}
     if str(row.get("batch") or "") != str(source.get("batch") or ""):
-        raise EvidenceIntegrityError("附件已不属于当前批次，请重新分析。")
+        raise EvidenceIntegrityError(_i18n("附件已不属于当前批次，请重新分析。"))
     if (
         source.get("download_required")
         and str(row.get("source_type") or "") == "OA"
@@ -4452,12 +4459,12 @@ def _ensure_local_attachment(source: dict) -> dict:
         selected_context = (selected_bundle or {}).get('context') or {}
         if ((source.get('source_context') or {}).get('fingerprint') != selected_context.get('fingerprint')
                 or not effective_source.attachment_allowed(row, selected_bundle, for_analysis=True)):
-            raise EvidenceIntegrityError('附件来源、当前版本或归档内容已变化，请重新分析。')
+            raise EvidenceIntegrityError(_i18n('附件来源、当前版本或归档内容已变化，请重新分析。'))
     if not row.get("file_url"):
-        raise ValueError("附件尚未保存到系统，暂时无法读取。")
+        raise ValueError(_i18n("附件尚未保存到系统，暂时无法读取。"))
     path = attachment_parse_service._resolve_source_file_path(file_url=str(row.get("file_url") or ""))
     if path.stat().st_size > MAX_SOURCE_BYTES:
-        raise ValueError("附件超过 25 MB，请压缩或拆分后重新上传。")
+        raise ValueError(_i18n("附件超过 25 MB，请压缩或拆分后重新上传。"))
     return {**source, **row, "source_id": source_id}
 
 
@@ -4875,7 +4882,7 @@ def _read_source(
             rows.extend(trusted['preview'].get('material_rows') or [])
         return candidates, {'source_ref':_source_reference(source),'structured_rows':rows,'cargo_reviews':reviews,'ai_eligible':False}
     if file_name.lower().endswith(".xls"):
-        raise ValueError("旧版 .xls 暂不支持，请另存为 .xlsx 后重新上传。")
+        raise ValueError(_i18n("旧版 .xls 暂不支持，请另存为 .xlsx 后重新上传。"))
     if file_name.lower().endswith((".xlsx", ".xlsm")):
         path = attachment_parse_service._resolve_source_file_path(
             file_url=str(attachment.get("file_url") or "")
@@ -4886,7 +4893,7 @@ def _read_source(
 
             selected_sheets = _attachment_sheet_names(attachment)
         if not selected_sheets:
-            raise ValueError("未读取到工作表，请检查文件是否损坏。")
+            raise ValueError(_i18n("未读取到工作表，请检查文件是否损坏。"))
         semantic_document = _read_excel_semantic_document(path, source, selected_sheets)
         semantic_document["ai_eligible"] = source.get('analysis_allowed') is not False
         all_candidates = []
@@ -5467,7 +5474,7 @@ def _extract_vision_observations_payload(content: str) -> list[dict]:
     elif isinstance(loaded, list):
         observations = loaded
     else:
-        raise ValueError("视觉模型返回结果不是 JSON 对象或数组。")
+        raise ValueError(_i18n("视觉模型返回结果不是 JSON 对象或数组。"))
     return [row for row in observations if isinstance(row, dict)]
 
 
@@ -5737,7 +5744,7 @@ def _assert_bound_physical_updates(proposals,manual_updates):
             if proposal.get('_purchase_value_fact') and proposal.get('source_refs'):
                 allowed.add('goods_value')
     if fields-allowed:
-        raise ValueError('采购字段缺少对应行的金额、数量、单位和币种证据，请通过逐字段预览确认。')
+        raise ValueError(_i18n('采购字段缺少对应行的金额、数量、单位和币种证据，请通过逐字段预览确认。'))
 
 
 def execute_material_ai_fill(run_id: str, *, repository: Any | None = None) -> dict:
@@ -5955,7 +5962,7 @@ def execute_material_ai_fill(run_id: str, *, repository: Any | None = None) -> d
                 for dependency in sealed:
                     key = digest({k:v for k,v in dependency.items() if k != 'fingerprint'})
                     if key in merged and merged[key] != dependency:
-                        raise EvidenceIntegrityError('下载期间来源内容已变化，请重新分析。')
+                        raise EvidenceIntegrityError(_i18n('下载期间来源内容已变化，请重新分析。'))
                     merged[key] = dependency
                 dependency_baseline = list(merged.values())
                 # Persist the local baseline before any bytes are parsed. Later
@@ -6808,7 +6815,7 @@ class FrappeMaterialAIFillRepository:
         if not record:
             return None
         if record.get('fingerprint') != fingerprint:
-            raise ValueError('此分析请求的资料或说明已变化，请重新启动分析。')
+            raise ValueError(_i18n('此分析请求的资料或说明已变化，请重新启动分析。'))
         return self.get_start_request_run(record['run_id'])
 
     def get_start_request_run(self, run_id):
@@ -6817,7 +6824,7 @@ class FrappeMaterialAIFillRepository:
             'SELECT name,status,progress_revision FROM `tabOverseas Cost Material AI Run` WHERE name=%s FOR UPDATE',
             (run_id,), as_dict=True)
         if not rows:
-            raise ValueError('原分析任务已不存在，请重新启动分析。')
+            raise ValueError(_i18n('原分析任务已不存在，请重新启动分析。'))
         return rows[0]
 
     def save_start_request(self, batch, version, request_id, fingerprint, run_id):
@@ -6874,7 +6881,7 @@ class FrappeMaterialAIFillRepository:
             (batch_name,), as_dict=True,
         )
         if not rows:
-            raise ValueError("未找到批次。")
+            raise ValueError(_i18n("未找到批次。"))
         meta = _load_json(rows[0].get("extra_json"), {})
         meta["ai_clarification"] = deepcopy(note)
         frappe.db.set_value("Overseas Cost Batch", batch_name, "extra_json", _json(meta), update_modified=False)
@@ -6896,7 +6903,7 @@ class FrappeMaterialAIFillRepository:
 
         resolved = batch_service._resolve_batch_name(batch_name)
         if not resolved:
-            raise ValueError(f"未找到批次：{batch_name}")
+            raise ValueError(_i18n("未找到批次：{0}").format(batch_name))
         batch = frappe.db.get_value(
             "Overseas Cost Batch", resolved, ["name", "current_version", "modified", "transport_mode", "confirm_status", "writeback_status"], as_dict=True
         ) or {}
@@ -6907,11 +6914,11 @@ class FrappeMaterialAIFillRepository:
             as_dict=True,
         ) or {}
         if str(version.get("batch") or "") != str(batch.get("name") or ""):
-            raise ValueError("版本不属于当前批次。")
+            raise ValueError(_i18n("版本不属于当前批次。"))
         if selected_version != str(batch.get("current_version") or ""):
-            raise ValueError("只能在当前版本生成 AI 草稿。")
+            raise ValueError(_i18n("只能在当前版本生成 AI 草稿。"))
         if str(version.get("status") or "") != "Active" or batch.get("confirm_status")=="Confirmed" or batch.get("writeback_status")=="Success":
-            raise ValueError("已确认或归档版本不能生成 AI 草稿。")
+            raise ValueError(_i18n("已确认或归档版本不能生成 AI 草稿。"))
         return {
             "batch": str(batch.get("name") or ""),
             "version": selected_version,
@@ -7094,7 +7101,7 @@ class FrappeMaterialAIFillRepository:
             as_dict=True,
         )
         if not rows:
-            raise ValueError("未找到 AI 装箱草稿任务。")
+            raise ValueError(_i18n("未找到 AI 装箱草稿任务。"))
         return frappe.get_doc("Overseas Cost Material AI Run", run_id)
 
     def claim_run(self, run_id: str, execution_token: str):
@@ -7110,7 +7117,7 @@ class FrappeMaterialAIFillRepository:
         )
         if not rows:
             frappe.db.rollback()
-            raise ValueError("未找到 AI 装箱草稿任务。")
+            raise ValueError(_i18n("未找到 AI 装箱草稿任务。"))
         current = rows[0]
         current_status = str(current.get("status") or "")
         legacy_running = current_status == "RUNNING" and not str(
@@ -7177,10 +7184,10 @@ class FrappeMaterialAIFillRepository:
         status = str(_record_value(run, "status") or "")
         if status == "APPLIED":
             frappe.db.rollback()
-            raise ValueError("已保存的 AI 草稿不能放弃。")
+            raise ValueError(_i18n("已保存的 AI 草稿不能放弃。"))
         if status not in {"QUEUED", "RUNNING", *PREVIEW_READY_STATES, "DISCARDED"}:
             frappe.db.rollback()
-            raise ValueError("AI 草稿尚未准备完成或已经处理。")
+            raise ValueError(_i18n("AI 草稿尚未准备完成或已经处理。"))
         if status != "DISCARDED":
             run.status = "DISCARDED"
             run.progress_revision = int(_record_value(run, "progress_revision") or 0) + 1
@@ -7199,7 +7206,7 @@ class FrappeMaterialAIFillRepository:
         )
         if not rows:
             frappe.db.rollback()
-            raise ValueError("未找到 AI 装箱草稿任务。")
+            raise ValueError(_i18n("未找到 AI 装箱草稿任务。"))
         values = {
             key: _json(value) if key.endswith("_json") and not isinstance(value, str) else value
             for key, value in updates.items()
@@ -7313,7 +7320,7 @@ class FrappeMaterialAIFillRepository:
         if not batch_rows or str(batch_rows[0].get("current_version") or "") != str(
             audit["version"]
         ):
-            raise ValueError("批次当前版本已变化，请重新分析资料。")
+            raise ValueError(_i18n("批次当前版本已变化，请重新分析资料。"))
         frappe.db.sql(
             "SELECT name FROM `tabOverseas Cost Version` WHERE name=%s AND batch=%s FOR UPDATE",
             (audit["version"], audit["batch"]),
@@ -7369,10 +7376,10 @@ class FrappeMaterialAIFillRepository:
                     target_name = str(proposal.get("target_item_name") or "")
                     target = frappe.get_doc("Overseas Cost Item", target_name)
                     if str(target.batch) != audit["batch"] or str(target.version) != audit["version"]:
-                        raise ValueError("拆分提案的原物料行不属于当前版本。")
+                        raise ValueError(_i18n("拆分提案的原物料行不属于当前版本。"))
                     target_snapshot = target.as_dict()
                     if not _is_unverified_placeholder_item(target_snapshot):
-                        raise ValueError("仅允许拆分明确标记为未验证占位的物料行。")
+                        raise ValueError(_i18n("仅允许拆分明确标记为未验证占位的物料行。"))
                     source_files = sorted({str(ref.get("file") or "") for ref in proposal.get("source_refs") or [] if ref.get("file")})
                     for replacement in payload.get("replacement_rows") or []:
                         row_payload = {
@@ -7548,7 +7555,7 @@ class FrappeMaterialAIFillRepository:
                 source_kind=cargo['source_kind'],source_id=cargo['source_id'],sheet_name=cargo.get('sheet') or None)
             fresh = cargo_review_for_preview(trusted,bundle['context'])
             if not fresh['complete'] or fresh != cargo:
-                raise ValueError('完整货物表已变化，请重新分析。')
+                raise ValueError(_i18n('完整货物表已变化，请重新分析。'))
             rows, evidence, complete = fresh['rows'], fresh, True
         fee_proposals = [p for p in proposals if p['proposal_type']=='fee_update']
         fees = [{**p['payload'],'source_row':p['proposal_id'],'label':p['payload'].get('expense_category')}

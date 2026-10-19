@@ -18,6 +18,13 @@ python -m overseas_costing.scripts.import_oa_logistics ^
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import argparse
 import csv
 import hashlib
@@ -294,7 +301,7 @@ def load_env_file(env_file: str | None, *, override: bool = False) -> str:
         return ""
     path = Path(path_text).expanduser()
     if not path.exists():
-        raise FileNotFoundError(f"未找到 .env 文件：{path}")
+        raise FileNotFoundError(_("未找到 .env 文件：{0}").format(path))
 
     for line in path.read_text(encoding="utf-8").splitlines():
         text = line.strip()
@@ -370,7 +377,7 @@ def resolve_approval_source_mode() -> str:
         default="api",
     ).lower()
     if mode not in ("api", "postgres"):
-        raise ValueError(f"不支持的 OA 数据源：{mode}")
+        raise ValueError(_("不支持的 OA 数据源：{0}").format(mode))
     return mode
 
 
@@ -385,7 +392,7 @@ def _assert_emergency_api_enabled() -> None:
         "OVERSEAS_COSTING_OA_EMERGENCY_API_ENABLED",
         "overseas_costing_oa_emergency_api_enabled",
     ):
-        raise PermissionError("钉钉 API 应急开关未开启，禁止消耗接口额度。")
+        raise PermissionError(_("钉钉 API 应急开关未开启，禁止消耗接口额度。"))
 
 
 def _get_postgres_approval_source() -> PostgresApprovalSource:
@@ -402,7 +409,7 @@ def _get_postgres_approval_source() -> PostgresApprovalSource:
     user = _runtime_config_value("OVERSEAS_COSTING_OA_DB_USER", "overseas_costing_oa_db_user")
     password = _runtime_config_value("OVERSEAS_COSTING_OA_DB_PASSWORD", "overseas_costing_oa_db_password")
     if not host or not database or not user or not password:
-        raise ValueError("缺少 PostgreSQL OA 数据源配置（host/name/user/password）。")
+        raise ValueError(_("缺少 PostgreSQL OA 数据源配置（host/name/user/password）。"))
     return PostgresApprovalSource(
         ApprovalSourceConfig(
             host=host,
@@ -517,7 +524,7 @@ def _resolve_api_style(api_style: str = "auto") -> str:
     if requested == "new":
         return "new"
     if requested != "auto":
-        raise ValueError(f"不支持的钉钉接口风格：{api_style}")
+        raise ValueError(_("不支持的钉钉接口风格：{0}").format(api_style))
 
     has_new = bool(
         _runtime_config_value("DINGTALK_CORP_ID", "overseas_costing_dingtalk_corp_id")
@@ -554,7 +561,7 @@ def _parse_json_text(value: Any) -> Any:
 def _parse_datetime_ms(value: str, *, end_of_day: bool = False) -> int:
     text = _clean(value)
     if not text:
-        raise ValueError("缺少时间参数。")
+        raise ValueError(_("缺少时间参数。"))
     if text.isdigit():
         number = int(text)
         return number if number > 10_000_000_000 else number * 1000
@@ -612,7 +619,7 @@ def _parse_transport_modes(value: Any, *, default: tuple[str, ...] = ("SEA",)) -
 
 def _iter_time_chunks(start_time_ms: int, end_time_ms: int, chunk_days: int = 30) -> list[tuple[int, int]]:
     if end_time_ms < start_time_ms:
-        raise ValueError("结束时间不能早于开始时间。")
+        raise ValueError(_("结束时间不能早于开始时间。"))
     if chunk_days <= 0:
         return [(start_time_ms, end_time_ms)]
 
@@ -699,7 +706,7 @@ def get_access_token(
             "overseas_costing_dingtalk_app_secret",
         )
         if not resolved_app_key or not resolved_app_secret:
-            raise ValueError("旧版钉钉接口需要 DINGTALK_APP_KEY 和 DINGTALK_APP_SECRET。")
+            raise ValueError(_("旧版钉钉接口需要 DINGTALK_APP_KEY 和 DINGTALK_APP_SECRET。"))
         query = urlencode({"appkey": resolved_app_key, "appsecret": resolved_app_secret})
         result = _request_json(f"{_oapi_url()}{LEGACY_TOKEN_PATH}?{query}", api_style="legacy")
         _ensure_dingtalk_success(result, api_style="legacy")
@@ -715,7 +722,7 @@ def get_access_token(
         "overseas_costing_dingtalk_client_secret",
     ) or _runtime_config_value("DINGTALK_APP_SECRET", "DINGTALK_APPSECRET", "overseas_costing_dingtalk_app_secret")
     if not resolved_corp_id or not resolved_client_id or not resolved_client_secret:
-        raise ValueError("新版钉钉接口需要 DINGTALK_CORP_ID、DINGTALK_CLIENT_ID、DINGTALK_CLIENT_SECRET。")
+        raise ValueError(_("新版钉钉接口需要 DINGTALK_CORP_ID、DINGTALK_CLIENT_ID、DINGTALK_CLIENT_SECRET。"))
 
     result = _request_json(
         f"{_api_url()}{NEW_TOKEN_PATH.format(corp_id=quote(resolved_corp_id, safe=''))}",
@@ -759,7 +766,7 @@ def list_process_instance_ids(
 
     process_code = _clean(process_code)
     if not process_code:
-        raise ValueError("缺少国际物流流程模板 process_code。")
+        raise ValueError(_("缺少国际物流流程模板 process_code。"))
     ids: list[str] = []
 
     resolved_list_api = _resolve_list_api_mode(list_api, api_style)
@@ -802,7 +809,7 @@ def _resolve_list_api_mode(list_api: str = "auto", api_style: str = "auto") -> s
     if requested in ("old", "new", "both"):
         return requested
     if requested != "auto":
-        raise ValueError(f"不支持的钉钉列表接口模式：{list_api}")
+        raise ValueError(_("不支持的钉钉列表接口模式：{0}").format(list_api))
     return "old" if _resolve_api_style(api_style) == "legacy" else "new"
 
 
@@ -884,7 +891,7 @@ def get_process_instance_detail(*, token: str, process_instance_id: str, api_sty
     if resolve_approval_source_mode() == "postgres":
         details = _get_postgres_approval_source().get_instances([instance_id])
         if instance_id not in details:
-            raise LookupError(f"审批实例不在成本系统数据库白名单视图中：{instance_id}")
+            raise LookupError(_("审批实例不在成本系统数据库白名单视图中：{0}").format(instance_id))
         return details[instance_id]
     resolved_api_style = _resolve_api_style(api_style)
     if resolved_api_style == "legacy":
@@ -1495,9 +1502,9 @@ def get_process_attachment_download_url(
     resolved_user_id = _clean(user_id)
     resolved_corp_id = _clean(corp_id)
     if not instance_id:
-        raise ValueError("缺少钉钉审批实例 ID。")
+        raise ValueError(_("缺少钉钉审批实例 ID。"))
     if not resolved_file_id:
-        raise ValueError("缺少钉钉附件 file_id。")
+        raise ValueError(_("缺少钉钉附件 file_id。"))
 
     resolved_api_style = _resolve_api_style(api_style)
     if resolved_api_style == "legacy":
@@ -5248,25 +5255,25 @@ def _oa_fee_sync_context(batch_name, version_name, *, edit_token=None, expected_
              from `tabOverseas Cost Batch` where name = %s for update""",
         (batch_name,), as_dict=True)
     if not rows:
-        raise ValueError("未找到当前批次。")
+        raise ValueError(_("未找到当前批次。"))
     batch = dict(rows[0])
     if edit_token is not None or expected_modified is not None:
         if not edit_token or not expected_modified:
-            raise PermissionError("缺少编辑会话或数据版本，请刷新后重试。")
+            raise PermissionError(_("缺少编辑会话或数据版本，请刷新后重试。"))
         edit_session_service.assert_editable(batch, str(frappe.session.user), str(edit_token), expected_modified)
     elif edit_session_service.lock_is_active(batch):
-        raise PermissionError("当前批次存在正在使用的编辑会话，OA 费用同步暂缓。")
+        raise PermissionError(_("当前批次存在正在使用的编辑会话，OA 费用同步暂缓。"))
     if batch.get("current_version") != version_name:
-        raise ValueError("只能更新当前成本版本的物流费用。")
+        raise ValueError(_("只能更新当前成本版本的物流费用。"))
     versions = frappe.db.sql(
         "select name, batch, status from `tabOverseas Cost Version` where name = %s for update",
         (version_name,), as_dict=True)
     if not versions or versions[0].get("batch") != batch_name:
-        raise ValueError("成本版本不属于当前批次。")
+        raise ValueError(_("成本版本不属于当前批次。"))
     if (batch.get("confirm_status") in {"Confirmed", "Partially Confirmed"}
             or batch.get("status") in {"Confirmed", "Written Back"}
             or batch.get("is_locked") in (1, True, "1") or versions[0].get("status") != "Active"):
-        raise PermissionError("已确认或归档版本不能覆盖物流费用，请先创建调整版本。")
+        raise PermissionError(_("已确认或归档版本不能覆盖物流费用，请先创建调整版本。"))
     return batch
 
 
@@ -6801,14 +6808,14 @@ def save_sea_approvals_to_erp(result: dict, *, recalculate_after_sync: bool = Tr
 def save_json_file_to_erp(input_path: str | Path) -> dict:
     path = Path(input_path).expanduser()
     if not path.exists():
-        raise FileNotFoundError(f"未找到钉钉拉取结果文件：{path}")
+        raise FileNotFoundError(_("未找到钉钉拉取结果文件：{0}").format(path))
     return save_sea_approvals_to_erp(json.loads(path.read_text(encoding="utf-8")))
 
 
 def save_json_file_to_erp_from_env() -> dict:
     input_path = _clean(os.environ.get("DINGTALK_PULL_INPUT")) or _clean(os.environ.get("DINGTALK_PULL_OUTPUT"))
     if not input_path:
-        raise ValueError("请设置 DINGTALK_PULL_INPUT 或 DINGTALK_PULL_OUTPUT。")
+        raise ValueError(_("请设置 DINGTALK_PULL_INPUT 或 DINGTALK_PULL_OUTPUT。"))
     return save_json_file_to_erp(input_path)
 
 
@@ -7008,7 +7015,7 @@ def pull_purchase_expense_approvals(
     source_mode = resolve_approval_source_mode()
     resolved_process_code = resolve_purchase_process_code(process_code)
     if not resolved_process_code:
-        raise ValueError("缺少采购支出流程模板 process_code，请配置 DINGTALK_PURCHASE_PROCESS_CODE。")
+        raise ValueError(_("缺少采购支出流程模板 process_code，请配置 DINGTALK_PURCHASE_PROCESS_CODE。"))
 
     resolved_api_style = _resolve_api_style(api_style)
     resolved_list_api = _resolve_list_api_mode(list_api, resolved_api_style)

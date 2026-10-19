@@ -6,6 +6,13 @@ SECURITY DEFINER 函数提交任务，不直接调用钉钉 API，也不直接�
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import hashlib
 import json
 import uuid
@@ -571,11 +578,11 @@ def request_batch_repair(batch_name: str, requested_by: str) -> dict:
         as_dict=True,
     )
     if not row or _text(row.get("source_type")) != "oa_logistics":
-        raise ValueError("当前批次不是钉钉国际物流来源。")
+        raise ValueError(_("当前批次不是钉钉国际物流来源。"))
     instance_id = _text(row.get("source_instance_id"))
     approval_no = _business_id(row)
     if not instance_id or not approval_no:
-        raise ValueError("当前批次缺少审批编号或流程实例 ID，需先人工核对。")
+        raise ValueError(_("当前批次缺少审批编号或流程实例 ID，需先人工核对。"))
 
     process_code = resolve_logistics_process_code()
     source = _get_approval_source()

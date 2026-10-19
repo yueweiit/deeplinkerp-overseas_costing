@@ -1,4 +1,11 @@
 """Local-only reads and background archive synchronization for logistics settlement."""
+
+try:
+    from frappe import _ as _i18n
+except ImportError:
+    def _i18n(message):
+        return message
+
 from decimal import Decimal
 import json
 import re
@@ -28,7 +35,7 @@ def installed():
 
 def store():
     if not installed():
-        raise ValueError('物流结算数据库尚未迁移')
+        raise ValueError(_i18n('物流结算数据库尚未迁移'))
     return Store.frappe()
 
 
@@ -190,7 +197,7 @@ def batch_status(batch_name, version_name=None):
     batch = ledger.get('batch', batch_name) or {}
     viewed_version = version_name or batch.get('current_version')
     if version_name and (ledger.get('version', version_name) or {}).get('batch') != batch_name:
-        raise ValueError('版本不属于当前批次')
+        raise ValueError(_i18n('版本不属于当前批次'))
     historical = bool(version_name and version_name != batch.get('current_version'))
     mappings = db.find('batch_map', batch=batch_name, limit=1)
     if not mappings:
@@ -246,21 +253,21 @@ def ensure_batch_source(db, batch_name):
         return db.get('source', mapping[0]['source_id'])
     instance = str(batch.get('source_instance_id') or '').strip()
     if not instance:
-        raise ValueError('本票缺少国际物流审批实例，请先补齐原单身份')
+        raise ValueError(_i18n('本票缺少国际物流审批实例，请先补齐原单身份'))
     corp = str(batch.get('source_corp_id') or '').strip()
     if not corp:
         corp = str(frappe.conf.get('overseas_costing_settlement_legacy_corp_id') or frappe.conf.get('overseas_costing_dingtalk_corp_id') or '')
     if not corp:
-        raise ValueError('本票缺少企业信息，无法安全确定国际物流原单')
+        raise ValueError(_i18n('本票缺少企业信息，无法安全确定国际物流原单'))
     source = db.get('source', digest(corp, instance))
     if not source:
         rows = archive().get_sources([(corp, instance)])
         exact = [r for r in rows if r.get('corp_id') == corp and r.get('process_instance_id') == instance]
         if len(exact) != 1:
-            raise ValueError('上游归档尚未提供本票国际物流审批，请等待归档补齐后重试')
+            raise ValueError(_i18n('上游归档尚未提供本票国际物流审批，请等待归档补齐后重试'))
         raw = exact[0]
         if parse_source(raw, logistics_codes=logistics_codes())['kind'] != 'logistics':
-            raise ValueError('本票原单不是国际物流流程，需核对批次来源')
+            raise ValueError(_i18n('本票原单不是国际物流流程，需核对批次来源'))
         try:
             raw = prepare_source(raw)
         except Exception as exc:
@@ -269,18 +276,18 @@ def ensure_batch_source(db, batch_name):
             raw = {**raw, 'settlement_fee_issues': ['本票附件待处理：' + str(exc)[:300]]}
         source = db.ingest(parse_source(raw, logistics_codes=logistics_codes()))
     if source['kind'] != 'logistics' or source['invalid']:
-        raise ValueError('本票国际物流来源已失效或类型不符')
+        raise ValueError(_i18n('本票国际物流来源已失效或类型不符'))
     with db.atomic():
         db.get('state', 'match_lock', lock=True)
         current_batch = ledger.get('batch', batch_name, lock=True) or {}
         if current_batch.get('source_instance_id') != instance or current_batch.get('source_corp_id') not in (None, '', corp):
-            raise ValueError('批次原单已变化，请刷新后重试')
+            raise ValueError(_i18n('批次原单已变化，请刷新后重试'))
         mappings = db.find('batch_map', source_id=source['id'])
         if mappings and mappings[0]['batch'] != batch_name:
-            raise ValueError('该国际物流已对应其他批次，请先处理重复批次')
+            raise ValueError(_i18n('该国际物流已对应其他批次，请先处理重复批次'))
         existing = db.find('batch_map', batch=batch_name)
         if existing and existing[0]['source_id'] != source['id']:
-            raise ValueError('本票来源映射已变化，请刷新')
+            raise ValueError(_i18n('本票来源映射已变化，请刷新'))
         if not existing:
             db.insert('batch_map', {'id': source['id'], 'source_id': source['id'], 'batch': batch_name, 'data': '{}'})
         ledger.put('batch', batch_name, {'source_corp_id': corp})
@@ -294,13 +301,13 @@ def start_batch_matching(batch_name, version_name=None):
     db = store()
     batch = FrappeLedger().get('batch', batch_name) or {}
     if version_name and version_name != batch.get('current_version'):
-        raise ValueError('历史版本只读，请返回当前版本匹配')
+        raise ValueError(_i18n('历史版本只读，请返回当前版本匹配'))
     source = ensure_batch_source(db, batch_name)
     with db.atomic():
         db.get('state', 'match_lock', lock=True)
         batch = FrappeLedger().get('batch', batch_name, lock=True) or {}
         if version_name and version_name != batch.get('current_version'):
-            raise ValueError('成本版本已变化，请刷新当前版本后匹配')
+            raise ValueError(_i18n('成本版本已变化，请刷新当前版本后匹配'))
         job = batch_matching.start(db, source['id'], frappe.session.user)
     if job.get('status') == 'queued':
         frappe.enqueue('overseas_costing.services.logistics_settlement.runtime.run_batch_matching', queue='long',
@@ -310,15 +317,15 @@ def start_batch_matching(batch_name, version_name=None):
 
 def run_payment_rule_matching(batch_name,version_name=None):
     """Refresh one batch's deterministic local candidates without a model call."""
-    if not freight_enabled():raise ValueError('当前模式不支持付款明细匹配')
+    if not freight_enabled():raise ValueError(_i18n('当前模式不支持付款明细匹配'))
     from . import freight_matching
     db=store();ledger=FrappeLedger();batch=ledger.get('batch',batch_name) or {}
-    if version_name and version_name!=batch.get('current_version'):raise ValueError('历史版本只读，请返回当前版本匹配')
+    if version_name and version_name!=batch.get('current_version'):raise ValueError(_i18n('历史版本只读，请返回当前版本匹配'))
     source=ensure_batch_source(db,batch_name)
     with db.atomic():
         db.get('state','match_lock',lock=True)
         current=ledger.get('batch',batch_name,lock=True) or {}
-        if version_name and version_name!=current.get('current_version'):raise ValueError('成本版本已变化，请刷新当前版本后匹配')
+        if version_name and version_name!=current.get('current_version'):raise ValueError(_i18n('成本版本已变化，请刷新当前版本后匹配'))
         job=freight_matching.record_rule_pass(db,source['id'],frappe.session.user)
     db.commit()
     from .freight_runtime import candidate_view
@@ -327,15 +334,15 @@ def run_payment_rule_matching(batch_name,version_name=None):
 
 
 def start_payment_ai_matching(batch_name,version_name=None,hints=None,offset=0,limit=30):
-    if not freight_enabled():raise ValueError('当前模式不支持付款明细 AI 匹配')
+    if not freight_enabled():raise ValueError(_i18n('当前模式不支持付款明细 AI 匹配'))
     from . import payment_ai_matching
     db=store();ledger=FrappeLedger();batch=ledger.get('batch',batch_name) or {};current=batch.get('current_version')
     version_name=version_name or current
-    if version_name!=current:raise ValueError('历史版本只读，请返回当前版本匹配')
+    if version_name!=current:raise ValueError(_i18n('历史版本只读，请返回当前版本匹配'))
     source=ensure_batch_source(db,batch_name)
     with db.atomic():
         if (ledger.get('batch',batch_name,lock=True) or {}).get('current_version')!=version_name:
-            raise ValueError('成本版本已变化，请刷新当前版本后匹配')
+            raise ValueError(_i18n('成本版本已变化，请刷新当前版本后匹配'))
         job=payment_ai_matching.start(db,source['id'],batch_name,version_name,frappe.session.user,hints=hints,offset=offset,limit=limit)
     if job.get('status')=='queued' and job.get('enqueue_required'):
         frappe.enqueue('overseas_costing.services.logistics_settlement.runtime.run_payment_ai_matching',queue='long',timeout=600,
@@ -366,7 +373,7 @@ def run_batch_matching(batch_matching_job_id):
     config['timeout'] = min(120, max(60, float(config.get('timeout') or 60)))
     def call_model(messages):
         if not config.get('api_key'):
-            raise ValueError('未配置 DeepSeek API 密钥，规则候选已保存，可人工搜索关联')
+            raise ValueError(_i18n('未配置 DeepSeek API 密钥，规则候选已保存，可人工搜索关联'))
         return allocation_service._extract_json_object(allocation_service._call_chat_completions(config, messages))
     return batch_matching.run(store(), batch_matching_job_id, call_model, config.get('model', ''))
 
@@ -376,7 +383,7 @@ def run_payment_ai_matching(payment_ai_job_id):
     from overseas_costing.services import allocation_service
     config=allocation_service._ai_config();config['timeout']=min(120,max(60,float(config.get('timeout') or 60)))
     def call_model(messages):
-        if not config.get('api_key'):raise ValueError('未配置 DeepSeek API 密钥')
+        if not config.get('api_key'):raise ValueError(_i18n('未配置 DeepSeek API 密钥'))
         return allocation_service._extract_json_object(allocation_service._call_chat_completions(config,messages))
     return payment_ai_matching.run(store(),payment_ai_job_id,call_model,config.get('model',''),
         current_version=lambda batch,lock=False:(FrappeLedger().get('batch',batch,lock=lock) or {}).get('current_version'))
@@ -641,9 +648,9 @@ def backfill_comment_waybills(
             'summary': summary,
         }
     if ready and not expected_plan_hash:
-        raise ValueError('请先生成运单号回填清单并传入 plan_hash。')
+        raise ValueError(_i18n('请先生成运单号回填清单并传入 plan_hash。'))
     if expected_plan_hash and expected_plan_hash != preview['plan_hash']:
-        raise ValueError('运单号回填清单已变化，请重新预览。')
+        raise ValueError(_i18n('运单号回填清单已变化，请重新预览。'))
 
     applied = []
     for planned in rows:
@@ -695,7 +702,7 @@ def ensure_batch(db, source):
     legacy_corp = str(frappe.conf.get('overseas_costing_settlement_legacy_corp_id') or frappe.conf.get('overseas_costing_dingtalk_corp_id') or '')
     eligible = exact or [b for b in matches if not b.get('source_corp_id') and legacy_corp == source['corp']]
     if len(eligible) > 1 or (matches and len(eligible) != 1):
-        raise ValueError('国际物流存在重复批次或旧批次缺企业信息；请核对批次映射及历史企业配置')
+        raise ValueError(_i18n('国际物流存在重复批次或旧批次缺企业信息；请核对批次映射及历史企业配置'))
     if eligible:
         batch = eligible[0]
         ledger.put('batch', batch['name'], {'source_corp_id': source['corp']})
@@ -801,7 +808,7 @@ def run_ai_matching(matching_ai_job_id):
     config['timeout'] = min(120, max(60, float(config.get('timeout') or 60)))
     def call_model(messages):
         if not config.get('api_key'):
-            raise ValueError('未配置 DeepSeek API 密钥')
+            raise ValueError(_i18n('未配置 DeepSeek API 密钥'))
         return allocation_service._extract_json_object(allocation_service._call_chat_completions(config, messages))
     return ai_matching.run(store(), matching_ai_job_id, call_model, config.get('model', ''))
 
@@ -933,7 +940,7 @@ def guard_legacy_item_write(batch_name, version_name):
     batch = FrappeLedger().get('batch', batch_name, lock=True)
     version = FrappeLedger().get('version', version_name, lock=True)
     if not version or version.get('status') == 'Confirmed' or batch.get('writeback_status') == 'Success' or version_name != batch.get('current_version'):
-        raise ValueError('采购支出关联批次的已确认版本保留历史，请在当前调整草稿补充资料')
+        raise ValueError(_i18n('采购支出关联批次的已确认版本保留历史，请在当前调整草稿补充资料'))
 
 
 def prepare_source(raw):
@@ -949,7 +956,7 @@ def prepare_source(raw):
     def read(manifest):
         nonlocal client
         if not manifest.get('bucket') or not manifest.get('object_key'):
-            raise ValueError('归档缺少明确 bucket/object_key，不能推测附件地址')
+            raise ValueError(_i18n('归档缺少明确 bucket/object_key，不能推测附件地址'))
         if client is None:
             client = _get_minio_archive_client().client
         content, _ = MinioArchiveClient(bucket=manifest['bucket'], client=client).download(manifest)

@@ -1,7 +1,7 @@
 frappe.ui.form.on("Overseas Cost ERP Settings", {
     refresh(frm) {
         toggle_push_mode_fields(frm);
-        frm.add_custom_button("测试连接", () => {
+        frm.add_custom_button(__("测试连接"), () => {
             frm.save().then(() => {
                 frappe.call({
                     method: "overseas_costing.services.erp_client.check_erp_connection",
@@ -11,7 +11,7 @@ frappe.ui.form.on("Overseas Cost ERP Settings", {
                         const result = r.message || {};
                         const indicator = result.ok ? "green" : "red";
                         frappe.msgprint({
-                            title: "ERP 连接检查",
+                            title: __("ERP 连接检查"),
                             indicator,
                             message: result.message || "没有返回检查结果。",
                         });

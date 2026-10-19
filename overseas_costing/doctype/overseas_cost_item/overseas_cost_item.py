@@ -11,6 +11,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 from frappe.model.document import Document
 
 from overseas_costing.constants import TRANSPORT_MODES
@@ -24,7 +31,7 @@ class OverseasCostItem(Document):
         if not self.flags.get('ignore_permissions'):
             from overseas_costing.services.calculate_service import _server_metadata_fields
             if 'settlement_cargo' in _server_metadata_fields(getattr(self, 'extra_json', None)):
-                raise ValueError('已采用物流结算采购支出的物料不能直接删除，请更正来源明细或关联。')
+                raise ValueError(_('已采用物流结算采购支出的物料不能直接删除，请更正来源明细或关联。'))
 
     def validate(self) -> None:
         # Frappe reserves flags from client document payloads. Existing validated
@@ -42,14 +49,14 @@ class OverseasCostItem(Document):
             if ('settlement_cargo' in _server_metadata_fields(getattr(previous, 'extra_json', None))
                     and any(getattr(previous, field, None) != getattr(self, field, None)
                             for field in ('material_code', 'product_name', 'spec_model'))):
-                raise ValueError('物料身份已采用物流结算采购支出，请更正来源后重新应用。')
+                raise ValueError(_('物料身份已采用物流结算采购支出，请更正来源后重新应用。'))
             if _server_metadata_fields(getattr(previous, "extra_json", None)) and any(
                 getattr(previous, field, None) != getattr(self, field, None) for field in ("batch", "version")
             ):
-                raise ValueError("服务器来源物料不能通过普通保存迁移到其他批次或版本。")
+                raise ValueError(_("服务器来源物料不能通过普通保存迁移到其他批次或版本。"))
         require_value(self.batch, "所属批次")
         require_value(self.version, "所属版本")
         if not self.material_code and not self.product_name:
-            raise ValueError("物料编码和产品名称至少要有一个")
+            raise ValueError(_("物料编码和产品名称至少要有一个"))
         if self.transport_mode:
             require_in(self.transport_mode, TRANSPORT_MODES, "运输方式")

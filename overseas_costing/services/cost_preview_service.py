@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 from copy import deepcopy
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import hashlib
@@ -745,9 +752,9 @@ def preview_comprehensive_cost(batch_name: str, version_name: str | None = None)
         return {"ok": True, "dry_run": True, "read_only": True, "batch_name": batch_name}
     version = version_name or frappe.db.get_value("Overseas Cost Batch", batch_name, "current_version")
     if not version:
-        raise ValueError("当前批次没有可用成本版本。")
+        raise ValueError(_("当前批次没有可用成本版本。"))
     if frappe.db.get_value("Overseas Cost Version", version, "batch") != batch_name:
-        raise ValueError("成本版本不属于当前批次。")
+        raise ValueError(_("成本版本不属于当前批次。"))
     transport_mode = frappe.db.get_value("Overseas Cost Batch", batch_name, "transport_mode") or ""
     raw_items = frappe.get_all(
         "Overseas Cost Item",
@@ -978,9 +985,9 @@ def assert_persistable_item_updates(result: dict) -> None:
 
     for row in result.get("item_updates") or []:
         if row.get("freight_alloc_mxn") is None or row.get("total_logistics_mxn") is None:
-            raise ValueError("未取得可用的人民币兑比索汇率，本次试算未保存。")
+            raise ValueError(_("未取得可用的人民币兑比索汇率，本次试算未保存。"))
         if row.get("alloc_price_mxn") is None:
-            raise ValueError("物料缺少可用数量，无法保存比索分摊单价。")
+            raise ValueError(_("物料缺少可用数量，无法保存比索分摊单价。"))
 
 
 class FrappeCostRepository:
@@ -989,10 +996,10 @@ class FrappeCostRepository:
 
         name = batch_service._resolve_batch_name(batch_name)
         if not name:
-            raise ValueError("未找到当前批次。")
+            raise ValueError(_("未找到当前批次。"))
         version = version_name or frappe.db.get_value("Overseas Cost Batch", name, "current_version")
         if not version:
-            raise ValueError("当前批次没有可用成本版本。")
+            raise ValueError(_("当前批次没有可用成本版本。"))
         version_row = frappe.db.get_value(
             "Overseas Cost Version",
             version,
@@ -1000,7 +1007,7 @@ class FrappeCostRepository:
             as_dict=True,
         ) or {}
         if str(version_row.get("batch") or "") != str(name):
-            raise ValueError("成本版本不属于当前批次。")
+            raise ValueError(_("成本版本不属于当前批次。"))
         resolution = fx_rate_service.resolve_costing_fx(
             version_fx=version_row,
             calculation_date=frappe.utils.nowdate(),
@@ -1009,9 +1016,9 @@ class FrappeCostRepository:
 
     def persist_fx_resolution(self, context, resolution):
         if str(resolution.get("batch_name") or "") != str(context.get("batch") or ""):
-            raise ValueError("试算汇率所属批次已变化，请重新预览。")
+            raise ValueError(_("试算汇率所属批次已变化，请重新预览。"))
         if str(resolution.get("version_name") or "") != str(context.get("version") or ""):
-            raise ValueError("试算汇率所属版本已变化，请重新预览。")
+            raise ValueError(_("试算汇率所属版本已变化，请重新预览。"))
         session_user = getattr(getattr(frappe, "session", None), "user", None)
         return fx_rate_service.persist_costing_fx_resolution(
             resolution=resolution,
@@ -1026,7 +1033,7 @@ class FrappeCostRepository:
         from overseas_costing.services import batch_service, edit_session_service
         name = batch_service._resolve_batch_name(batch_name)
         if not name:
-            raise ValueError("未找到当前批次。")
+            raise ValueError(_("未找到当前批次。"))
         from overseas_costing.services.logistics_settlement.runtime import calculation_blockers
         blockers = calculation_blockers(name, version_name, for_calculation=True, lock=True)
         if blockers:
@@ -1042,7 +1049,7 @@ class FrappeCostRepository:
         version_row = frappe.db.get_value("Overseas Cost Version", version,
             ["name", "batch", "status", "modified", "fx_usd_to_rmb", "fx_rmb_to_mxn", "extra_json"], as_dict=True) or {}
         if version_row.get("batch") != name:
-            raise ValueError("成本版本不属于当前批次。")
+            raise ValueError(_("成本版本不属于当前批次。"))
         for doctype in ("Overseas Cost Item", "Overseas Cost Allocation Rule"):
             frappe.db.sql(f"SELECT name FROM `tab{doctype}` WHERE batch=%s AND version=%s ORDER BY name FOR UPDATE", (name, version))
         items = frappe.get_all("Overseas Cost Item", filters={"batch": name, "version": version, "is_excluded": 0},
@@ -1052,7 +1059,7 @@ class FrappeCostRepository:
             raise ValueError(invalid.get("message") or "当前批次审批已被排除，不能计算。")
         mode = fee_service.resolve_transport_mode(batch.get("transport_mode"))
         if not mode:
-            raise ValueError("请先确认批次运输方式。")
+            raise ValueError(_("请先确认批次运输方式。"))
         items, source_context = project_batch_items(items,name,version)
         from overseas_costing.services.material_packing_group_service import groups_from_version, project_packing_groups
         items = project_packing_groups(items, groups_from_version(version_row))['items']
@@ -1146,9 +1153,9 @@ def calculate_comprehensive_cost(batch_name, version_name=None, *, edit_token=No
         context, items, fees, fx = repo.lock_and_load(batch_name, version_name, edit_token=edit_token,
             expected_modified=expected_modified, trusted=trusted)
         if context.get("current_version") != context["version"]:
-            raise ValueError("只能试算当前版本，请刷新批次。")
+            raise ValueError(_("只能试算当前版本，请刷新批次。"))
         if context.get("version_status") in {"Confirmed", "Archived"} or context.get("confirm_status") == "Confirmed" or context.get("is_locked"):
-            raise PermissionError("已确认或归档版本不能覆盖，请先创建调整版本。")
+            raise PermissionError(_("已确认或归档版本不能覆盖，请先创建调整版本。"))
         from overseas_costing.services.material_input_service import assert_complete_purchase_values
         assert_complete_purchase_values(items)
         persister = getattr(repo, "persist_fx_resolution", None)

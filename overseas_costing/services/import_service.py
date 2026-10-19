@@ -10,6 +10,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import json
 import os
 import re
@@ -1397,7 +1404,7 @@ def _get_minio_archive_client() -> MinioArchiveClient:
         "overseas_costing_oa_minio_secret_key",
     )
     if not endpoint or not bucket or not access_key or not secret_key:
-        raise ValueError("缺少 MinIO OA 归档读取配置（endpoint/bucket/access key/secret key）。")
+        raise ValueError(_("缺少 MinIO OA 归档读取配置（endpoint/bucket/access key/secret key）。"))
     client = Minio(
         endpoint,
         access_key=access_key,
@@ -2712,16 +2719,16 @@ def _resolve_excel_file_path(*, file_path: str | None = None, file_url: str | No
         path = Path(file_path).expanduser()
         if path.exists():
             return _ensure_supported_excel_path(path)
-        raise FileNotFoundError(f"未找到 Excel 文件：{file_path}")
+        raise FileNotFoundError(_("未找到 Excel 文件：{0}").format(file_path))
 
     if not file_url:
-        raise ValueError("请传入 file_path 或 file_url。")
+        raise ValueError(_("请传入 file_path 或 file_url。"))
 
     if frappe is None:
         path = Path(file_url).expanduser()
         if path.exists():
             return _ensure_supported_excel_path(path)
-        raise FileNotFoundError(f"未连接 Frappe，且本地路径不存在：{file_url}")
+        raise FileNotFoundError(_("未连接 Frappe，且本地路径不存在：{0}").format(file_url))
 
     resolved_file_url = file_url
     if not resolved_file_url.startswith("/"):
@@ -2739,20 +2746,20 @@ def _resolve_excel_file_path(*, file_path: str | None = None, file_url: str | No
     path = Path(resolved_file_url).expanduser()
     if path.exists():
         return _ensure_supported_excel_path(path)
-    raise FileNotFoundError(f"无法解析 Excel 文件路径：{file_url}")
+    raise FileNotFoundError(_("无法解析 Excel 文件路径：{0}").format(file_url))
 
 
 def _ensure_supported_excel_path(path: Path) -> Path:
     suffix = path.suffix.lower()
     if suffix not in {".xlsx", ".xlsm"}:
-        raise ValueError("当前仅支持 .xlsx / .xlsm 格式的 Excel 文件。")
+        raise ValueError(_("当前仅支持 .xlsx / .xlsm 格式的 Excel 文件。"))
     return path
 
 
 def _fetch_dingtalk_attachment_content(download_uri: str, headers: dict | None = None) -> tuple[bytes, dict]:
     url = str(download_uri or "").strip()
     if not url:
-        raise ValueError("缺少钉钉附件下载地址。")
+        raise ValueError(_("缺少钉钉附件下载地址。"))
     request_headers = {"User-Agent": "overseas-costing/1.0"}
     if isinstance(headers, dict):
         request_headers.update({str(key): str(value) for key, value in headers.items() if value not in (None, "")})
@@ -2882,7 +2889,7 @@ def _deduplicate_private_file_path(path: Path) -> Path:
         candidate = path.with_name(f"{stem}-{index}{suffix}")
         if not candidate.exists():
             return candidate
-    raise FileExistsError(f"无法生成不重名的附件文件名：{path.name}")
+    raise FileExistsError(_("无法生成不重名的附件文件名：{0}").format(path.name))
 
 
 def _get_doc_value(doc, fieldname: str, default: str = ""):
@@ -5650,7 +5657,7 @@ def _build_attachment_price_provenance(
         _settlement_blocks_write(attachment_policy)
         or _approval_reference_is_excluded(str(attachment_row.get("batch") or ""), attachment_policy)
     ):
-        raise ValueError("该附件来自已排除审批，仅供审计查看和下载，不能写入成本数据。")
+        raise ValueError(_("该附件来自已排除审批，仅供审计查看和下载，不能写入成本数据。"))
 
     resolved_file_url = str(attachment_row.get("file_url") or file_url or "").strip()
     source_doc_no = str(attachment_row.get("source_doc_no") or resolved_file_url or resolved_attachment_name).strip()
@@ -7556,7 +7563,7 @@ def preview_linked_purchase_expense_oa_from_env() -> dict:
 
     batch_name = str(os.environ.get("OVERSEAS_COST_BATCH") or os.environ.get("OVERSEAS_COST_BATCH_NAME") or "").strip()
     if not batch_name:
-        raise ValueError("请设置 OVERSEAS_COST_BATCH。")
+        raise ValueError(_("请设置 OVERSEAS_COST_BATCH。"))
     return preview_linked_purchase_expense_oa(
         batch_name=batch_name,
         version_name=str(os.environ.get("OVERSEAS_COST_VERSION") or "").strip() or None,

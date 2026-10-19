@@ -30,7 +30,7 @@ class RecordSession {
   snapshot(){const payload=clone(this.payload);payload.rows=payload.rows.filter(row=>row.some(value=>!blank(value)));return payload;}
   async save(call){
     if(this.saving)return null;
-    if(!this.title.trim())throw new Error('请填写记录名称。');
+    if(!this.title.trim())throw new Error(ocTranslate("请填写记录名称。"));
     const payload_json=JSON.stringify(this.snapshot());const title=this.title.trim();
     const signature=JSON.stringify([title,payload_json,this.name,this.modified]);
     if(!this.pendingSave||this.pendingSave.signature!==signature)this.pendingSave={signature,request_id:uuid()};
@@ -38,11 +38,11 @@ class RecordSession {
     this.saving=true;
     try{
       const response=await call('save_record',{title,payload_json,name:this.name,modified:this.modified,request_id});
-      if(!response||!response.ok||!response.record)throw new Error('保存失败，请重试。');
+      if(!response||!response.ok||!response.record)throw new Error(ocTranslate("保存失败，请重试。"));
       if(this.generation!==generation)return null;
       if(response.record.payload && (canonicalPayload(response.record.payload)!==canonicalPayload(JSON.parse(payload_json)) || response.record.title!=null && response.record.title.trim()!==title)){
         this.result=null;this.dirty=true;
-        throw new Error('保存返回的数据与本次提交不一致，当前编辑已保留。请重新读取团队记录核对后再保存。');
+        throw new Error(ocTranslate("保存返回的数据与本次提交不一致，当前编辑已保留。请重新读取团队记录核对后再保存。"));
       }
       this.name=response.record.name;this.modified=response.record.modified;this.pendingSave=null;
       if(this.revision===revision){this.result=response.record.result||calculate(this.payload);this.dirty=false;}

@@ -5,6 +5,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import json
 
 try:
@@ -201,7 +208,7 @@ def save_profit_inputs(batch_name: str, version_name: str | None, rows_payload) 
     if isinstance(rows_payload, str):
         rows_payload = json.loads(rows_payload or "[]")
     if not isinstance(rows_payload, list):
-        raise ValueError("rows_payload 必须是数组。")
+        raise ValueError(_("rows_payload 必须是数组。"))
 
     if _frappe is None:
         rows, summary = calculate_profit_rows(rows_payload)

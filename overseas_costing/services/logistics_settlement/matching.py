@@ -1,4 +1,11 @@
 """证据明确的候选匹配与双向唯一关联；金额不是匹配条件。"""
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 from .model import digest, dumps
 
 
@@ -79,7 +86,7 @@ def reject_candidate(store, candidate_id, revision, actor, reason):
         store.get('state', 'match_lock', lock=True)
         candidate = store.get('candidate', candidate_id, lock=True)
         if not candidate or candidate['revision'] != revision or candidate['status'] == 'confirmed':
-            raise ValueError('候选已变化，请刷新')
+            raise ValueError(_('候选已变化，请刷新'))
         candidate.update(status='rejected', rejected_by=actor, rejection_reason=reason)
         save_candidate(store, candidate)
         store.audit('', 'reject_candidate', actor, candidate_id=candidate_id, reason=reason)
@@ -89,9 +96,9 @@ def validate_sources(store, candidate):
     logistics = store.get('source', candidate['logistics_id'])
     expense = store.get('source', candidate['expense_id'])
     if logistics['snapshot'] != candidate['logistics_snapshot'] or expense['snapshot'] != candidate['expense_snapshot']:
-        raise ValueError('来源已变化，请重新预览')
+        raise ValueError(_('来源已变化，请重新预览'))
     if expense['invalid'] or logistics['invalid'] or expense['kind'] != 'expense' or logistics['kind'] != 'logistics' or expense['corp'] != logistics['corp']:
-        raise ValueError('来源无效或业务类型不符')
+        raise ValueError(_('来源无效或业务类型不符'))
     return logistics, expense
 
 
@@ -100,7 +107,7 @@ def confirm_candidate(store, candidate_id, revision, actor, *, resolve=False, re
         store.get('state', 'match_lock', lock=True)
         candidate = store.get('candidate', candidate_id, lock=True)
         if not candidate or candidate['revision'] != revision:
-            raise ValueError('匹配预览已变化，请刷新')
+            raise ValueError(_('匹配预览已变化，请刷新'))
         for id in sorted([candidate['logistics_id'], candidate['expense_id']]):
             store.get('source', id, lock=True)
         logistics = store.get('source', candidate['logistics_id'])
@@ -110,16 +117,16 @@ def confirm_candidate(store, candidate_id, revision, actor, *, resolve=False, re
             return existing[0]
         allowed = candidate['status'] == 'pending' or (resolve and reason.strip() and candidate['status'] == 'conflict')
         if not allowed or existing or store.find('binding', logistics_id=logistics['id']):
-            raise ValueError('关联冲突：每票物流和物流支出只能各关联一次')
+            raise ValueError(_('关联冲突：每票物流和物流支出只能各关联一次'))
         validate_sources(store, candidate)
         current_targets = eligible_logistics(store, expense)
         if candidate['method'] not in {'manual', 'deepseek'} and logistics['id'] not in current_targets:
-            raise ValueError('匹配标识已变化，请重新匹配')
+            raise ValueError(_('匹配标识已变化，请重新匹配'))
         ambiguous = len(current_targets) > 1 or any(s['id'] != expense['id'] for s in related_expenses(store, logistics)) or any(c['expense_id'] != expense['id'] and c['status'] in {'pending','conflict'} for c in store.find('candidate', logistics_id=logistics['id']))
         ambiguous = ambiguous or any(c['logistics_id'] != logistics['id'] and c['status'] in {'pending', 'conflict'}
                                      for c in store.find('candidate', expense_id=expense['id']))
         if ambiguous and not (resolve and reason.strip()):
-            raise ValueError('关联冲突：新增了其他支出候选，请逐项核对后确认')
+            raise ValueError(_('关联冲突：新增了其他支出候选，请逐项核对后确认'))
         binding = {'id': digest('binding', logistics['id']), 'logistics_id': logistics['id'], 'expense_id': expense['id'], 'actor': actor, 'revision': 1, 'status': 'bound', 'application_status': 'pending', 'candidate_id': candidate_id}
         store.insert('binding', {'id': binding['id'], 'logistics_id': logistics['id'], 'expense_id': expense['id'], 'data': dumps(binding)})
         candidate['status'] = 'confirmed'
@@ -130,20 +137,20 @@ def confirm_candidate(store, candidate_id, revision, actor, *, resolve=False, re
 
 def replace_binding(store, binding_id, expected_revision, candidate_id, candidate_revision, actor, reason, *, on_replace=None):
     if not reason.strip():
-        raise ValueError('更正关联必须填写原因')
+        raise ValueError(_('更正关联必须填写原因'))
     with store.atomic():
         store.get('state', 'match_lock', lock=True)
         binding = store.get('binding', binding_id, lock=True)
         candidate = store.get('candidate', candidate_id, lock=True)
         if not binding or binding['revision'] != int(expected_revision) or not candidate or candidate['revision'] != candidate_revision:
-            raise ValueError('关联或候选已变化，请刷新')
+            raise ValueError(_('关联或候选已变化，请刷新'))
         if candidate['logistics_id'] != binding['logistics_id']:
-            raise ValueError('候选不属于当前物流')
+            raise ValueError(_('候选不属于当前物流'))
         for id in sorted({binding['logistics_id'], binding['expense_id'], candidate['expense_id']}):
             store.get('source', id, lock=True)
         validate_sources(store, candidate)
         if store.find('binding', expense_id=candidate['expense_id']):
-            raise ValueError('新采购支出已经被占用')
+            raise ValueError(_('新采购支出已经被占用'))
         old = dict(binding)
         binding.update(expense_id=candidate['expense_id'], revision=binding['revision'] + 1,
                        candidate_id=candidate_id, actor=actor, application_status='pending', coverage=None, negative_confirmed=False, source_snapshot=None, applied_hash=None)
@@ -206,7 +213,7 @@ def configure_binding(store, binding, *, coverage=None, negative_confirmed=None,
     expense = store.get('source', binding['expense_id'], lock=True)
     if coverage is not None:
         if not isinstance(coverage, list) or not coverage or set(coverage) - SCOPES:
-            raise ValueError('费用范围无效')
+            raise ValueError(_('费用范围无效'))
         values = sorted(set(coverage))
         if values != binding.get('coverage') or expense['cost_hash'] != binding.get('coverage_cost_hash'):
             changed['coverage'] = values

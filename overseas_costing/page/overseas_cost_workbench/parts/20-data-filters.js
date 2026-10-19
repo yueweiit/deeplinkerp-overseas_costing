@@ -123,7 +123,7 @@
         if (!this.isWorkbenchReleaseMonitorCurrent(generation)) return { cancelled: true };
         const result = payload.message || payload || {};
         const releaseId = String(result.release_id || "").trim();
-        if (!releaseId) throw new Error("发布标识为空");
+        if (!releaseId) throw new Error(ocTranslate("发布标识为空"));
         if (this.adoptWorkbenchRelease(releaseId)) {
           return { changed: true, releaseId, reloading: true };
         }
@@ -262,9 +262,9 @@
     this.dismissDeploymentErrorDialogs();
     if (!this._releaseDialog) {
       const dialog = new frappe.ui.Dialog({
-        title: "系统版本更新",
+        title: ocTranslate("系统版本更新"),
         fields: [{ fieldtype: "HTML", fieldname: "release_status" }],
-        primary_action_label: "立即刷新",
+        primary_action_label: ocTranslate("立即刷新"),
         primary_action: () => window.location.reload(),
       });
       dialog.show();
@@ -502,7 +502,7 @@
     this.resetFilterValues();
     this.moreFiltersOpen = false;
     this.$root.find("[data-area='more-filters']").prop("hidden", true);
-    this.$root.find("[data-action='toggle-more-filters']").attr("aria-expanded", "false").text("更多筛选 +");
+    this.$root.find("[data-action='toggle-more-filters']").attr("aria-expanded", "false").text(ocTranslate("更多筛选 +"));
     this.resetBatchScopeState();
     this.batchItems = {};
     this.loadBatches();
@@ -690,8 +690,8 @@
       .prop("hidden", false)
       .html(entries.map((entry) => `
         <span class="ocw-filter-chip">
-          <span class="ocw-filter-chip-label">${this.escape(entry.label)}：${this.escape(entry.value)}</span>
-          <button type="button" class="ocw-filter-chip-remove" data-action="remove-filter" data-filter="${this.escape(entry.field)}" aria-label="移除${this.escape(entry.label)}">×</button>
+          <span class="ocw-filter-chip-label">${this.escape(ocTranslate(entry.label))}：${this.escape(entry.value)}</span>
+          <button type="button" class="ocw-filter-chip-remove" data-action="remove-filter" data-filter="${this.escape(entry.field)}" aria-label="${this.escape(ocTranslate("移除{0}", [ocTranslate(entry.label)]))}">×</button>
         </span>
       `).join(""));
   }
@@ -714,7 +714,7 @@
     this.moreFiltersOpen = !this.moreFiltersOpen;
     const $button = this.$root.find("[data-action='toggle-more-filters']");
     this.$root.find("[data-area='more-filters']").prop("hidden", !this.moreFiltersOpen);
-    $button.attr("aria-expanded", this.moreFiltersOpen ? "true" : "false").text(this.moreFiltersOpen ? "收起筛选 -" : "更多筛选 +");
+    $button.attr("aria-expanded", this.moreFiltersOpen ? "true" : "false").text(this.moreFiltersOpen ? ocTranslate("收起筛选 -") : ocTranslate("更多筛选 +"));
   }
 
   childPriorityStorageKey() {
@@ -755,7 +755,7 @@
   openChildColumnPreferenceDialog() {
     const columns = this.batchColumns || [];
     if (!columns.length) {
-      frappe.show_alert({ message: "请先展开任意一个批次，再设置 SKU 明细重点字段。", indicator: "orange" });
+      frappe.show_alert({ message: ocTranslate("请先展开任意一个批次，再设置 SKU 明细重点字段。"), indicator: "orange" });
       return;
     }
 
@@ -770,7 +770,7 @@
           <label class="ocw-sku-priority-option ${fixed ? "is-fixed" : ""}">
             <input type="checkbox" data-sku-priority-field="${this.escape(column.fieldname)}"${checked ? " checked" : ""}${fixed ? " disabled" : ""} />
             <span>
-              <strong>[${this.escape(column.excel_col)}] ${this.escape(column.label)}</strong>
+              <strong>[${this.escape(column.excel_col)}] ${this.escape(ocTranslate(column.label))}</strong>
               <small>${description}</small>
             </span>
           </label>
@@ -779,19 +779,19 @@
       .join("");
 
     const dialog = new frappe.ui.Dialog({
-      title: "设置 SKU 明细重点字段",
+      title: ocTranslate("设置 SKU 明细重点字段"),
       size: "extra-large",
       fields: [
         {
           fieldtype: "HTML",
           fieldname: "sku_priority_fields",
           options: `
-            <div class="ocw-sku-priority-note">勾选的字段会紧跟在“物料编码、产品名称”后面；未勾选字段不会隐藏，仍按原 Excel 顺序展示。此设置仅保存在当前浏览器。</div>
+            <div class="ocw-sku-priority-note">${ocTranslate("勾选的字段会紧跟在“物料编码、产品名称”后面；未勾选字段不会隐藏，仍按原 Excel 顺序展示。此设置仅保存在当前浏览器。")}</div>
             <div class="ocw-sku-priority-grid">${options}</div>
           `,
         },
       ],
-      primary_action_label: "保存",
+      primary_action_label: ocTranslate("保存"),
       primary_action: () => {
         const fields = dialog.$wrapper
           .find("[data-sku-priority-field]:checked")
@@ -800,7 +800,7 @@
         this.saveChildPriorityFields(fields);
         dialog.hide();
         this.renderTable();
-        frappe.show_alert({ message: "SKU 明细字段顺序已更新", indicator: "green" });
+        frappe.show_alert({ message: ocTranslate("SKU 明细字段顺序已更新"), indicator: "green" });
       },
     });
     dialog.show();

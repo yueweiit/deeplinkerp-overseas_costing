@@ -4,6 +4,13 @@ Callers supply rows reparsed from signed local material previews or a fenced AI
 draft, never an arbitrary browser row list. `full_table` is a server assertion;
 `complete` is the separate human confirmation. Both are required for retirement.
 """
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 from copy import deepcopy
 from decimal import Decimal, InvalidOperation
 
@@ -72,19 +79,19 @@ def normalize_goods(rows, evidence):
     for row in rows:
         position = str(row.get('source_row') or row.get('source_position') or row.get('line_key') or '')
         if not position or position in positions:
-            raise ValueError('完整清单的来源行身份必须唯一，不能按 SKU 合并行。')
+            raise ValueError(_('完整清单的来源行身份必须唯一，不能按 SKU 合并行。'))
         positions.add(position)
         code, name = str(row.get('material_code') or '').strip(), str(row.get('product_name') or '').strip()
         unit = str(row.get('unit') or row.get('shipped_uom') or '').strip()
         if not (code or name) or not unit:
-            raise ValueError('完整清单的每行需要 SKU 或品名，以及明确单位。')
+            raise ValueError(_('完整清单的每行需要 SKU 或品名，以及明确单位。'))
         row_identity = (identity(code or name),identity(row.get('spec_model')),identity(unit))
         native = row.get('native_line_id') or row.get('line_key')
         if not native and identities[row_identity] != 1:
-            raise ValueError('同 SKU 重复行缺少唯一原生行标识，请先核对行归属；行号不能作为稳定身份。')
+            raise ValueError(_('同 SKU 重复行缺少唯一原生行标识，请先核对行归属；行号不能作为稳定身份。'))
         line_key = str(native or digest('reviewed_cargo', evidence['source_id'], evidence.get('sheet'),row_identity))
         if line_key in line_keys:
-            raise ValueError('货物明细的最终稳定行标识必须唯一。')
+            raise ValueError(_('货物明细的最终稳定行标识必须唯一。'))
         line_keys.add(line_key)
         quantity = row.get('quantity') if row.get('quantity') not in (None, '') else row.get('actual_shipped_qty')
         physical = {}
@@ -92,7 +99,7 @@ def normalize_goods(rows, evidence):
             if row.get(key) not in (None, ''):
                 physical[key] = _decimal(row[key], key)
                 if Decimal(physical[key]) < 0:
-                    raise ValueError('装箱物理值不得为负数。')
+                    raise ValueError(_('装箱物理值不得为负数。'))
         if row.get('shipped_uom'):
             physical['shipped_uom'] = str(row['shipped_uom'])
         # Packing table unit-price columns are not merchandise-price evidence.
@@ -106,7 +113,7 @@ def normalize_goods(rows, evidence):
                        'spec_model':str(row.get('spec_model') or ''),'quantity':_decimal(quantity,'货物数量',positive=True),
                        'unit':unit,'merchandise_price':price,'reviewed_physical':physical})
     if not result:
-        raise ValueError('没有可采用的货物行；缺少归档或空清单不能确认成功。')
+        raise ValueError(_('没有可采用的货物行；缺少归档或空清单不能确认成功。'))
     return result
 
 
@@ -197,22 +204,22 @@ def normalize_fees(rows, source, evidence, negative_confirmed):
     for index, row in enumerate(rows):
         position = str(row.get('source_row') or row.get('line_key') or index+1)
         if position in positions:
-            raise ValueError('费用明细行身份必须唯一。')
+            raise ValueError(_('费用明细行身份必须唯一。'))
         positions.add(position)
         amount = _decimal(row.get('amount'), '费用金额')
         currency = str(row.get('currency') or '').upper()
         currency = 'RMB' if currency == 'CNY' else currency
         if currency != source.get('currency') or currency not in {'RMB','USD','MXN'}:
-            raise ValueError('费用明细必须与采购支出整单采用同一明确币种。')
+            raise ValueError(_('费用明细必须与采购支出整单采用同一明确币种。'))
         if Decimal(amount) < 0 and not negative_confirmed:
-            raise ValueError('负数或冲抵明细需要本次明确确认。')
+            raise ValueError(_('负数或冲抵明细需要本次明确确认。'))
         fees.append({'line_key':digest('reviewed_fee',evidence['source_id'],evidence.get('sheet'),position),
                      'label':str(row.get('label') or row.get('expense_category') or '物流费用'),
                      'amount':amount,'currency':currency,'source_position':position})
     if not fees or source.get('amount') is None:
-        raise ValueError('需核对采购支出明确总额后才能采用费用明细。')
+        raise ValueError(_('需核对采购支出明确总额后才能采用费用明细。'))
     if sum((Decimal(x['amount']) for x in fees),Decimal(0)) != Decimal(str(source['amount'])):
-        raise ValueError('所选费用明细合计与采购支出整单金额不一致，需补全拆分；尚未采用。')
+        raise ValueError(_('所选费用明细合计与采购支出整单金额不一致，需补全拆分；尚未采用。'))
     return fees
 
 
@@ -240,14 +247,14 @@ def confirm_reviewed_cargo(store, ledger, batch_name, expected_context, rows, ev
         bundle = load_source_bundle(batch_name,store=store,ledger=ledger,lock=True)
         context, binding, raw = bundle['context'], bundle['binding'], bundle['source']
         if context['root_kind'] != 'expense' or not binding:
-            raise ValueError('当前批次没有已确认的采购支出关联。')
+            raise ValueError(_('当前批次没有已确认的采购支出关联。'))
         require_available(context)
         if locked(bundle['batch']) and bundle['batch'].get('edit_lock_owner') != actor:
-            raise ValueError('批次由其他人编辑，不能采用审核明细。')
+            raise ValueError(_('批次由其他人编辑，不能采用审核明细。'))
         if not evidence.get('source_id') or len(str(evidence.get('source_hash') or '')) != 64:
-            raise ValueError('审核缺少可信本地资料版本。')
+            raise ValueError(_('审核缺少可信本地资料版本。'))
         if public_context(evidence.get('source_context')) != public_context(expected_context):
-            raise ValueError('审核证据与当前预览来源不一致。')
+            raise ValueError(_('审核证据与当前预览来源不一致。'))
         goods = inherit_expense_prices(normalize_goods(rows, evidence),raw) if rows is not None else None
         if goods is not None and (not complete or not evidence.get('full_table') or evidence.get('row_count') != len(goods)):
             return {'ok':False,'candidate_only':True,'changed_count':0,'message':'货物表尚未确认完整；仅保留候选，不替换或删除现有行。'}
@@ -267,7 +274,7 @@ def confirm_reviewed_cargo(store, ledger, batch_name, expected_context, rows, ev
         pointer = store.get('state',_pointer(binding['id'],raw['snapshot'])) or {}
         receipt = store.get('state',digest('reviewed_source_receipt',review_id)) or {}
         if coverage is not None and (not coverage or set(coverage)-{'freight','customs','tax','mexico_inland'}):
-            raise ValueError('请明确确认有效费用覆盖范围。')
+            raise ValueError(_('请明确确认有效费用覆盖范围。'))
         if pointer.get('review_id') == review_id and receipt.get('binding_revision') == binding['revision'] and receipt.get('version') == context['cost_version']:
             confirmations_changed = False
             if coverage is not None and (binding.get('coverage_cost_hash') != prior['cost_hash'] or set(binding.get('coverage') or []) != set(coverage)):
@@ -282,7 +289,7 @@ def confirm_reviewed_cargo(store, ledger, batch_name, expected_context, rows, ev
                 binding=apply_binding(store,ledger,binding['id'],actor,trusted_review_actor=actor)
             return _response(store,ledger,binding,review_id,idempotent=True,goods_count=len(payload['goods'] or []),fee_count=len(payload['fees'] or []))
         if public_context(context) != public_context(expected_context):
-            raise ValueError('关联、资料快照或成本版本已变化，请重新预览。')
+            raise ValueError(_('关联、资料快照或成本版本已变化，请重新预览。'))
         from .bound_wiki_service import acknowledge_wiki_review
         acknowledge_wiki_review(store,binding,evidence,expected_context,complete=bool(goods is not None and complete),actor=actor)
         if not store.get('state',review_id):

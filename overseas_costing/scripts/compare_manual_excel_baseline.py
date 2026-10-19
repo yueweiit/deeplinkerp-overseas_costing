@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import json
 import os
 import re
@@ -161,7 +168,7 @@ def load_manual_baseline(
         worksheet = workbook[source_sheet] if source_sheet in workbook.sheetnames else _find_sheet_with_token(workbook, customs_no, waybill_no)
         start_row = _find_start_row(worksheet, customs_no, waybill_no)
         if not start_row:
-            raise ValueError(f"人工 Excel 中未找到报关单/运单：{customs_no} / {waybill_no}")
+            raise ValueError(_("人工 Excel 中未找到报关单/运单：{0} / {1}").format(customs_no, waybill_no))
         rows = _read_manual_block(worksheet, start_row, customs_no, waybill_no)
         return {
             "source_file": Path(file_path).name,
@@ -502,7 +509,7 @@ def _find_sheet_with_token(workbook, customs_no: str, waybill_no: str):
     for worksheet in workbook.worksheets:
         if _find_start_row(worksheet, customs_no, waybill_no):
             return worksheet
-    raise ValueError(f"工作簿中未找到包含 {customs_no} / {waybill_no} 的工作表。")
+    raise ValueError(_("工作簿中未找到包含 {0} / {1} 的工作表。").format(customs_no, waybill_no))
 
 
 def _find_start_row(worksheet, customs_no: str, waybill_no: str) -> int:
@@ -538,11 +545,11 @@ def _resolve_manual_workbook(file_path: str | None = None) -> Path:
         path = Path(file_path).expanduser()
         if path.exists():
             return path
-        raise FileNotFoundError(f"未找到人工核算 Excel：{file_path}")
+        raise FileNotFoundError(_("未找到人工核算 Excel：{0}").format(file_path))
     for path in DEFAULT_CANDIDATE_PATHS:
         if path.exists():
             return path
-    raise FileNotFoundError("未找到墨西哥进口物料综合成本核算.xlsx，请通过 OVERSEAS_COST_MANUAL_EXCEL 指定。")
+    raise FileNotFoundError(_("未找到墨西哥进口物料综合成本核算.xlsx，请通过 OVERSEAS_COST_MANUAL_EXCEL 指定。"))
 
 
 def _default_output_path(waybill_no: str) -> Path:

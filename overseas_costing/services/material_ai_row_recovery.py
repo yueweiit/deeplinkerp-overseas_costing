@@ -1,6 +1,13 @@
 """Preview-first recovery for legacy AI whole-table row replacements."""
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 from copy import deepcopy
 from datetime import datetime
 
@@ -20,7 +27,7 @@ def _replacement_audit(store, batch_name, current_version):
     rows=[row for row in store.find('audit',binding_id=batch_name,action='ai_rows_adopted')
           if row.get('version')==current_version and row.get('old_version') and row.get('mode')=='replace_all']
     if not rows:
-        raise ValueError('当前版本没有可恢复的 AI 整表替换记录。')
+        raise ValueError(_('当前版本没有可恢复的 AI 整表替换记录。'))
     return max(rows,key=lambda row:str(row.get('created_at') or ''))
 
 
@@ -52,9 +59,9 @@ def _build_preview(store,ledger,batch_name,current_version):
     batch=ledger.get('batch',batch_name) or {}
     version=ledger.get('version',current_version) or {}
     if batch.get('current_version')!=current_version or version.get('batch')!=batch_name:
-        raise ValueError('当前成本版本已变化，请刷新后重试。')
+        raise ValueError(_('当前成本版本已变化，请刷新后重试。'))
     if version.get('status')!='Active' or batch.get('confirm_status')=='Confirmed' or batch.get('writeback_status')=='Success':
-        raise ValueError('已确认或归档的版本不能恢复物料行。')
+        raise ValueError(_('已确认或归档的版本不能恢复物料行。'))
     audit=_replacement_audit(store,batch_name,current_version)
     old_version=str(audit['old_version'])
     historical=sorted(ledger.rows('item',batch=batch_name,version=old_version),
@@ -62,7 +69,7 @@ def _build_preview(store,ledger,batch_name,current_version):
     current=sorted(ledger.rows('item',batch=batch_name,version=current_version),
                    key=lambda row:(int(row.get('row_no') or 0),str(row.get('name') or '')))
     if not historical or not current:
-        raise ValueError('历史物料或当前物料为空，无法安全恢复。')
+        raise ValueError(_('历史物料或当前物料为空，无法安全恢复。'))
     matched={};issues=[]
     for row in current:
         candidates=_matches(row,historical)
@@ -111,17 +118,17 @@ def confirm_recovery(store,ledger,batch_name,current_version,preview_id,revision
         return {**existing.get('result',{}),'ok':True,'idempotent':True}
     issued=store.get('state',_state_id(preview_id)) or {}
     if issued.get('revision')!=revision or issued.get('batch')!=batch_name:
-        raise ValueError('恢复预览已过期，请重新生成。')
+        raise ValueError(_('恢复预览已过期，请重新生成。'))
     with store.atomic():
         batch=ledger.get('batch',batch_name,lock=True) or {}
         if batch.get('current_version')!=current_version:
             existing=store.get('state',_result_id(preview_id))
             if existing:return {**existing.get('result',{}),'ok':True,'idempotent':True}
-            raise ValueError('当前成本版本已变化，本次未恢复。')
+            raise ValueError(_('当前成本版本已变化，本次未恢复。'))
         current=ledger.get('version',current_version,lock=True) or {}
         preview=_build_preview(store,ledger,batch_name,current_version)
         if preview['id']!=preview_id or preview['revision']!=revision or not preview['can_confirm']:
-            raise ValueError('历史或当前物料已变化，请重新预览。')
+            raise ValueError(_('历史或当前物料已变化，请重新预览。'))
         values=clean_copy(current)
         values.update(version_code='RECOVER-'+datetime.now().strftime('%Y%m%d%H%M%S%f'),version_type='Adjustment',
             status='Active',is_current=1,source_type='Clone',calculated_at=None,summary_snapshot_json='{}',rule_snapshot_json='[]',

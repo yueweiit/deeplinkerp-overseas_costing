@@ -1,4 +1,11 @@
 """Pure row catalog and server-owned projection for selected AI suggestions."""
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 from collections import Counter
 from copy import deepcopy
 from decimal import Decimal, InvalidOperation
@@ -890,7 +897,7 @@ def _coherent_value_choices(selected, candidates, rows_by_id):
     for item_name, bases in by_item.items():
         explicit = [candidate for candidate in bases if not candidate.get('default_selected')]
         if len(explicit) > 1:
-            raise ValueError('同一物料只能选择一套采购价或货值依据，请保留一项。')
+            raise ValueError(_('同一物料只能选择一套采购价或货值依据，请保留一项。'))
         winner = explicit[0] if explicit else min(bases, key=lambda candidate:(candidate['workflow_rank'], candidate['source_priority']))
         result = [candidate for candidate in result if candidate['item_name'] != item_name
                   or candidate['fieldname'] not in VALUE_FIELDS | PRICE_FIELDS
@@ -1791,14 +1798,14 @@ def catalog(items, proposals, fees, context, *, run_id, sources=None, fx_rates=N
 
 
 def project(items, catalog, row_ids, fee_ids, mode, *, field_choices=None):
-    if mode not in ('fill_missing','update_selected','add_selected','replace_all'):raise ValueError('请选择补充空缺、更新所选行、单独新增或替换整票。')
-    if not isinstance(row_ids,list) or not isinstance(fee_ids,list):raise ValueError('请选择有效的物料行和费用。')
+    if mode not in ('fill_missing','update_selected','add_selected','replace_all'):raise ValueError(_('请选择补充空缺、更新所选行、单独新增或替换整票。'))
+    if not isinstance(row_ids,list) or not isinstance(fee_ids,list):raise ValueError(_('请选择有效的物料行和费用。'))
     if any(not isinstance(i,str) for i in row_ids+fee_ids) or len(row_ids)!=len(set(row_ids)) or len(fee_ids)!=len(set(fee_ids)):
-        raise ValueError('选择包含重复或无效行。')
+        raise ValueError(_('选择包含重复或无效行。'))
     if mode=='add_selected' and fee_ids:
-        raise ValueError('新增物料必须单独确认，不能同时采用费用。')
+        raise ValueError(_('新增物料必须单独确认，不能同时采用费用。'))
     rows_by_id={r['row_id']:r for r in catalog['rows']};fees_by_id={r['proposal_id']:r for r in catalog['fees']}
-    if set(row_ids)-rows_by_id.keys() or set(fee_ids)-fees_by_id.keys():raise ValueError('所选内容不属于当前草稿，请刷新预览。')
+    if set(row_ids)-rows_by_id.keys() or set(fee_ids)-fees_by_id.keys():raise ValueError(_('所选内容不属于当前草稿，请刷新预览。'))
     chosen=[r for r in catalog['rows'] if r['row_id'] in row_ids]
     if mode=='update_selected':
         chosen.sort(key=lambda row:(int(row.get('source_priority') or 999999),str(row.get('row_id') or '')))
@@ -1806,15 +1813,15 @@ def project(items, catalog, row_ids, fee_ids, mode, *, field_choices=None):
     selected_field_candidates=[]
     if field_choices is not None:
         if not isinstance(field_choices,dict) or any(not isinstance(key,str) or not isinstance(value,str) for key,value in field_choices.items()):
-            raise ValueError('逐字段选择格式不正确。')
+            raise ValueError(_('逐字段选择格式不正确。'))
         fields_by_id={candidate['candidate_id']:candidate for candidate in catalog.get('field_candidates') or []}
         if set(field_choices.values())-fields_by_id.keys():
-            raise ValueError('所选字段候选不属于当前草稿，请刷新预览。')
+            raise ValueError(_('所选字段候选不属于当前草稿，请刷新预览。'))
         for expected_key,candidate_id in field_choices.items():
             candidate=fields_by_id[candidate_id]
             actual_key=f"{candidate['item_name']}:{candidate['fieldname']}"
             if expected_key!=actual_key:
-                raise ValueError('逐字段选择与物料不匹配。')
+                raise ValueError(_('逐字段选择与物料不匹配。'))
             if not candidate.get('can_apply'):
                 raise ValueError(candidate.get('resolution_reason') or '本字段候选不可采用。')
             selected_field_candidates.append(candidate)
@@ -1836,8 +1843,8 @@ def project(items, catalog, row_ids, fee_ids, mode, *, field_choices=None):
         covered_scopes.update(scopes)
     if (len(fee_keys)!=len(set(fee_keys)) or len(fee_groups)!=len(set(fee_groups))
             or overlapping_scopes):
-        raise ValueError('同一费用有多份报价，请只选择一份；其他报价保留参考。')
-    if mode=='replace_all' and not chosen:raise ValueError('至少选择一条物料，不能用空结果清空整票。')
+        raise ValueError(_('同一费用有多份报价，请只选择一份；其他报价保留参考。'))
+    if mode=='replace_all' and not chosen:raise ValueError(_('至少选择一条物料，不能用空结果清空整票。'))
     effective={r['target_item_name']:r['values'] for r in catalog['rows'] if r['origin']=='current'}
     scope_excluded=set(catalog.get('material_scope_excluded_item_names') or [])
     items=[deepcopy(effective.get(i['name'],i)) for i in items
@@ -1847,7 +1854,7 @@ def project(items, catalog, row_ids, fee_ids, mode, *, field_choices=None):
     if field_choices is not None and mode in ('fill_missing','update_selected'):
         for candidate in sorted(selected_field_candidates,key=lambda value:(value['item_name'],value['fieldname'],value['candidate_id'])):
             row=next((value for value in result if value.get('name')==candidate['item_name']),None)
-            if row is None:raise ValueError('逐字段候选的目标物料已变化，请刷新。')
+            if row is None:raise ValueError(_('逐字段候选的目标物料已变化，请刷新。'))
             field=candidate['fieldname']
             if mode=='fill_missing' and field in PRICE_FIELDS and not missing(original[candidate['item_name']], 'unit_price'):
                 continue
@@ -1897,7 +1904,7 @@ def project(items, catalog, row_ids, fee_ids, mode, *, field_choices=None):
         if mode=='replace_all' and target and target in used:
             previous=used_choices[target]
             duplicate_target=(mode=='replace_all' and choice['proposal_type']=='logistics_reconcile' and previous['proposal_id']==choice['proposal_id'])
-            if not duplicate_target:raise ValueError('所选多行对应同一现有物料，请仅选择一种来源。')
+            if not duplicate_target:raise ValueError(_('所选多行对应同一现有物料，请仅选择一种来源。'))
         if choice['origin']=='current':
             row=deepcopy(original[target]);row.update(_target=target,_row_action='retain');used.add(target);used_choices[target]=choice;result.append(row);continue
         if mode in ('fill_missing','update_selected') and target:
@@ -1925,7 +1932,7 @@ def project(items, catalog, row_ids, fee_ids, mode, *, field_choices=None):
         meta=json_dict(row.get('extra_json'));field_refs=meta.setdefault('ai_row_fields',{})
         if ('goods_value' in fields and choice.get('proposal_type')=='item_update'
                 and not choice.get('_purchase_value_fact')):
-            raise ValueError('货值缺少同一来源行的数量、单位或币种依据，请逐字段核对。')
+            raise ValueError(_('货值缺少同一来源行的数量、单位或币种依据，请逐字段核对。'))
         if 'goods_value' in fields and choice.get('_purchase_value_fact'):
             _activate_purchase_value(row, meta, choice['_purchase_value_fact'])
         if mode=='update_selected' and choice.get('_price_metadata') is not None:
@@ -1984,14 +1991,14 @@ def _activate_purchase_value(row, meta, fact):
 def _activate_selected_price(row, choice, catalog):
     if not choice.get('_review_price_valuation'):
         if choice.get('_price_metadata') and json_dict(row.get('extra_json')).get('adopted_purchase_value'):
-            raise ValueError('采购单价缺少同源数量、单位、币种或汇率依据，请重新核对。')
+            raise ValueError(_('采购单价缺少同源数量、单位、币种或汇率依据，请重新核对。'))
         return
     from .purchase_value_evidence import price_valuation
     meta = json_dict(row.get('extra_json'))
     price_meta = deepcopy(choice['_price_metadata'])
     valuation = price_valuation(row, price_meta, choice['source_refs'], fx_rates=catalog.get('_review_fx_rates'))
     if valuation is None:
-        raise ValueError('采购单价缺少同源数量、单位、币种或汇率依据，请重新核对。')
+        raise ValueError(_('采购单价缺少同源数量、单位、币种或汇率依据，请重新核对。'))
     activate_shipment_valuation(meta, valuation)
     row['_shipment_valuation'] = deepcopy(valuation)
     row['shipment_value_rmb'] = valuation['amount_rmb']

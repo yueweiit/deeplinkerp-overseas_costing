@@ -1,4 +1,11 @@
 """Atomic fee-line claims, with independent packing and frozen version evidence."""
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 from decimal import Decimal, InvalidOperation
 from copy import deepcopy
 from .model import digest, dumps
@@ -58,51 +65,51 @@ def confirm(store,ledger,batch_name,version_name,candidate_id,candidate_revision
             replace_claim_ids=None,expected_revision=None,reason='',negative_confirmed=False):
     replace_claim_ids=list(replace_claim_ids or [])
     if not isinstance(line_ids,list) or not line_ids or len(line_ids)>200 or len(set(line_ids))!=len(line_ids):
-        raise ValueError('请选择 1 至 200 条不重复的本票费用明细')
+        raise ValueError(_('请选择 1 至 200 条不重复的本票费用明细'))
     with store.atomic():
         store.get('state','match_lock',lock=True)
         c=store.get('freight_candidate',candidate_id,lock=True)
-        if not c or c['revision']!=candidate_revision or c['status']=='rejected': raise ValueError('候选已变化或被否决，请刷新')
+        if not c or c['revision']!=candidate_revision or c['status']=='rejected': raise ValueError(_('候选已变化或被否决，请刷新'))
         maps=store.find('batch_map',batch=batch_name,source_id=c['logistics_id'])
-        if not maps: raise ValueError('候选不属于当前批次')
+        if not maps: raise ValueError(_('候选不属于当前批次'))
         batch=ledger.get('batch',batch_name,lock=True)
-        if batch['current_version']!=version_name: raise ValueError('成本版本已变化，请刷新')
+        if batch['current_version']!=version_name: raise ValueError(_('成本版本已变化，请刷新'))
         payment_claims=store.find('payment_claim',batch=batch_name,version=version_name,status='active')
         if payment_claims:
             from overseas_costing.services.transport_fee_service import primary_freight_definition
             freight_key=primary_freight_definition(batch.get('transport_mode'))['logical_fee_key']
             if any(row.get('logical_fee_key')==freight_key for row in payment_claims):
-                raise ValueError('新旧运费认领不能混用，请通过统一付款流程更正或撤销')
+                raise ValueError(_('新旧运费认领不能混用，请通过统一付款流程更正或撤销'))
         source=store.get('source',c['expense_id'],lock=True);logistics=store.get('source',c['logistics_id'],lock=True)
         if not source or source['snapshot']!=c['expense_snapshot'] or logistics['snapshot']!=c['logistics_snapshot']:
-            raise ValueError('来源快照已变化，请重新核对')
+            raise ValueError(_('来源快照已变化，请重新核对'))
         if not source['approved'] or source['invalid'] or source['kind']!='expense' or logistics['invalid'] or source['corp']!=logistics['corp']:
-            raise ValueError('费用来源未批准、失效或企业不符')
-        if set(line_ids)-set(c['line_ids']): raise ValueError('费用明细不属于当前候选')
+            raise ValueError(_('费用来源未批准、失效或企业不符'))
+        if set(line_ids)-set(c['line_ids']): raise ValueError(_('费用明细不属于当前候选'))
         previous=context(store,ledger,batch_name,version_name)
         if replace_claim_ids and (not reason.strip() or expected_revision!=previous['revision']):
-            raise ValueError('更正需填写原因并核对当前采用版本')
+            raise ValueError(_('更正需填写原因并核对当前采用版本'))
         old_claims={r['id']:r for r in previous['claims']}
-        if set(replace_claim_ids)-set(old_claims): raise ValueError('待更正费用不属于本票')
+        if set(replace_claim_ids)-set(old_claims): raise ValueError(_('待更正费用不属于本票'))
         selected=[]
         for line_id in line_ids:
             line=store.get('freight_line',line_id,lock=True)
-            if not line or line['source_id']!=source['id'] or line['snapshot']!=source['snapshot']: raise ValueError('明细已失效')
+            if not line or line['source_id']!=source['id'] or line['snapshot']!=source['snapshot']: raise ValueError(_('明细已失效'))
             from .freight_lines import matching_lines
             verified=matching_lines(logistics,[line])
             if any(r.get('identifier_conflict') for r in verified) or (line.get('waybill') or line.get('approval_no')) and not verified:
-                raise ValueError('费用运单与本票审批标识不一致')
-            if line.get('ambiguous') or line.get('scope')!='freight': raise ValueError('费用性质或重复明细待核对，不能直接采用')
-            if Decimal(line['amount'])<0 and not negative_confirmed: raise ValueError('请确认负数冲抵费用')
+                raise ValueError(_('费用运单与本票审批标识不一致'))
+            if line.get('ambiguous') or line.get('scope')!='freight': raise ValueError(_('费用性质或重复明细待核对，不能直接采用'))
+            if Decimal(line['amount'])<0 and not negative_confirmed: raise ValueError(_('请确认负数冲抵费用'))
             claim_id=digest(POLICY,c['logistics_id'],source['id'],line['line_key'])
             prior_claim=old_claims.get(claim_id)
             if prior_claim and any(prior_claim.get(k)!=v for k,v in {'source_snapshot':source['snapshot'],'line_id':line_id,'logistics_snapshot':logistics['snapshot']}.items()) and (claim_id not in replace_claim_ids or not reason.strip() or expected_revision!=previous['revision']):
-                raise ValueError('已采用费用发生变化，请选择旧采用记录并填写更正原因')
+                raise ValueError(_('已采用费用发生变化，请选择旧采用记录并填写更正原因'))
             occupied=store.find('freight_claim',charge_key=line['charge_key'])
             payment_occupied=[o for o in store.find('payment_claim',source_id=source['id'])
                               if o.get('status')=='active' and o.get('source_line_id')==line_id]
             if payment_occupied or any(o['id']!=claim_id and o['id'] not in replace_claim_ids for o in occupied):
-                raise ValueError('这笔费用已采用，不能重复计费')
+                raise ValueError(_('这笔费用已采用，不能重复计费'))
             claim={'id':claim_id,'batch':batch_name,'logistics_id':c['logistics_id'],'source_id':source['id'],
                 'line_id':line_id,'source_snapshot':source['snapshot'],'logistics_snapshot':logistics['snapshot'],'charge_key':line['charge_key'],
                 'amount':line['amount'],'currency':line['currency'],'label':line['label'],'evidence':line['evidence'],
@@ -140,7 +147,7 @@ def _write_claims(store,ledger,batch,previous,new_claims,revision,actor,reason,l
     for rule in before['rules']:
         scopes=row_scopes(rule)
         if 'freight' not in scopes: continue
-        if scopes-{'freight'}: raise ValueError('已有费用同时含运费与其他费用，请先核对覆盖范围')
+        if scopes-{'freight'}: raise ValueError(_('已有费用同时含运费与其他费用，请先核对覆盖范围'))
         # Keep historical rule evidence but remove it from current final selection.
         ledger.put('rule',rule['name'],{'is_enabled':0,'is_active':0,'is_final':0})
     rules=[rule_for(r) for r in new_claims.values()];round_fee_rules(rules)
@@ -166,7 +173,7 @@ def amend(store, ledger, batch_name, version_name, claim_id, expected_revision, 
           reason='', amount=None, candidate_id=None, candidate_revision=None, line_ids=None, negative_confirmed=False):
     """Change only the human adoption; archived statements are immutable."""
     if action not in ('amount', 'replace', 'revoke') or not str(reason).strip():
-        raise ValueError('请选择更正操作并填写核对原因')
+        raise ValueError(_('请选择更正操作并填写核对原因'))
     request = dict(batch_name=batch_name, version_name=version_name, claim_id=claim_id,
                    expected_revision=expected_revision, action=action, actor=actor, reason=str(reason).strip(),
                    amount=amount, candidate_id=candidate_id, candidate_revision=candidate_revision,
@@ -181,26 +188,26 @@ def amend(store, ledger, batch_name, version_name, claim_id, expected_revision, 
             result = done['result']
             if result['version'] == batch.get('current_version') and result['revision'] == previous['revision']:
                 return {**result, 'cached': True}
-            raise ValueError('这次更正已处理，当前费用又有变化，请刷新')
+            raise ValueError(_('这次更正已处理，当前费用又有变化，请刷新'))
         if batch.get('current_version') != version_name or previous['revision'] != expected_revision:
-            raise ValueError('费用或成本版本已变化，请刷新后更正')
+            raise ValueError(_('费用或成本版本已变化，请刷新后更正'))
         claims = {c['id']:deepcopy(c) for c in previous['claims']}
         if claim_id not in claims:
-            raise ValueError('待更正费用不属于本票当前采用记录')
+            raise ValueError(_('待更正费用不属于本票当前采用记录'))
         if action == 'amount':
             claim = claims[claim_id]
             source = store.get('source', claim['source_id'], lock=True) or {}
             logistics = store.get('source', claim['logistics_id'], lock=True) or {}
             if not source.get('approved') or source.get('invalid') or source.get('snapshot') != claim['source_snapshot'] or logistics.get('invalid') or logistics.get('snapshot') != claim['logistics_snapshot']:
-                raise ValueError('原费用来源已变化或失效，请先核对新证据')
+                raise ValueError(_('原费用来源已变化或失效，请先核对新证据'))
             try:
                 value = Decimal(str(amount))
                 if not value.is_finite() or abs(value) >= Decimal('1000000000000') or value != value.quantize(Decimal('.000001')):
                     raise ValueError()
             except (InvalidOperation, ValueError, TypeError):
-                raise ValueError('更正金额须是有效数字，最多六位小数')
+                raise ValueError(_('更正金额须是有效数字，最多六位小数'))
             if value < 0 and not negative_confirmed:
-                raise ValueError('请确认负数冲抵费用')
+                raise ValueError(_('请确认负数冲抵费用'))
             claim.update(original_amount=claim.get('original_amount', claim['amount']), amount=format(value.normalize(), 'f'),
                          manual_corrected=True, correction_reason=str(reason).strip(), corrected_by=actor, corrected_at=utcnow())
             validate_final(rule_for(claim))

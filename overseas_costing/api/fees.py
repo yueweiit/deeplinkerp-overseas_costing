@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import json
 
 import frappe
@@ -25,22 +32,22 @@ def _bounded_json_object(value) -> dict:
     else:
         encoded = str(value or "{}")
         if len(encoded.encode("utf-8")) > MAX_FEE_PAYLOAD_BYTES:
-            raise ValueError("费用参数过大。")
+            raise ValueError(_("费用参数过大。"))
         try:
             payload = json.loads(encoded)
         except (TypeError, ValueError, json.JSONDecodeError) as error:
-            raise ValueError("费用参数不是有效 JSON。") from error
+            raise ValueError(_("费用参数不是有效 JSON。")) from error
     if len(encoded.encode("utf-8")) > MAX_FEE_PAYLOAD_BYTES:
-        raise ValueError("费用参数过大。")
+        raise ValueError(_("费用参数过大。"))
     if not isinstance(payload, dict):
-        raise ValueError("费用参数必须是 JSON 对象。")
+        raise ValueError(_("费用参数必须是 JSON 对象。"))
     return payload
 
 
 def _identifier(value) -> str:
     normalized = str(value or "").strip()
     if not normalized or len(normalized) > MAX_IDENTIFIER_LENGTH:
-        raise ValueError("记录标识不合法。")
+        raise ValueError(_("记录标识不合法。"))
     return normalized
 
 
@@ -51,15 +58,15 @@ def _bounded_json(value, expected_type, label):
     else:
         encoded = str(value or ("[]" if expected_type is list else "{}"))
         if len(encoded.encode("utf-8")) > MAX_REVIEW_PAYLOAD_BYTES:
-            raise ValueError(f"{label}内容过大。")
+            raise ValueError(_("{0}内容过大。").format(label))
         try:
             payload = json.loads(encoded)
         except (TypeError, ValueError, json.JSONDecodeError) as error:
-            raise ValueError(f"{label}不是有效 JSON。") from error
+            raise ValueError(_("{0}不是有效 JSON。").format(label)) from error
     if len(encoded.encode("utf-8")) > MAX_REVIEW_PAYLOAD_BYTES:
-        raise ValueError(f"{label}内容过大。")
+        raise ValueError(_("{0}内容过大。").format(label))
     if not isinstance(payload, expected_type):
-        raise ValueError(f"{label}格式不正确。")
+        raise ValueError(_("{0}格式不正确。").format(label))
     return payload
 
 
@@ -72,19 +79,19 @@ def _bounded_component_matrix_json(value) -> dict | None:
     else:
         encoded = str(value)
         if len(encoded.encode("utf-8")) > MAX_COMPONENT_MATRIX_PAYLOAD_BYTES:
-            raise ValueError("物料税费矩阵内容过大。")
+            raise ValueError(_("物料税费矩阵内容过大。"))
         try:
             payload = json.loads(encoded)
         except (TypeError, ValueError, json.JSONDecodeError) as error:
-            raise ValueError("物料税费矩阵不是有效 JSON。") from error
+            raise ValueError(_("物料税费矩阵不是有效 JSON。")) from error
     if len(encoded.encode("utf-8")) > MAX_COMPONENT_MATRIX_PAYLOAD_BYTES:
-        raise ValueError("物料税费矩阵内容过大。")
+        raise ValueError(_("物料税费矩阵内容过大。"))
     if not isinstance(payload, dict):
-        raise ValueError("物料税费矩阵必须是 JSON 对象。")
+        raise ValueError(_("物料税费矩阵必须是 JSON 对象。"))
     cells = payload.get("cells")
     if isinstance(cells, list) and len(cells) > MAX_COMPONENT_MATRIX_CELLS:
         raise ValueError(
-            f"物料税费矩阵单元格数量不能超过 {MAX_COMPONENT_MATRIX_CELLS}。"
+            _("物料税费矩阵单元格数量不能超过 {0}。").format(MAX_COMPONENT_MATRIX_CELLS)
         )
     return payload
 

@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
@@ -76,18 +83,18 @@ def _context(batch_name: str, version_name: str | None) -> tuple[str, str]:
     if not getattr(getattr(batch_service, "frappe", None), "db", None):
         if batch and version:
             return batch, version
-        raise ValueError("当前未连接成本数据库。")
+        raise ValueError(_("当前未连接成本数据库。"))
     resolved_batch = batch_service._resolve_batch_name(batch)
     if not resolved_batch:
-        raise ValueError(f"未找到批次：{batch_name}")
+        raise ValueError(_("未找到批次：{0}").format(batch_name))
     resolved_version = version or batch_service._resolve_version_name(resolved_batch, None)
     if not resolved_version:
-        raise ValueError("当前批次没有可用成本版本。")
+        raise ValueError(_("当前批次没有可用成本版本。"))
     version_batch = batch_service.frappe.db.get_value(
         "Overseas Cost Version", resolved_version, "batch"
     )
     if str(version_batch or "") != str(resolved_batch):
-        raise ValueError("版本不属于当前批次。")
+        raise ValueError(_("版本不属于当前批次。"))
     return str(resolved_batch), str(resolved_version)
 
 
@@ -167,7 +174,7 @@ def sanitize_snapshot(value: dict) -> dict:
 def _validate_snapshot_data(data: dict) -> dict:
     for section in ("detail", "materials", "fees", "preview", "settlement"):
         if section not in data or not isinstance(data.get(section), dict):
-            raise ValueError(f"快照缺少有效 {section} 数据。")
+            raise ValueError(_("快照缺少有效 {0} 数据。").format(section))
         if data[section].get("ok") is False and section != "settlement":
             raise ValueError(data[section].get("message") or f"快照 {section} 数据读取失败。")
     return data

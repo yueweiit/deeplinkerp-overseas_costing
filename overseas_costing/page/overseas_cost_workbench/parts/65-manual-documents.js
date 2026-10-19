@@ -54,7 +54,7 @@
     const $footer = dialog.$wrapper.find(".modal-footer");
     if (!$footer.length || $footer.find("[data-action='manual-doc-batch-parse']").length) return;
     const $button = $(
-      '<button class="btn btn-secondary btn-sm ocw-manual-batch-parse-btn" type="button" data-action="manual-doc-batch-parse">解析手动补传</button>'
+      `<button class="btn btn-secondary btn-sm ocw-manual-batch-parse-btn" type="button" data-action="manual-doc-batch-parse">${ocTranslate("解析手动补传")}</button>`
     );
     $button.on("click", () => {
       this.parseManualDocumentAttachments(batch, dialog, $button).catch((error) => this.showError(error));
@@ -74,37 +74,37 @@
   manualDocumentPlans(logisticsType = "") {
     const plans = {
       SEA: [
-        { code: "sea_approval_attachment", label: "国际物流 OA 附件", required: false, oaSource: true, attachmentType: "Other", purpose: "系统优先从钉钉读取；缺失或需复核时再补传" },
-        { code: "sea_customs_declaration", label: "报关资料", required: true, attachmentType: "Customs Declaration", purpose: "报关单号、海关编码、申报品名、申报数量" },
-        { code: "sea_packing_list", label: "装箱单", required: true, attachmentType: "Packing List", purpose: "物料、数量、重量、体积、箱规" },
-        { code: "sea_commercial_invoice", label: "商业发票", required: true, attachmentType: "Commercial Invoice", purpose: "货值、币种、发票金额，用于和采购支出 OA 核对" },
-        { code: "sea_bill_of_lading", label: "提单/运单", required: true, attachmentType: "Logistics Bill", purpose: "提单号、柜号、船期、承运信息" },
-        { code: "sea_forwarder_bill", label: "货代账单/费用清单", required: true, attachmentType: "Logistics Bill", purpose: "海运费、港杂费、货代服务费、杂费" },
-        { code: "sea_clearance_fee", label: "清关费用资料（如有）", required: false, attachmentType: "Other", purpose: "报关费、清关费、预检费等费用依据" },
-        { code: "sea_tax_certificate", label: "完税凭证（最终核对）", required: false, attachmentType: "Tax Certificate", purpose: "正式税费结果，用于和系统预估金额对照" },
-        { code: "sea_other", label: "其他补充资料", required: false, attachmentType: "Other", purpose: "仓储费、滞留罚款、异常说明等补充依据" },
+        { code: "sea_approval_attachment", label: ocTranslate("国际物流 OA 附件"), required: false, oaSource: true, attachmentType: "Other", purpose: "系统优先从钉钉读取；缺失或需复核时再补传" },
+        { code: "sea_customs_declaration", label: ocTranslate("报关资料"), required: true, attachmentType: "Customs Declaration", purpose: "报关单号、海关编码、申报品名、申报数量" },
+        { code: "sea_packing_list", label: ocTranslate("装箱单"), required: true, attachmentType: "Packing List", purpose: "物料、数量、重量、体积、箱规" },
+        { code: "sea_commercial_invoice", label: ocTranslate("商业发票"), required: true, attachmentType: "Commercial Invoice", purpose: "货值、币种、发票金额，用于和采购支出 OA 核对" },
+        { code: "sea_bill_of_lading", label: ocTranslate("提单/运单"), required: true, attachmentType: "Logistics Bill", purpose: "提单号、柜号、船期、承运信息" },
+        { code: "sea_forwarder_bill", label: ocTranslate("货代账单/费用清单"), required: true, attachmentType: "Logistics Bill", purpose: "海运费、港杂费、货代服务费、杂费" },
+        { code: "sea_clearance_fee", label: ocTranslate("清关费用资料（如有）"), required: false, attachmentType: "Other", purpose: "报关费、清关费、预检费等费用依据" },
+        { code: "sea_tax_certificate", label: ocTranslate("完税凭证（最终核对）"), required: false, attachmentType: "Tax Certificate", purpose: "正式税费结果，用于和系统预估金额对照" },
+        { code: "sea_other", label: ocTranslate("其他补充资料"), required: false, attachmentType: "Other", purpose: "仓储费、滞留罚款、异常说明等补充依据" },
       ],
       AIR: [
-        { code: "air_approval_attachment", label: "国际物流 OA 附件", required: false, oaSource: true, attachmentType: "Other", purpose: "系统优先从钉钉读取；缺失或需复核时再补传" },
-        { code: "air_waybill", label: "空运运单", required: true, attachmentType: "Logistics Bill", purpose: "主单/分单、航班、实际重量、计费重量" },
-        { code: "air_packing_list", label: "装箱单", required: true, attachmentType: "Packing List", purpose: "物料、数量、重量、体积、箱规" },
-        { code: "air_commercial_invoice", label: "商业发票", required: true, attachmentType: "Commercial Invoice", purpose: "货值、币种、发票金额，用于和采购支出 OA 核对" },
-        { code: "air_customs_declaration", label: "报关资料", required: true, attachmentType: "Customs Declaration", purpose: "报关单号、海关编码、申报品名" },
-        { code: "air_forwarder_bill", label: "货代账单/费用清单", required: true, attachmentType: "Logistics Bill", purpose: "空运费、燃油附加费、服务费、杂费" },
-        { code: "air_clearance_fee", label: "清关费用资料（如有）", required: false, attachmentType: "Other", purpose: "清关费、预检费等费用依据" },
-        { code: "air_tax_certificate", label: "完税凭证（最终核对）", required: false, attachmentType: "Tax Certificate", purpose: "正式税费结果，用于和系统预估金额对照" },
-        { code: "air_other", label: "其他补充资料", required: false, attachmentType: "Other", purpose: "仓储费、异常说明等补充依据" },
+        { code: "air_approval_attachment", label: ocTranslate("国际物流 OA 附件"), required: false, oaSource: true, attachmentType: "Other", purpose: "系统优先从钉钉读取；缺失或需复核时再补传" },
+        { code: "air_waybill", label: ocTranslate("空运运单"), required: true, attachmentType: "Logistics Bill", purpose: "主单/分单、航班、实际重量、计费重量" },
+        { code: "air_packing_list", label: ocTranslate("装箱单"), required: true, attachmentType: "Packing List", purpose: "物料、数量、重量、体积、箱规" },
+        { code: "air_commercial_invoice", label: ocTranslate("商业发票"), required: true, attachmentType: "Commercial Invoice", purpose: "货值、币种、发票金额，用于和采购支出 OA 核对" },
+        { code: "air_customs_declaration", label: ocTranslate("报关资料"), required: true, attachmentType: "Customs Declaration", purpose: "报关单号、海关编码、申报品名" },
+        { code: "air_forwarder_bill", label: ocTranslate("货代账单/费用清单"), required: true, attachmentType: "Logistics Bill", purpose: "空运费、燃油附加费、服务费、杂费" },
+        { code: "air_clearance_fee", label: ocTranslate("清关费用资料（如有）"), required: false, attachmentType: "Other", purpose: "清关费、预检费等费用依据" },
+        { code: "air_tax_certificate", label: ocTranslate("完税凭证（最终核对）"), required: false, attachmentType: "Tax Certificate", purpose: "正式税费结果，用于和系统预估金额对照" },
+        { code: "air_other", label: ocTranslate("其他补充资料"), required: false, attachmentType: "Other", purpose: "仓储费、异常说明等补充依据" },
       ],
       EXPRESS: [
-        { code: "express_approval_attachment", label: "国际物流 OA 附件", required: false, oaSource: true, attachmentType: "Other", purpose: "系统优先从钉钉读取；缺失或需复核时再补传" },
-        { code: "express_waybill", label: "快递面单/运单", required: true, attachmentType: "Logistics Bill", purpose: "运单号、重量、收发件信息" },
-        { code: "express_goods_list", label: "货品明细/装箱资料", required: true, attachmentType: "Packing List", purpose: "物料、数量、重量、体积" },
-        { code: "express_commercial_invoice", label: "商业发票", required: true, attachmentType: "Commercial Invoice", purpose: "货值、币种、发票金额，用于和采购支出 OA 核对" },
-        { code: "express_bill", label: "快递账单/费用清单", required: true, attachmentType: "Logistics Bill", purpose: "快递费、双清费用、服务费" },
-        { code: "express_clearance_fee", label: "清关费用资料（如有）", required: false, attachmentType: "Other", purpose: "快递或双清产生清关费用时提供" },
-        { code: "express_tax_certificate", label: "完税凭证（如有）", required: false, attachmentType: "Tax Certificate", purpose: "有正规进口清关时用于最终税费核对" },
-        { code: "express_payment_voucher", label: "付款/对账凭证", required: false, attachmentType: "Other", purpose: "已付款金额、付款对象、对账依据" },
-        { code: "express_other", label: "其他补充资料", required: false, attachmentType: "Other", purpose: "异常说明、补充截图、沟通记录等" },
+        { code: "express_approval_attachment", label: ocTranslate("国际物流 OA 附件"), required: false, oaSource: true, attachmentType: "Other", purpose: "系统优先从钉钉读取；缺失或需复核时再补传" },
+        { code: "express_waybill", label: ocTranslate("快递面单/运单"), required: true, attachmentType: "Logistics Bill", purpose: "运单号、重量、收发件信息" },
+        { code: "express_goods_list", label: ocTranslate("货品明细/装箱资料"), required: true, attachmentType: "Packing List", purpose: "物料、数量、重量、体积" },
+        { code: "express_commercial_invoice", label: ocTranslate("商业发票"), required: true, attachmentType: "Commercial Invoice", purpose: "货值、币种、发票金额，用于和采购支出 OA 核对" },
+        { code: "express_bill", label: ocTranslate("快递账单/费用清单"), required: true, attachmentType: "Logistics Bill", purpose: "快递费、双清费用、服务费" },
+        { code: "express_clearance_fee", label: ocTranslate("清关费用资料（如有）"), required: false, attachmentType: "Other", purpose: "快递或双清产生清关费用时提供" },
+        { code: "express_tax_certificate", label: ocTranslate("完税凭证（如有）"), required: false, attachmentType: "Tax Certificate", purpose: "有正规进口清关时用于最终税费核对" },
+        { code: "express_payment_voucher", label: ocTranslate("付款/对账凭证"), required: false, attachmentType: "Other", purpose: "已付款金额、付款对象、对账依据" },
+        { code: "express_other", label: ocTranslate("其他补充资料"), required: false, attachmentType: "Other", purpose: "异常说明、补充截图、沟通记录等" },
       ],
     };
     return plans[logisticsType] || [];
@@ -121,13 +121,13 @@
       return `
         <div class="ocw-manual-documents" data-logistics-type="">
           <div class="ocw-purchase-target ocw-manual-document-target">
-            <span>当前批次</span>
+            <span>${ocTranslate("当前批次")}</span>
             <strong>${this.escape(batchLabel)}</strong>
-            <em>运输方式：${this.escape(batch.transport_mode || "未填写")}</em>
+            <em>${ocTranslate("运输方式：{0}", [this.escape(batch.transport_mode || ocTranslate("未填写"))])}</em>
           </div>
           <div class="ocw-detail-empty is-error ocw-manual-doc-blocked">
-            <strong>运输方式未识别，无法确定资料清单</strong>
-            <span>请先在批次中确认运输方式，再上传或解析资料；已有历史附件仍可查看或清理。</span>
+            <strong>${ocTranslate("运输方式未识别，无法确定资料清单")}</strong>
+            <span>${ocTranslate("请先在批次中确认运输方式，再上传或解析资料；已有历史附件仍可查看或清理。")}</span>
           </div>
           ${historyHtml}
         </div>
@@ -147,27 +147,27 @@
     return `
       <div class="ocw-manual-documents" data-logistics-type="${this.escape(logisticsType)}">
         <div class="ocw-purchase-target ocw-manual-document-target">
-          <span>当前批次</span>
+          <span>${ocTranslate("当前批次")}</span>
           <strong>${this.escape(batchLabel)}</strong>
-          <em>这里用于补传缺失资料或给财务复核原件；钉钉已能拉到的不用重复上传。</em>
+          <em>${ocTranslate("这里用于补传缺失资料或给财务复核原件；钉钉已能拉到的不用重复上传。")}</em>
         </div>
         <div class="ocw-manual-doc-source-note">
-          <span>当前运输方式：<strong>${this.escape(logisticsLabel)}</strong></span>
-          <span>基础信息来自国际物流 OA</span>
-          <span>单价/币种来自采购支出 OA</span>
-          <span>税费以报关/完税资料最终核对</span>
+          <span>${ocTranslate("当前运输方式：")}<strong>${this.escape(logisticsLabel)}</strong></span>
+          <span>${ocTranslate("基础信息来自国际物流 OA")}</span>
+          <span>${ocTranslate("单价/币种来自采购支出 OA")}</span>
+          <span>${ocTranslate("税费以报关/完税资料最终核对")}</span>
         </div>
         <div class="ocw-manual-doc-summary">
-          <span>已补传 ${this.escape(String(uploadedTotal))} / ${this.escape(String(plan.length))}</span>
-          <span>核算资料 ${this.escape(String(uploadedRequired))} / ${this.escape(String(requiredTotal))}</span>
-          <span class="${missingRequired ? "warning" : "done"}">${missingRequired ? `${this.escape(String(missingRequired))} 项核算资料待确认` : "核算资料已补齐"}</span>
+          <span>${ocTranslate("已补传 {0} / {1}", [this.escape(String(uploadedTotal)), this.escape(String(plan.length))])}</span>
+          <span>${ocTranslate("核算资料 {0} / {1}", [this.escape(String(uploadedRequired)), this.escape(String(requiredTotal))])}</span>
+          <span class="${missingRequired ? "warning" : "done"}">${missingRequired ? ocTranslate("{0} 项核算资料待确认", [this.escape(String(missingRequired))]) : ocTranslate("核算资料已补齐")}</span>
         </div>
         ${
           focusedSlots.length
             ? `
               <div class="ocw-manual-gap-fill-hint">
-                <strong>已定位 ${this.escape(String(focusedSlots.length))} 处：${this.escape(focusedLabels)}</strong>
-                <span>${this.escape(focus.label || focus.fieldname || "当前缺失项")}。上传资料或人工补填保存后，对应高亮会消失。</span>
+                <strong>${ocTranslate("已定位 {0} 处：{1}", [this.escape(String(focusedSlots.length)), this.escape(focusedLabels)])}</strong>
+                <span>${ocTranslate("{0}。上传资料或人工补填保存后，对应高亮会消失。", [this.escape(focus.label || focus.fieldname || ocTranslate("当前缺失项"))])}</span>
               </div>
             `
             : ""
@@ -185,8 +185,8 @@
     return `
       <section class="ocw-manual-documents ocw-manual-doc-history">
         <div class="ocw-manual-doc-summary">
-          <span><strong>历史/其他方式附件</strong></span>
-          <span>共 ${this.escape(String(items.length))} 件，不计入当前资料完成度</span>
+          <span><strong>${ocTranslate("历史/其他方式附件")}</strong></span>
+          <span>${ocTranslate("共 {0} 件，不计入当前资料完成度", [this.escape(String(items.length))])}</span>
         </div>
         <div class="ocw-purchase-source-list">
           ${items
@@ -199,18 +199,18 @@
                   <div>
                     <strong>${this.escape(logisticsLabel)} · ${this.escape(slotLabel)}</strong>
                     <span title="${this.escape(fileName)}">${this.escape(fileName)}</span>
-                    <em>历史留存，不计入当前资料完成度</em>
+                    <em>${ocTranslate("历史留存，不计入当前资料完成度")}</em>
                   </div>
                   <span class="ocw-manual-doc-actions">
                     ${
                       attachment.file_url
                         ? `
-                          <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="preview-manual-document" data-file-url="${this.escape(attachment.file_url)}" data-file-name="${this.escape(fileName)}" data-attachment-name="${this.escape(attachment.name || "")}">预览</button>
-                          <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="download-manual-document" data-file-url="${this.escape(attachment.file_url)}" data-file-name="${this.escape(fileName)}" data-attachment-name="${this.escape(attachment.name || "")}">下载</button>
+                          <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="preview-manual-document" data-file-url="${this.escape(attachment.file_url)}" data-file-name="${this.escape(fileName)}" data-attachment-name="${this.escape(attachment.name || "")}">${ocTranslate("预览")}</button>
+                          <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="download-manual-document" data-file-url="${this.escape(attachment.file_url)}" data-file-name="${this.escape(fileName)}" data-attachment-name="${this.escape(attachment.name || "")}">${ocTranslate("下载")}</button>
                         `
                         : ""
                     }
-                    ${attachment.audit_only || attachment.source_type === "OA" ? '<em>归档证据只读</em>' : `<button class="ocw-outline-btn ocw-mini-btn danger" type="button" data-action="delete-manual-document" data-attachment-name="${this.escape(attachment.name || "")}">删除</button>`}
+                    ${attachment.audit_only || attachment.source_type === "OA" ? `<em>${ocTranslate("归档证据只读")}</em>` : `<button class="ocw-outline-btn ocw-mini-btn danger" type="button" data-action="delete-manual-document" data-attachment-name="${this.escape(attachment.name || "")}">${ocTranslate("删除")}</button>`}
                   </span>
                 </div>
               `;
@@ -235,35 +235,35 @@
         return `
           <div class="ocw-manual-doc-card ${this.escape(status.className)} ${attachment ? "uploaded" : ""} ${focused ? "is-gap-focus" : ""}" data-slot-code="${this.escape(slot.code)}">
             <div class="ocw-manual-doc-card-head">
-              <strong>${this.escape(slot.label)}</strong>
-              <span class="ocw-manual-doc-required ${this.escape(badge.className)}">${this.escape(badge.label)}</span>
+              <strong>${this.escape(ocTranslate(slot.label))}</strong>
+              <span class="ocw-manual-doc-required ${this.escape(badge.className)}">${this.escape(ocTranslate(badge.label))}</span>
             </div>
-            <div class="ocw-manual-doc-purpose">用于：${this.escape(slot.purpose)}</div>
+            <div class="ocw-manual-doc-purpose">${ocTranslate("用于：{0}", [this.escape(slot.purpose)])}</div>
             <div class="ocw-manual-doc-status">
-              <span class="ocw-manual-doc-status-badge ${this.escape(status.className)}">${this.escape(status.label)}</span>
-              ${attachment ? `<em title="${this.escape(fileName)}">${this.escape(fileName)}</em>` : `<em>${this.escape(status.note || (slot.oaSource ? "优先从钉钉读取" : "缺了再补传"))}</em>`}
+              <span class="ocw-manual-doc-status-badge ${this.escape(status.className)}">${this.escape(ocTranslate(status.label))}</span>
+              ${attachment ? `<em title="${this.escape(fileName)}">${this.escape(fileName)}</em>` : `<em>${this.escape(status.note || (slot.oaSource ? ocTranslate("优先从钉钉读取") : ocTranslate("缺了再补传")))}</em>`}
             </div>
             ${slot.attachmentType === "Packing List" && this.renderPackingComparisonCardStatus ? this.renderPackingComparisonCardStatus(batch) : ""}
             <div class="ocw-manual-doc-actions">
-              ${!archiveOnly && slot.oaSource ? `<button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="view-dingtalk-approval">查看钉钉审批</button>` : ""}
-              ${archiveOnly ? '<span>归档只读；装箱待核对请查看结算明细</span>' : `
+              ${!archiveOnly && slot.oaSource ? `<button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="view-dingtalk-approval">${ocTranslate("查看钉钉审批")}</button>` : ""}
+              ${archiveOnly ? `<span>${ocTranslate("归档只读；装箱待核对请查看结算明细")}</span>` : `
               ${
                 slot.attachmentType === "Packing List"
-                  ? `<button class="ocw-primary-btn ocw-mini-btn" type="button" data-action="open-packing-flow">获取装箱单</button>`
-                  : `<button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="upload-manual-document" data-logistics-type="${this.escape(logisticsType)}" data-slot-code="${this.escape(slot.code)}" data-slot-label="${this.escape(slot.label)}" data-attachment-type="${this.escape(slot.attachmentType)}" data-required="${slot.required ? "1" : "0"}">${attachment ? "重传" : "上传"}</button>`
+                  ? `<button class="ocw-primary-btn ocw-mini-btn" type="button" data-action="open-packing-flow">${ocTranslate("获取装箱单")}</button>`
+                  : `<button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="upload-manual-document" data-logistics-type="${this.escape(logisticsType)}" data-slot-code="${this.escape(slot.code)}" data-slot-label="${this.escape(ocTranslate(slot.label))}" data-attachment-type="${this.escape(slot.attachmentType)}" data-required="${slot.required ? "1" : "0"}">${attachment ? ocTranslate("重传") : ocTranslate("上传")}</button>`
               }
-              <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="manual-fill-gap" data-logistics-type="${this.escape(logisticsType)}" data-slot-code="${this.escape(slot.code)}" data-slot-label="${this.escape(slot.label)}" data-attachment-type="${this.escape(slot.attachmentType)}" data-required="${slot.required ? "1" : "0"}" data-gap-fieldname="${this.escape(focus.fieldname || "")}" data-gap-label="${this.escape(focus.label || slot.label)}">人工补填</button>`}
+              <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="manual-fill-gap" data-logistics-type="${this.escape(logisticsType)}" data-slot-code="${this.escape(slot.code)}" data-slot-label="${this.escape(ocTranslate(slot.label))}" data-attachment-type="${this.escape(slot.attachmentType)}" data-required="${slot.required ? "1" : "0"}" data-gap-fieldname="${this.escape(focus.fieldname || "")}" data-gap-label="${this.escape(focus.label || slot.label)}">${ocTranslate("人工补填")}</button>`}
               ${
                 attachment && attachment.file_url
                   ? `
-                    <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="preview-manual-document" data-file-url="${this.escape(attachment.file_url)}" data-file-name="${this.escape(fileName)}">预览</button>
-                    <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="download-manual-document" data-file-url="${this.escape(attachment.file_url)}" data-file-name="${this.escape(fileName)}">下载</button>
+                    <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="preview-manual-document" data-file-url="${this.escape(attachment.file_url)}" data-file-name="${this.escape(fileName)}">${ocTranslate("预览")}</button>
+                    <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="download-manual-document" data-file-url="${this.escape(attachment.file_url)}" data-file-name="${this.escape(fileName)}">${ocTranslate("下载")}</button>
                   `
                   : ""
               }
               ${
                 attachment && !archiveOnly
-                  ? `<button class="ocw-outline-btn ocw-mini-btn danger" type="button" data-action="delete-manual-document" data-attachment-name="${this.escape(attachment.name)}" data-logistics-type="${this.escape(logisticsType)}">删除</button>`
+                  ? `<button class="ocw-outline-btn ocw-mini-btn danger" type="button" data-action="delete-manual-document" data-attachment-name="${this.escape(attachment.name)}" data-logistics-type="${this.escape(logisticsType)}">${ocTranslate("删除")}</button>`
                   : ""
               }
             </div>
@@ -285,24 +285,24 @@
   manualDocumentStatusInfo(slot, attachment, batch = {}) {
     if (attachment?.source_type === "OA") {
       // 「仅审计」只留给真被排除审批的资料；审批进行中是业务常态，说成人话。
-      if (attachment.audit_only) return { label: "仅审计留档", className: "uploaded" };
-      if (attachment.pending_approval) return { label: "待审批 · 已归档", className: "uploaded" };
-      return { label: "已归档 · 查看核对状态", className: "uploaded" };
+      if (attachment.audit_only) return { label: ocTranslate("仅审计留档"), className: "uploaded" };
+      if (attachment.pending_approval) return { label: ocTranslate("待审批 · 已归档"), className: "uploaded" };
+      return { label: ocTranslate("已归档 · 查看核对状态"), className: "uploaded" };
     }
-    if (attachment) return { label: "已补传", className: "uploaded" };
+    if (attachment) return { label: ocTranslate("已补传"), className: "uploaded" };
     const sourceAttachmentCount = Number(batch.source_attachment_count || 0);
     if (slot.oaSource && sourceAttachmentCount > 0) {
-      return { label: "已拉取", className: "uploaded", note: `已从钉钉拉取 ${sourceAttachmentCount} 个附件` };
+      return { label: ocTranslate("已拉取"), className: "uploaded", note: ocTranslate("已从钉钉拉取 {0} 个附件", [sourceAttachmentCount]) };
     }
-    if (slot.oaSource) return { label: "OA拉取", className: "oa" };
-    if (slot.required) return { label: "待确认", className: "missing" };
-    return { label: "可选补充", className: "optional" };
+    if (slot.oaSource) return { label: ocTranslate("OA拉取"), className: "oa" };
+    if (slot.required) return { label: ocTranslate("待确认"), className: "missing" };
+    return { label: ocTranslate("可选补充"), className: "optional" };
   }
 
   manualDocumentBadgeInfo(slot) {
-    if (slot.oaSource) return { label: "OA拉取", className: "oa" };
-    if (slot.required) return { label: "核算资料", className: "core" };
-    return { label: "可选资料", className: "optional" };
+    if (slot.oaSource) return { label: ocTranslate("OA拉取"), className: "oa" };
+    if (slot.required) return { label: ocTranslate("核算资料"), className: "core" };
+    return { label: ocTranslate("可选资料"), className: "optional" };
   }
 
   async loadManualDocumentAttachments(batch, dialog, _logisticsType = "", focus = {}) {
@@ -337,8 +337,8 @@
     if (!result || !result.ok) {
       $target.html(`
         <div class="ocw-purchase-empty">
-          <strong>资料记录读取失败</strong>
-          <span>${this.escape((result && result.message) || "请稍后重试。")}</span>
+          <strong>${ocTranslate("资料记录读取失败")}</strong>
+          <span>${this.escape((result && result.message) || ocTranslate("请稍后重试。"))}</span>
         </div>
       `);
       return;
@@ -399,7 +399,7 @@
 
     $modal.addClass("ocw-file-uploader-zh");
     this.observeFrappeFileUploader($modal, slotLabel);
-    const title = slotLabel ? `上传资料：${slotLabel}` : "上传资料";
+    const title = slotLabel ? ocTranslate("上传资料：{0}", [slotLabel]) : "上传资料";
     $modal.find(".modal-title").first().text(title);
 
     const replacements = {
@@ -554,7 +554,7 @@
       this.showPendingFeature((result && result.message) || "资料登记失败。");
       return;
     }
-    frappe.show_alert({ message: result.message || "资料已上传", indicator: "green" });
+    frappe.show_alert({ message: result.message || ocTranslate("资料已上传"), indicator: "green" });
     if (dialog && dialog.$wrapper && dialog.$wrapper.find("[data-area='manual-documents']").length) {
       await this.loadManualDocumentAttachments(batch, dialog, logisticsType, {
         slotCodes: Array.isArray(slot.focusSlotCodes) ? slot.focusSlotCodes : [],
@@ -572,27 +572,27 @@
       return;
     }
     const dialog = new frappe.ui.Dialog({
-      title: `人工补填：${slot.label}`,
+      title: ocTranslate("人工补填：{0}", [slot.label]),
       fields: [
         {
           fieldtype: "HTML",
           fieldname: "manual_gap_context",
-          options: `<div class="ocw-manual-gap-modal"><strong>${this.escape(slot.label)}</strong><span>${this.escape(gap.label || gap.fieldname || "当前缺失项")}</span><small>这里记录人工确认内容，不会把说明文字直接当作费用或系统字段值。</small></div>`,
+          options: `<div class="ocw-manual-gap-modal"><strong>${this.escape(ocTranslate(slot.label))}</strong><span>${this.escape(gap.label || gap.fieldname || ocTranslate("当前缺失项"))}</span><small>${ocTranslate("这里记录人工确认内容，不会把说明文字直接当作费用或系统字段值。")}</small></div>`,
         },
         {
           fieldtype: "Small Text",
           fieldname: "manual_note",
-          label: "补填内容",
+          label: ocTranslate("补填内容"),
           reqd: 1,
-          description: "例如：业务主体为 Empresas；或填写费用来源、金额、币种、确认人等。",
+          description: ocTranslate("例如：业务主体为 Empresas；或填写费用来源、金额、币种、确认人等。"),
         },
         {
           fieldtype: "Small Text",
           fieldname: "remark",
-          label: "备注",
+          label: ocTranslate("备注"),
         },
       ],
-      primary_action_label: "保存补填",
+      primary_action_label: ocTranslate("保存补填"),
       primary_action: () => {
         const values = dialog.get_values() || {};
         this.saveManualGapFillRecord(batch, dialog, sourceDialog, {
@@ -644,7 +644,7 @@
       return;
     }
     dialog.hide();
-    frappe.show_alert({ message: result.message || "人工补填已保存", indicator: "green" });
+    frappe.show_alert({ message: result.message || ocTranslate("人工补填已保存"), indicator: "green" });
     if (sourceDialog && sourceDialog.$wrapper) {
       await this.loadManualDocumentAttachments(batch, sourceDialog, logisticsType, {
         fieldname: gap.fieldname,
@@ -661,7 +661,7 @@
     }
     const confirmed = await new Promise((resolve) => {
       frappe.confirm(
-        "确认删除这条资料记录吗？删除后无法恢复。",
+        ocTranslate("确认删除这条资料记录吗？删除后无法恢复。"),
         () => resolve(true),
         () => resolve(false)
       );
@@ -676,7 +676,7 @@
       this.showPendingFeature((result && result.message) || "资料删除失败。");
       return;
     }
-    frappe.show_alert({ message: result.message || "资料记录已删除", indicator: "green" });
+    frappe.show_alert({ message: result.message || ocTranslate("资料记录已删除"), indicator: "green" });
     await this.loadManualDocumentAttachments(batch, dialog, "", focus);
     await this.refreshBatch(batch.name);
   }
@@ -690,7 +690,7 @@
     }
     this.isParsingManualDocuments = true;
     if ($button && $button.length) {
-      $button.prop("disabled", true).text("解析中");
+      $button.prop("disabled", true).text(ocTranslate("解析中"));
     }
     try {
       const result = await this.call(
@@ -705,16 +705,16 @@
         true
       );
       if (!result || !result.ok) {
-        this.showOaAttachmentParseResult(result || { ok: false, message: "当前批次补传资料解析失败。" });
+        this.showOaAttachmentParseResult(result || { ok: false, message: ocTranslate("当前批次补传资料解析失败。") });
       } else {
-        frappe.show_alert({ message: result.message || "当前补传资料已解析", indicator: "green" });
+        frappe.show_alert({ message: result.message || ocTranslate("当前补传资料已解析"), indicator: "green" });
       }
       await this.loadManualDocumentAttachments(batch, dialog, logisticsType);
       await this.refreshBatch(batch.name);
     } finally {
       this.isParsingManualDocuments = false;
       if ($button && $button.length) {
-        $button.prop("disabled", false).text("解析手动补传");
+        $button.prop("disabled", false).text(ocTranslate("解析手动补传"));
       }
     }
   }
@@ -737,27 +737,27 @@
             const isConfirmed = Number(confirmed.candidate_index) === index && this.isPositive(confirmed.amount);
             const carrier = candidate.carrier || "未标注供应商";
             const amount = `${this.formatMoney(candidate.amount)} ${candidate.currency || "RMB"}`;
-            const volume = this.isPositive(candidate.volume_m3) ? ` · ${this.formatNumber(candidate.volume_m3)} 方` : "";
+            const volume = this.isPositive(candidate.volume_m3) ? ocTranslate(" · {0} 方", [this.formatNumber(candidate.volume_m3)]) : "";
             return `
               <div class="ocw-purchase-source-row">
                 <div>
                   <strong>${this.escape(carrier)}</strong>
                   <span>${this.escape(amount)}${this.escape(volume)}</span>
-                  <em>${this.escape(candidate.evidence_line || "来源于 OA 物流报价字段")}</em>
+                  <em>${this.escape(candidate.evidence_line || ocTranslate("来源于 OA 物流报价字段"))}</em>
                 </div>
                 ${
                   isConfirmed
-                    ? '<span class="ocw-purchase-source-disabled">已确认</span>'
-                    : `<button class="ocw-primary-btn ocw-mini-btn" data-action="confirm-logistics-quote" data-candidate-index="${index}">确认使用</button>`
+                    ? `<span class="ocw-purchase-source-disabled">${ocTranslate("已确认")}</span>`
+                    : `<button class="ocw-primary-btn ocw-mini-btn" data-action="confirm-logistics-quote" data-candidate-index="${index}">${ocTranslate("确认使用")}</button>`
                 }
               </div>
             `;
           })
           .join("")
-      : '<div class="ocw-purchase-empty-line">当前 OA 未识别到可确认的物流报价。请先确认审批单已填写“物流报价”文字或有明确物流费用字段。</div>';
+      : `<div class="ocw-purchase-empty-line">${ocTranslate("当前 OA 未识别到可确认的物流报价。请先确认审批单已填写“物流报价”文字或有明确物流费用字段。")}</div>`;
     const confirmedHtml = this.isPositive(confirmed.amount)
-      ? `<div class="ocw-purchase-apply"><div><strong>当前已确认</strong><span>${this.escape(confirmed.carrier || "未标注承运商/货代")} ${this.escape(`${this.formatMoney(confirmed.amount)} ${confirmed.currency || "RMB"}`)}，按${this.escape(this.allocationBasisLabel(confirmed.allocation_basis || "gross_weight"))}参与试算。</span></div></div>`
-      : '<div class="ocw-purchase-note">候选报价仅用于辅助确认；未确认前不会写入费用分摊或综合成本。</div>';
+      ? `<div class="ocw-purchase-apply"><div><strong>${ocTranslate("当前已确认")}</strong><span>${ocTranslate("{0} {1}，按{2}参与试算。", [this.escape(confirmed.carrier || ocTranslate("未标注承运商/货代")), this.escape(`${this.formatMoney(confirmed.amount)} ${confirmed.currency || "RMB"}`), this.escape(this.allocationBasisLabel(confirmed.allocation_basis || "gross_weight"))])}</span></div></div>`
+      : `<div class="ocw-purchase-note">${ocTranslate("候选报价仅用于辅助确认；未确认前不会写入费用分摊或综合成本。")}</div>`;
     const manualDefaults = {
       carrier: confirmed.carrier || logisticsTextSummary.logistics_quote_carrier || "",
       amount: confirmed.amount || logisticsTextSummary.logistics_quote_amount || "",
@@ -773,7 +773,7 @@
       note: confirmed.confirmation_note || "",
     };
     const dialog = new frappe.ui.Dialog({
-      title: "物流报价/运费补录",
+      title: ocTranslate("物流报价/运费补录"),
       fields: [
         {
           fieldtype: "HTML",
@@ -781,28 +781,28 @@
           options: `
             <div class="ocw-purchase-preview">
               <div class="ocw-purchase-target">
-                <span>当前批次</span>
+                <span>${ocTranslate("当前批次")}</span>
                 <strong>${this.escape(batchLabel)}</strong>
-                <em>系统从国际物流 OA 的文字报价中提取候选；确认后会记录来源、操作人和时间。</em>
+                <em>${ocTranslate("系统从国际物流 OA 的文字报价中提取候选；确认后会记录来源、操作人和时间。")}</em>
               </div>
               ${confirmedHtml}
               <div class="ocw-purchase-source-list">${candidateRows}</div>
               <div class="ocw-manual-quote-box">
                 <div class="ocw-manual-quote-head">
-                  <strong>手工补录物流报价</strong>
-                  <span>用于 OA 文本能看到费用、但系统没有自动写入的情况；保存后会进入费用池并重新试算。</span>
+                  <strong>${ocTranslate("手工补录物流报价")}</strong>
+                  <span>${ocTranslate("用于 OA 文本能看到费用、但系统没有自动写入的情况；保存后会进入费用池并重新试算。")}</span>
                 </div>
                 <div class="ocw-manual-quote-grid">
                   <label>
-                    <span>承运商/货代</span>
-                    <input class="form-control" data-field="carrier" value="${this.escape(manualDefaults.carrier)}" placeholder="如 DHL、SISA、货代名称">
+                    <span>${ocTranslate("承运商/货代")}</span>
+                    <input class="form-control" data-field="carrier" value="${this.escape(manualDefaults.carrier)}" placeholder="${ocTranslate('如 DHL、SISA、货代名称')}">
                   </label>
                   <label>
-                    <span>物流费用金额</span>
-                    <input class="form-control" data-field="amount" type="number" step="0.000001" value="${this.escape(manualDefaults.amount)}" placeholder="如 6160.615461">
+                    <span>${ocTranslate("物流费用金额")}</span>
+                    <input class="form-control" data-field="amount" type="number" step="0.000001" value="${this.escape(manualDefaults.amount)}" placeholder="${ocTranslate('如 6160.615461')}">
                   </label>
                   <label>
-                    <span>币种</span>
+                    <span>${ocTranslate("币种")}</span>
                     <select class="form-control" data-field="currency">
                       ${this.renderManualQuoteOption("RMB", "人民币 RMB", manualDefaults.currency)}
                       ${this.renderManualQuoteOption("USD", "美元 USD", manualDefaults.currency)}
@@ -810,7 +810,7 @@
                     </select>
                   </label>
                   <label>
-                    <span>分摊依据</span>
+                    <span>${ocTranslate("分摊依据")}</span>
                     <select class="form-control" data-field="allocation_basis">
                       ${this.renderManualQuoteOption("gross_weight", "按毛重分摊", manualDefaults.allocation_basis)}
                       ${this.renderManualQuoteOption("chargeable_weight", "按计费重分摊", manualDefaults.allocation_basis)}
@@ -819,47 +819,47 @@
                     </select>
                   </label>
                   <label>
-                    <span>实际重量 KG</span>
+                    <span>${ocTranslate("实际重量 KG")}</span>
                     <input class="form-control" data-field="gross_weight_kg" type="number" step="0.000001" value="${this.escape(manualDefaults.gross_weight_kg)}">
                   </label>
                   <label>
-                    <span>计费重量 KG</span>
+                    <span>${ocTranslate("计费重量 KG")}</span>
                     <input class="form-control" data-field="chargeable_weight_kg" type="number" step="0.000001" value="${this.escape(manualDefaults.chargeable_weight_kg)}">
                   </label>
                   <label>
-                    <span>每 KG 单价</span>
+                    <span>${ocTranslate("每 KG 单价")}</span>
                     <input class="form-control" data-field="unit_freight_per_kg" type="number" step="0.000001" value="${this.escape(manualDefaults.unit_freight_per_kg)}">
                   </label>
                   <label>
-                    <span>预计发货日期</span>
-                    <input class="form-control" data-field="pre_delivery_date" value="${this.escape(manualDefaults.pre_delivery_date)}" placeholder="如 2026/7/15">
+                    <span>${ocTranslate("预计发货日期")}</span>
+                    <input class="form-control" data-field="pre_delivery_date" value="${this.escape(manualDefaults.pre_delivery_date)}" placeholder="${ocTranslate('如 2026/7/15')}">
                   </label>
                   <label class="ocw-manual-quote-wide">
-                    <span>目的地</span>
+                    <span>${ocTranslate("目的地")}</span>
                     <input class="form-control" data-field="destination" value="${this.escape(manualDefaults.destination)}">
                   </label>
                   <label class="ocw-manual-quote-wide">
-                    <span>计费说明/备注</span>
-                    <input class="form-control" data-field="billing_method" value="${this.escape(manualDefaults.billing_method)}" placeholder="如体积重大于实际重量，按计费重">
+                    <span>${ocTranslate("计费说明/备注")}</span>
+                    <input class="form-control" data-field="billing_method" value="${this.escape(manualDefaults.billing_method)}" placeholder="${ocTranslate('如体积重大于实际重量，按计费重')}">
                   </label>
                   <label class="ocw-manual-quote-full">
-                    <span>来源依据</span>
-                    <textarea class="form-control" data-field="evidence_text" rows="3" placeholder="可粘贴审批单里的报价公式或关键原文">${this.escape(manualDefaults.evidence_text)}</textarea>
+                    <span>${ocTranslate("来源依据")}</span>
+                    <textarea class="form-control" data-field="evidence_text" rows="3" placeholder="${ocTranslate('可粘贴审批单里的报价公式或关键原文')}">${this.escape(manualDefaults.evidence_text)}</textarea>
                   </label>
                   <label class="ocw-manual-quote-full">
-                    <span>人工备注</span>
-                    <input class="form-control" data-field="note" value="${this.escape(manualDefaults.note)}" placeholder="可填写核对说明">
+                    <span>${ocTranslate("人工备注")}</span>
+                    <input class="form-control" data-field="note" value="${this.escape(manualDefaults.note)}" placeholder="${ocTranslate('可填写核对说明')}">
                   </label>
                 </div>
                 <div class="ocw-manual-quote-actions">
-                  <button class="ocw-primary-btn" type="button" data-action="save-manual-logistics-quote">保存补录并重新试算</button>
+                  <button class="ocw-primary-btn" type="button" data-action="save-manual-logistics-quote">${ocTranslate("保存补录并重新试算")}</button>
                 </div>
               </div>
             </div>
           `,
         },
       ],
-      primary_action_label: "关闭",
+      primary_action_label: ocTranslate("关闭"),
       primary_action: () => dialog.hide(),
     });
     dialog.show();
@@ -876,7 +876,7 @@
   renderManualQuoteOption(value, label, selectedValue) {
     const normalizedSelected = String(selectedValue || "").trim();
     const selected = normalizedSelected === value ? " selected" : "";
-    return `<option value="${this.escape(value)}"${selected}>${this.escape(label)}</option>`;
+    return `<option value="${this.escape(value)}"${selected}>${this.escape(ocTranslate(label))}</option>`;
   }
 
   readManualQuoteValue(dialog, fieldname) {
@@ -888,7 +888,7 @@
     let acquired = null;
     try {
       if (inDetail) {
-        if (!(await this.ensureEditSession())) throw new Error("未能获取编辑权，物流报价未保存。");
+        if (!(await this.ensureEditSession())) throw new Error(ocTranslate("未能获取编辑权，物流报价未保存。"));
       } else {
         acquired = await this.call("overseas_costing.api.edit_session.acquire", { batch_name: batch.name });
         if (!acquired?.ok) throw new Error(acquired?.message || "未能获取编辑权，物流报价未保存。");
@@ -926,16 +926,16 @@
       note: this.readManualQuoteValue(dialog, "note"),
     };
     if (!this.isPositive(payload.amount)) {
-      frappe.msgprint("请先填写大于 0 的物流费用金额。");
+      frappe.msgprint(ocTranslate("请先填写大于 0 的物流费用金额。"));
       return;
     }
     const confirmed = await new Promise((resolve) => {
       frappe.confirm(
         `
           <div class="ocw-confirm-copy">
-            <h4>确认保存物流报价补录？</h4>
-            <p>系统会把 ${this.escape(this.formatMoney(payload.amount))} ${this.escape(payload.currency)} 写入当前批次费用池，并立即重新试算。</p>
-            <div class="ocw-confirm-note">已有人工保存费用时，新报价会保留供复核；调整金额请在费用清单中处理。</div>
+            <h4>${ocTranslate("确认保存物流报价补录？")}</h4>
+            <p>${ocTranslate("系统会把 {0} {1} 写入当前批次费用池，并立即重新试算。", [this.escape(this.formatMoney(payload.amount)), this.escape(payload.currency)])}</p>
+            <div class="ocw-confirm-note">${ocTranslate("已有人工保存费用时，新报价会保留供复核；调整金额请在费用清单中处理。")}</div>
           </div>
         `,
         () => resolve(true),
@@ -946,7 +946,7 @@
 
     this.isSavingManualLogisticsQuote = true;
     const $button = dialog.$wrapper.find("[data-action='save-manual-logistics-quote']");
-    $button.prop("disabled", true).text("保存中...");
+    $button.prop("disabled", true).text(ocTranslate("保存中..."));
     try {
       const result = await this.callLogisticsQuoteWrite("overseas_costing.api.import_api.save_manual_logistics_quote", batch, payload);
       if (!result || !result.ok) {
@@ -964,10 +964,10 @@
       if (this.drawerBatchName === batch.name && this.$root.find("[data-area='batch-drawer']").hasClass("is-open")) {
         this.renderBatchDrawer();
       }
-      frappe.show_alert({ message: result.message || "物流报价补录已保存", indicator: "green" });
+      frappe.show_alert({ message: result.message || ocTranslate("物流报价补录已保存"), indicator: "green" });
     } finally {
       this.isSavingManualLogisticsQuote = false;
-      $button.prop("disabled", false).text("保存补录并重新试算");
+      $button.prop("disabled", false).text(ocTranslate("保存补录并重新试算"));
     }
   }
 
@@ -979,9 +979,9 @@
       frappe.confirm(
         `
           <div class="ocw-confirm-copy">
-            <h4>确认使用该物流报价？</h4>
-            <p>将确认 ${this.escape(carrier)} 的 ${this.escape(amount)}，生成整票物流费用分摊规则并重新试算。</p>
-            <div class="ocw-confirm-note">已有人工保存费用时，新报价会保留供复核；调整金额请在费用清单中处理。</div>
+            <h4>${ocTranslate("确认使用该物流报价？")}</h4>
+            <p>${ocTranslate("将确认 {0} 的 {1}，生成整票物流费用分摊规则并重新试算。", [this.escape(carrier), this.escape(amount)])}</p>
+            <div class="ocw-confirm-note">${ocTranslate("已有人工保存费用时，新报价会保留供复核；调整金额请在费用清单中处理。")}</div>
           </div>
         `,
         () => resolve(true),
@@ -1006,7 +1006,7 @@
       }
       dialog.hide();
       await this.loadBatches();
-      frappe.show_alert({ message: result.message || "物流报价已确认", indicator: "green" });
+      frappe.show_alert({ message: result.message || ocTranslate("物流报价已确认"), indicator: "green" });
     } finally {
       this.isConfirmingLogisticsQuote = false;
     }

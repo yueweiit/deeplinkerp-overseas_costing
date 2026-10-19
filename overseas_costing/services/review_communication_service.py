@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import json
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -27,10 +34,10 @@ def normalize_issue_draft(value: dict, *, order_no: int) -> dict:
     draft = dict(value or {})
     description = _clean(draft.get("description"))
     if not description:
-        raise ValueError("整改问题不能为空。")
+        raise ValueError(_("整改问题不能为空。"))
     target_tab = _clean(draft.get("target_tab"))
     if target_tab and target_tab not in ALLOWED_TARGET_TABS:
-        raise ValueError("整改问题关联页签无效。")
+        raise ValueError(_("整改问题关联页签无效。"))
     attachments = []
     for name in draft.get("attachments") or []:
         normalized = _clean(name)
@@ -157,10 +164,10 @@ class FrappeReviewRepository:
             (batch_name,), as_dict=True,
         )
         if not rows:
-            raise ValueError(f"未找到当前批次或活动成本版本：{batch_name}")
+            raise ValueError(_("未找到当前批次或活动成本版本：{0}").format(batch_name))
         row = dict(rows[0])
         if version_name and _clean(version_name) != _clean(row.get("version_name")):
-            raise ValueError("成本版本已变化，请刷新后重试。")
+            raise ValueError(_("成本版本已变化，请刷新后重试。"))
         snapshot = _json_object(row.get("summary_snapshot_json"))
         signature = _clean(snapshot.get("input_hash"))
         result_current = bool(
@@ -203,21 +210,21 @@ class FrappeReviewRepository:
         if target_item and not self.frappe.db.exists(
             "Overseas Cost Item", {"name": target_item, "batch": batch_name, "version": version_name}
         ):
-            raise ValueError("整改问题关联的物料不属于当前批次。")
+            raise ValueError(_("整改问题关联的物料不属于当前批次。"))
         target_row = _clean(draft.get("target_row"))
         if target_row and not (
             self.frappe.db.exists("Overseas Cost Item", {"name": target_row, "batch": batch_name, "version": version_name})
             or self.frappe.db.exists("Overseas Cost Allocation Rule", {"name": target_row, "batch": batch_name, "version": version_name})
             or self.frappe.db.exists("Overseas Cost Fee Evidence", {"name": target_row, "batch": batch_name, "version": version_name})
         ):
-            raise ValueError("整改问题原关联位置已变化，请刷新后重新选择。")
+            raise ValueError(_("整改问题原关联位置已变化，请刷新后重新选择。"))
 
     def file_manifest(self, names):
         manifest = []
         for name in names:
             row = self.frappe.db.get_value("File", name, ["name", "file_name", "file_url", "is_private"], as_dict=True)
             if not row:
-                raise ValueError("整改附件不存在或不可用。")
+                raise ValueError(_("整改附件不存在或不可用。"))
             manifest.append(dict(row))
         return manifest
 
@@ -310,11 +317,11 @@ def _audit(repo, *, batch, version, action_type, field_name, old_value="", new_v
 
 def _require_current_trial(context: dict) -> None:
     if not context.get("result_is_current"):
-        raise ValueError("当前试算已失效，请重新试算后再操作。")
+        raise ValueError(_("当前试算已失效，请重新试算后再操作。"))
     if not context.get("cost_review_eligible"):
-        raise ValueError("当前批次缺少采购货值，不能进入成本核对。")
+        raise ValueError(_("当前批次缺少采购货值，不能进入成本核对。"))
     if context.get("confirmed"):
-        raise ValueError("当前成本结果已确认，不能再发起整改。")
+        raise ValueError(_("当前成本结果已确认，不能再发起整改。"))
 
 
 def return_for_remediation(batch_name, version_name, trial_signature, issues) -> dict:
@@ -322,13 +329,13 @@ def return_for_remediation(batch_name, version_name, trial_signature, issues) ->
     try:
         normalized = [normalize_issue_draft(row, order_no=index) for index, row in enumerate(issues or [], 1)]
         if not normalized:
-            raise ValueError("请至少填写一项整改问题。")
+            raise ValueError(_("请至少填写一项整改问题。"))
         context = repo.lock_cost_context(_clean(batch_name), _clean(version_name) or None)
         _require_current_trial(context)
         if _clean(trial_signature) != _clean(context.get("trial_signature")):
-            raise ValueError("试算结果已变化，请刷新后重新提出整改。")
+            raise ValueError(_("试算结果已变化，请刷新后重新提出整改。"))
         if repo.load_active_round(context["batch_name"], for_update=True):
-            raise ValueError("已有未完成的整改轮次，请在复核沟通中继续处理。")
+            raise ValueError(_("已有未完成的整改轮次，请在复核沟通中继续处理。"))
         prepared = []
         for draft in normalized:
             repo.validate_anchor(context["batch_name"], context["version_name"], draft)
@@ -371,15 +378,15 @@ def address_review_issue(batch_name, issue_name, reply, expected_modified="") ->
         context = repo.lock_cost_context(_clean(batch_name))
         issue = repo.get_issue_for_update(context["batch_name"], _clean(issue_name))
         if not issue:
-            raise ValueError("整改问题不存在或不属于当前批次。")
+            raise ValueError(_("整改问题不存在或不属于当前批次。"))
         review_round = repo.get_round_for_update(context["batch_name"], issue["review_round"])
         if not review_round or review_round.get("status") != "Returned":
-            raise ValueError("当前整改轮次不能继续回复。")
+            raise ValueError(_("当前整改轮次不能继续回复。"))
         if not _same_modified(expected_modified, issue.get("modified")):
-            raise ValueError("整改问题已被其他人更新，请刷新后重试。")
+            raise ValueError(_("整改问题已被其他人更新，请刷新后重试。"))
         answer = _clean(reply)
         if not answer:
-            raise ValueError("请填写处理回复。")
+            raise ValueError(_("请填写处理回复。"))
         updated = repo.update_issue(issue["name"], {
             "status": "Addressed", "reply": answer, "addressed_by": _current_user(),
             "addressed_at": _now(), "resolved_by": None, "resolved_at": None,
@@ -403,12 +410,12 @@ def resubmit_review_round(batch_name, round_name, expected_modified="") -> dict:
         _require_current_trial(context)
         review_round = repo.get_round_for_update(context["batch_name"], _clean(round_name))
         if not review_round or review_round.get("status") != "Returned":
-            raise ValueError("当前整改轮次不能提交财务复核。")
+            raise ValueError(_("当前整改轮次不能提交财务复核。"))
         if not _same_modified(expected_modified, review_round.get("modified")):
-            raise ValueError("整改轮次已被其他人更新，请刷新后重试。")
+            raise ValueError(_("整改轮次已被其他人更新，请刷新后重试。"))
         issues = repo.list_round_issues(review_round["name"], for_update=True)
         if not issues or any(row.get("status") != "Addressed" for row in issues):
-            raise ValueError("请先全部回复并标记已处理。")
+            raise ValueError(_("请先全部回复并标记已处理。"))
         updated = repo.update_round(review_round["name"], {
             "status": "Resubmitted", "trial_signature": context["trial_signature"],
             "resubmitted_by": _current_user(), "resubmitted_at": _now(),
@@ -433,12 +440,12 @@ def resolve_review_issue(batch_name, issue_name, expected_modified="") -> dict:
         _require_current_trial(context)
         issue = repo.get_issue_for_update(context["batch_name"], _clean(issue_name))
         if not issue:
-            raise ValueError("整改问题不存在或不属于当前批次。")
+            raise ValueError(_("整改问题不存在或不属于当前批次。"))
         review_round = repo.get_round_for_update(context["batch_name"], issue["review_round"])
         if not review_round or review_round.get("status") != "Resubmitted" or issue.get("status") != "Addressed":
-            raise ValueError("只有采购已处理并再次提交的问题才能由财务确认。")
+            raise ValueError(_("只有采购已处理并再次提交的问题才能由财务确认。"))
         if not _same_modified(expected_modified, issue.get("modified")):
-            raise ValueError("整改问题已被其他人更新，请刷新后重试。")
+            raise ValueError(_("整改问题已被其他人更新，请刷新后重试。"))
         actor, now = _current_user(), _now()
         updated_issue = repo.update_issue(issue["name"], {"status": "Resolved", "resolved_by": actor, "resolved_at": now})
         issues = repo.list_round_issues(review_round["name"], for_update=True)

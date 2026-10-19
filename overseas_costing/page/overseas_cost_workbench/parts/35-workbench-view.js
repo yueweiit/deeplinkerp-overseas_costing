@@ -4,27 +4,27 @@
         <main class="ocw-workbench-screen" data-area="workbench-screen">
           <header class="ocw-redesign-header">
             <div class="ocw-redesign-title">
-              <button class="ocw-icon-btn ocw-nav-toggle" type="button" data-action="toggle-module-sidebar" aria-label="展开或收起导航" title="展开或收起导航">☰</button>
+              <button class="ocw-icon-btn ocw-nav-toggle" type="button" data-action="toggle-module-sidebar" aria-label="${ocTranslate('展开或收起导航')}" title="${ocTranslate('展开或收起导航')}">☰</button>
               <div>
-                <h1>海外成本工作台</h1>
-                <p>优先处理异常批次，也可搜索已知批次核对成本。</p>
+                <h1>${ocTranslate("海外成本工作台")}</h1>
+                <p>${ocTranslate("优先处理异常批次，也可搜索已知批次核对成本。")}</p>
               </div>
             </div>
             <div class="ocw-header-actions">
               <div class="ocw-menu-wrap">
-                <button class="ocw-outline-btn" type="button" data-action="toggle-ingest-menu" aria-expanded="false">全局工具</button>
+                <button class="ocw-outline-btn" type="button" data-action="toggle-ingest-menu" aria-expanded="false">${ocTranslate("全局工具")}</button>
                 <div class="ocw-ingest-menu" data-area="ingest-menu" hidden>
-                  <button type="button" data-action="export-current">导出当前结果</button>
-                  <button type="button" data-action="file-parse">凭证对比</button>
-                  <button type="button" data-action="preview-categories">商品归类</button>
-                  <button type="button" data-action="pull-oa-logistics">批量钉钉拉取</button>
-                  <button type="button" data-action="open-import">批量 Excel 导入</button>
+                  <button type="button" data-action="export-current">${ocTranslate("导出当前结果")}</button>
+                  <button type="button" data-action="file-parse">${ocTranslate("凭证对比")}</button>
+                  <button type="button" data-action="preview-categories">${ocTranslate("商品归类")}</button>
+                  <button type="button" data-action="pull-oa-logistics">${ocTranslate("批量钉钉拉取")}</button>
+                  <button type="button" data-action="open-import">${ocTranslate("批量 Excel 导入")}</button>
                 </div>
               </div>
-              <button class="ocw-primary-btn" type="button" data-action="add-batch">+ 新增批次</button>
+              <button class="ocw-primary-btn" type="button" data-action="add-batch">${ocTranslate("+ 新增批次")}</button>
             </div>
           </header>
-          <nav class="ocw-task-tabs" data-area="task-tabs" aria-label="工作任务"></nav>
+          <nav class="ocw-task-tabs" data-area="task-tabs" aria-label="${ocTranslate('工作任务')}"></nav>
           <section class="ocw-search-panel" data-area="search-panel"></section>
           <section class="ocw-batch-list-panel" data-area="batch-list"></section>
         </main>
@@ -451,16 +451,16 @@
   renderWorkbenchLoading() {
     if (!this.$root) return;
     this.$root.find("[data-area='batch-list']").html(`
-      <div class="ocw-state-panel"><span class="ocw-spinner"></span><strong>正在加载工作台</strong></div>
+      <div class="ocw-state-panel"><span class="ocw-spinner"></span><strong>${ocTranslate("正在加载工作台")}</strong></div>
     `);
   }
 
   renderWorkbenchError(error) {
     this.$root.find("[data-area='batch-list']").html(`
       <div class="ocw-state-panel is-error">
-        <strong>工作台加载失败</strong>
+        <strong>${ocTranslate("工作台加载失败")}</strong>
         <span>${this.escape(this.normalizeErrorMessage(error))}</span>
-        <button class="ocw-outline-btn" type="button" data-action="reload-batches">重新加载</button>
+        <button class="ocw-outline-btn" type="button" data-action="reload-batches">${ocTranslate("重新加载")}</button>
       </div>
     `);
   }
@@ -474,9 +474,9 @@
 
   renderTaskTabs() {
     const tasks = [
-      { key: "pending", label: "待处理", hint: "优先处理资料与计算异常" },
-      { key: "cost", label: "成本核对", hint: "核对当前已完成分摊的结果" },
-      { key: "erp", label: "ERP 队列", hint: "处理待推送与失败记录" },
+      { key: "pending", label: ocTranslate("待处理"), hint: ocTranslate("优先处理资料与计算异常") },
+      { key: "cost", label: ocTranslate("成本核对"), hint: ocTranslate("核对当前已完成分摊的结果") },
+      { key: "erp", label: ocTranslate("ERP 队列"), hint: ocTranslate("处理待推送与失败记录") },
     ];
     this.$root.find("[data-area='task-tabs']").html(
       tasks.map((task) => `
@@ -492,101 +492,101 @@
     const entityOptions = this.businessEntityOptions || [];
     this.$root.find("[data-area='search-panel']").html(`
       <div class="ocw-search-row">
-        <label class="ocw-search-main"><span>查找批次或物料</span><input class="form-control" type="search" data-workbench-filter="q" value="${this.escape(this.viewState.q)}" placeholder="搜索批次号、运单号、物流单号或物料编码" /></label>
-        <label><span>开始日期</span><input class="form-control" type="date" data-workbench-filter="start_date" value="${this.escape(this.filters.start_date)}" /></label>
-        <label><span>结束日期</span><input class="form-control" type="date" data-workbench-filter="end_date" value="${this.escape(this.filters.end_date)}" /></label>
-        <button class="ocw-primary-btn" type="button" data-action="apply-filters">查询</button>
-        <button class="ocw-outline-btn" type="button" data-action="clear-filters">重置</button>
+        <label class="ocw-search-main"><span>${ocTranslate("查找批次或物料")}</span><input class="form-control" type="search" data-workbench-filter="q" value="${this.escape(this.viewState.q)}" placeholder="${ocTranslate('搜索批次号、运单号、物流单号或物料编码')}" /></label>
+        <label><span>${ocTranslate("开始日期")}</span><input class="form-control" type="date" data-workbench-filter="start_date" value="${this.escape(this.filters.start_date)}" /></label>
+        <label><span>${ocTranslate("结束日期")}</span><input class="form-control" type="date" data-workbench-filter="end_date" value="${this.escape(this.filters.end_date)}" /></label>
+        <button class="ocw-primary-btn" type="button" data-action="apply-filters">${ocTranslate("查询")}</button>
+        <button class="ocw-outline-btn" type="button" data-action="clear-filters">${ocTranslate("重置")}</button>
       </div>
       <div class="ocw-secondary-filter-row">
-        ${this.viewState.task === "cost" ? `<label><span>核对状态</span><select class="form-control" data-workbench-filter="review_status">
-          <option value="pending" ${this.filters.review_status !== "confirmed" ? "selected" : ""}>待核对</option>
-          <option value="confirmed" ${this.filters.review_status === "confirmed" ? "selected" : ""}>已核对</option>
+        ${this.viewState.task === "cost" ? `<label><span>${ocTranslate("核对状态")}</span><select class="form-control" data-workbench-filter="review_status">
+          <option value="pending" ${this.filters.review_status !== "confirmed" ? "selected" : ""}>${ocTranslate("待核对")}</option>
+          <option value="confirmed" ${this.filters.review_status === "confirmed" ? "selected" : ""}>${ocTranslate("已核对")}</option>
         </select></label>` : ""}
-        <label><span>业务类型</span><select class="form-control" data-workbench-filter="business_type" data-filter="business_type">
-          <option value="">全部业务类型</option>
+        <label><span>${ocTranslate("业务类型")}</span><select class="form-control" data-workbench-filter="business_type" data-filter="business_type">
+          <option value="">${ocTranslate("全部业务类型")}</option>
           ${businessOptions.map((option) => {
             const value = typeof option === "string" ? option : option.value;
             const label = typeof option === "string" ? this.businessTypeLabel(option) : option.label;
-            return `<option value="${this.escape(value)}" ${this.filters.business_type === value ? "selected" : ""}>${this.escape(label)}</option>`;
+            return `<option value="${this.escape(value)}" ${this.filters.business_type === value ? "selected" : ""}>${this.escape(ocTranslate(label))}</option>`;
           }).join("")}
         </select></label>
-        <label><span>业务主体</span><select class="form-control" data-workbench-filter="subsidiary_code" data-filter="subsidiary_code">
-          <option value="">全部业务主体</option>
+        <label><span>${ocTranslate("业务主体")}</span><select class="form-control" data-workbench-filter="subsidiary_code" data-filter="subsidiary_code">
+          <option value="">${ocTranslate("全部业务主体")}</option>
           ${entityOptions.map((value) => `<option value="${this.escape(value)}" ${this.filters.subsidiary_code === value ? "selected" : ""}>${this.escape(value)}</option>`).join("")}
         </select></label>
-        <label><span>ERP 状态</span><select class="form-control" data-workbench-filter="erp_status">
-          <option value="">全部 ERP 状态</option>
-          <option value="not_started" ${this.filters.erp_status === "not_started" ? "selected" : ""}>未推送</option>
-          <option value="pending" ${this.filters.erp_status === "pending" ? "selected" : ""}>待推送</option>
-          <option value="failed" ${this.filters.erp_status === "failed" ? "selected" : ""}>推送失败</option>
-          <option value="success" ${this.filters.erp_status === "success" ? "selected" : ""}>推送成功</option>
+        <label><span>${ocTranslate("ERP 状态")}</span><select class="form-control" data-workbench-filter="erp_status">
+          <option value="">${ocTranslate("全部 ERP 状态")}</option>
+          <option value="not_started" ${this.filters.erp_status === "not_started" ? "selected" : ""}>${ocTranslate("未推送")}</option>
+          <option value="pending" ${this.filters.erp_status === "pending" ? "selected" : ""}>${ocTranslate("待推送")}</option>
+          <option value="failed" ${this.filters.erp_status === "failed" ? "selected" : ""}>${ocTranslate("推送失败")}</option>
+          <option value="success" ${this.filters.erp_status === "success" ? "selected" : ""}>${ocTranslate("推送成功")}</option>
         </select></label>
-        <span class="ocw-result-copy">共 ${this.workbenchTotal} 个批次${this.viewState.task === "cost" && this.filters.review_warning ? " · 已按核对提示筛选" : this.viewState.task === "pending" && this.filters.issue ? " · 已按异常筛选" : ""}</span>
+        <span class="ocw-result-copy">${ocTranslate("共 {0} 个批次{1}", [this.workbenchTotal, this.viewState.task === "cost" && this.filters.review_warning ? " · 已按核对提示筛选" : this.viewState.task === "pending" && this.filters.issue ? " · 已按异常筛选" : ""])}</span>
       </div>
     `);
   }
 
   issueLabel(issue) {
     return {
-      purchase: "采购资料不完整",
-      logistics: "物流资料不完整",
-      calculation: "成本待计算",
-      erp_failed: "ERP 回写失败",
-      ready: "可核对",
-    }[issue] || "待核对";
+      purchase: ocTranslate("采购资料不完整"),
+      logistics: ocTranslate("物流资料不完整"),
+      calculation: ocTranslate("成本待计算"),
+      erp_failed: ocTranslate("ERP 回写失败"),
+      ready: ocTranslate("可核对"),
+    }[issue] || ocTranslate("待核对");
   }
 
   workbenchRowStatusLabel(batch) {
-    if (String(batch.remediation_state || "").toLowerCase() === "returned") return "待整改";
-    if (String(batch.remediation_state || "").toLowerCase() === "resubmitted") return "待财务复核";
-    if (batch.review_state === "confirmed") return "已核对";
-    if (batch.review_state === "ready") return "可核对";
+    if (String(batch.remediation_state || "").toLowerCase() === "returned") return ocTranslate("待整改");
+    if (String(batch.remediation_state || "").toLowerCase() === "resubmitted") return ocTranslate("待财务复核");
+    if (batch.review_state === "confirmed") return ocTranslate("已核对");
+    if (batch.review_state === "ready") return ocTranslate("可核对");
     return {
-      purchase: "资料待补",
-      logistics: "资料待补",
-      calculation: "待重新计算",
-      erp_failed: "ERP 回写失败",
-    }[batch.primary_issue] || "待核对";
+      purchase: ocTranslate("资料待补"),
+      logistics: ocTranslate("资料待补"),
+      calculation: ocTranslate("待重新计算"),
+      erp_failed: ocTranslate("ERP 回写失败"),
+    }[batch.primary_issue] || ocTranslate("待核对");
   }
 
   workbenchReviewTagLabel(code) {
     const labels = {
-      MATERIAL_ITEMS_REQUIRED: "采购资料待补",
-      GOODS_VALUE_MISSING: "采购资料待补",
-      PURCHASE_SOURCE_INVALID: "采购资料待补",
-      SOURCE_ADOPTION_PENDING: "采购资料待采用",
-      TRANSPORT_MODE_REQUIRED: "运输方式待确认",
-      AMOUNT_MISSING: "费用金额待补",
-      AMOUNT_STATUS_INVALID: "费用状态待确认",
-      FEE_AMOUNT_INVALID: "费用金额待核对",
-      DUPLICATE_LOGICAL_FEE: "重复费用待处理",
-      FX_RATE_MISSING: "费用汇率待补",
-      CURRENCY_UNSUPPORTED: "费用币种待核对",
-      ESTIMATED_AMOUNT: "实际费用待确认",
-      EVIDENCE_MISSING: "费用凭证未齐",
-      FINAL_FEE_REVIEW_REQUIRED: "费用待核对",
-      ALLOCATION_REQUIRED: "分摊资料待补",
-      SHIPPING_UNIT_REQUIRED: "分摊资料待补",
-      ALLOCATION_BASIS_INCOMPLETE: "分摊资料待补",
-      ALLOCATION_DENOMINATOR_ZERO: "分摊资料待补",
-      FEE_SCOPE_EMPTY: "分摊资料待补",
-      FEE_SCOPE_INVALID: "分摊资料待补",
-      DIRECT_ITEM_SCOPE_INVALID: "分摊资料待补",
-      STABLE_ITEM_KEY_REQUIRED: "分摊资料待补",
-      STABLE_ITEM_KEY_DUPLICATED: "分摊资料待补",
-      TEMPORARY_ALLOCATION_BASIS: "分摊资料待补",
-      RESULT_NOT_SAVED: "待重新计算",
-      RESULT_LEGACY: "待重新计算",
-      RESULT_STALE: "待重新计算",
-      SAVED_RESULT_INVALID: "待重新计算",
-      STALE: "待重新计算",
-      purchase: "采购资料待补",
-      logistics: "分摊资料待补",
-      calculation: "待重新计算",
-      erp_failed: "ERP 回写待处理",
+      MATERIAL_ITEMS_REQUIRED: ocTranslate("采购资料待补"),
+      GOODS_VALUE_MISSING: ocTranslate("采购资料待补"),
+      PURCHASE_SOURCE_INVALID: ocTranslate("采购资料待补"),
+      SOURCE_ADOPTION_PENDING: ocTranslate("采购资料待采用"),
+      TRANSPORT_MODE_REQUIRED: ocTranslate("运输方式待确认"),
+      AMOUNT_MISSING: ocTranslate("费用金额待补"),
+      AMOUNT_STATUS_INVALID: ocTranslate("费用状态待确认"),
+      FEE_AMOUNT_INVALID: ocTranslate("费用金额待核对"),
+      DUPLICATE_LOGICAL_FEE: ocTranslate("重复费用待处理"),
+      FX_RATE_MISSING: ocTranslate("费用汇率待补"),
+      CURRENCY_UNSUPPORTED: ocTranslate("费用币种待核对"),
+      ESTIMATED_AMOUNT: ocTranslate("实际费用待确认"),
+      EVIDENCE_MISSING: ocTranslate("费用凭证未齐"),
+      FINAL_FEE_REVIEW_REQUIRED: ocTranslate("费用待核对"),
+      ALLOCATION_REQUIRED: ocTranslate("分摊资料待补"),
+      SHIPPING_UNIT_REQUIRED: ocTranslate("分摊资料待补"),
+      ALLOCATION_BASIS_INCOMPLETE: ocTranslate("分摊资料待补"),
+      ALLOCATION_DENOMINATOR_ZERO: ocTranslate("分摊资料待补"),
+      FEE_SCOPE_EMPTY: ocTranslate("分摊资料待补"),
+      FEE_SCOPE_INVALID: ocTranslate("分摊资料待补"),
+      DIRECT_ITEM_SCOPE_INVALID: ocTranslate("分摊资料待补"),
+      STABLE_ITEM_KEY_REQUIRED: ocTranslate("分摊资料待补"),
+      STABLE_ITEM_KEY_DUPLICATED: ocTranslate("分摊资料待补"),
+      TEMPORARY_ALLOCATION_BASIS: ocTranslate("分摊资料待补"),
+      RESULT_NOT_SAVED: ocTranslate("待重新计算"),
+      RESULT_LEGACY: ocTranslate("待重新计算"),
+      RESULT_STALE: ocTranslate("待重新计算"),
+      SAVED_RESULT_INVALID: ocTranslate("待重新计算"),
+      STALE: ocTranslate("待重新计算"),
+      purchase: ocTranslate("采购资料待补"),
+      logistics: ocTranslate("分摊资料待补"),
+      calculation: ocTranslate("待重新计算"),
+      erp_failed: ocTranslate("ERP 回写待处理"),
     };
-    return labels[String(code || "")] || "其他问题待处理";
+    return labels[String(code || "")] || ocTranslate("其他问题待处理");
   }
 
   renderWorkbenchReviewTags(batch) {
@@ -608,7 +608,7 @@
     if (!unique.length) return "";
     const visible = unique.slice(0, 3);
     const remaining = unique.length - visible.length;
-    return `<div class="ocw-review-tags" aria-label="状态摘要">${visible.map((row) => `<span class="ocw-review-tag is-${this.escape(row.tone)}">${this.escape(row.label)}</span>`).join("")}${remaining ? `<span class="ocw-review-tag is-more">另有 ${remaining} 项</span>` : ""}</div>`;
+    return `<div class="ocw-review-tags" aria-label="${ocTranslate('状态摘要')}">${visible.map((row) => `<span class="ocw-review-tag is-${this.escape(row.tone)}">${this.escape(ocTranslate(row.label))}</span>`).join("")}${remaining ? `<span class="ocw-review-tag is-more">${ocTranslate("另有 {0} 项", [remaining])}</span>` : ""}</div>`;
   }
 
   resultPreviewCacheKey(batchName, page) {
@@ -713,16 +713,16 @@
     if (state.loading) {
       return `
         <section class="ocw-result-preview ocw-result-preview-state" aria-live="polite">
-          <span class="ocw-spinner"></span><strong>正在加载 SKU 核算结果</strong>
+          <span class="ocw-spinner"></span><strong>${ocTranslate("正在加载 SKU 核算结果")}</strong>
         </section>
       `;
     }
     if (state.error) {
       return `
         <section class="ocw-result-preview ocw-result-preview-state is-error" aria-live="polite">
-          <strong>SKU 核算结果加载失败</strong>
+          <strong>${ocTranslate("SKU 核算结果加载失败")}</strong>
           <span>${this.escape(state.error)}</span>
-          <button class="ocw-outline-btn" type="button" data-action="retry-result-preview">重试</button>
+          <button class="ocw-outline-btn" type="button" data-action="retry-result-preview">${ocTranslate("重试")}</button>
         </section>
       `;
     }
@@ -734,7 +734,7 @@
     const purchaseTotals = Array.isArray(summary.purchase_totals) ? summary.purchase_totals : [];
     const purchaseTotalHtml = purchaseTotals.length
       ? purchaseTotals.map((row) => `<span>${this.escape(this.formatResultPreviewMoney(row.amount, row.currency || ""))}</span>`).join("")
-      : "<span>未计算</span>";
+      : `<span>${ocTranslate("未计算")}</span>`;
     const calculationPending = summary.calculation_status === "pending";
     const otherCost = Number(summary.unlisted_other_cost_rmb || 0);
     const items = Array.isArray(data.items) ? data.items : [];
@@ -746,22 +746,22 @@
       return this.escape(this.formatResultPreviewMoney(value, currency));
     };
     const columns = [
-      "物料编码",
-      "产品名称",
-      "规格型号",
-      "原始采购单价",
-      "采购数量",
-      "分摊运费",
-      "分摊关税/税费",
-      "分摊清关",
-      "单品综合单价",
+      ocTranslate("物料编码"),
+      ocTranslate("产品名称"),
+      ocTranslate("规格型号"),
+      ocTranslate("原始采购单价"),
+      ocTranslate("采购数量"),
+      ocTranslate("分摊运费"),
+      ocTranslate("分摊关税/税费"),
+      ocTranslate("分摊清关"),
+      ocTranslate("单品综合单价"),
     ];
     const headerClass = (index) => index === 0 ? " is-sticky-code" : index === 1 ? " is-sticky-name" : "";
     const visualHeaders = columns.map((label, index) =>
-      `<th class="ocw-result-cell${headerClass(index)}">${this.escape(label)}</th>`
+      `<th class="ocw-result-cell${headerClass(index)}">${this.escape(ocTranslate(label))}</th>`
     ).join("");
     const semanticHeaders = columns.map((label, index) =>
-      `<th id="ocw-result-preview-column-${index + 1}" scope="col">${this.escape(label)}</th>`
+      `<th id="ocw-result-preview-column-${index + 1}" scope="col">${this.escape(ocTranslate(label))}</th>`
     ).join("");
     const columnClasses = [
       "is-code",
@@ -781,7 +781,7 @@
         <td class="ocw-result-cell is-sticky-code"${cellHeaders(0)} title="${this.escape(item.material_code || "")}"><span>${this.escape(item.material_code || "—")}</span></td>
         <td class="ocw-result-cell is-sticky-name"${cellHeaders(1)} title="${this.escape(item.product_name || "")}"><span>${this.escape(item.product_name || "—")}</span></td>
         <td class="ocw-result-cell"${cellHeaders(2)} title="${this.escape(item.spec_model || "")}">${this.escape(item.spec_model || "—")}</td>
-        <td class="ocw-result-cell is-number"${cellHeaders(3)}>${sourceMoneyCell(item.adopted_price?.value ?? item.unit_price, item.adopted_price?.currency || item.purchase_currency || "")}${item.adopted_price?.source_type === "purchase_total_derived" ? '<small class="ocw-result-source">按货值÷采购数量计算</small>' : ""}</td>
+        <td class="ocw-result-cell is-number"${cellHeaders(3)}>${sourceMoneyCell(item.adopted_price?.value ?? item.unit_price, item.adopted_price?.currency || item.purchase_currency || "")}${item.adopted_price?.source_type === "purchase_total_derived" ? `<small class="ocw-result-source">${ocTranslate("按货值÷采购数量计算")}</small>` : ""}</td>
         <td class="ocw-result-cell is-number"${cellHeaders(4)}>${this.escape(this.formatNumber(item.quantity) || "—")}</td>
         <td class="ocw-result-cell is-number"${cellHeaders(5)}>${moneyCell(item.freight_alloc_rmb)}</td>
         <td class="ocw-result-cell is-number"${cellHeaders(6)}>${moneyCell(item.tax_alloc_rmb)}</td>
@@ -791,25 +791,25 @@
     `).join("");
 
     return `
-      <section class="ocw-result-preview" aria-label="当前批次 SKU 核算结果">
+      <section class="ocw-result-preview" aria-label="${ocTranslate('当前批次 SKU 核算结果')}">
         <div class="ocw-result-table-shell">
           <div class="ocw-result-sticky-dock" data-role="result-preview-sticky-dock">
             <div class="ocw-result-summary">
-              <div><span>批次号</span><strong>${this.escape(summary.batch_no || "—")}</strong></div>
-              <div><span>物流单号</span><strong>${this.escape(summary.logistics_no || "未填写")}</strong></div>
-              <div><span>批次总货值</span><strong class="ocw-result-summary-stack">${purchaseTotalHtml}</strong></div>
-              <div><span>总运费</span><strong>${moneyCell(summary.total_freight_rmb)}</strong></div>
-              <div><span>总关税/税费</span><strong>${moneyCell(summary.total_tax_rmb)}</strong></div>
-              <div><span>总清关费</span><strong>${moneyCell(summary.total_clearance_rmb)}</strong></div>
-              <div><span>总数量</span><strong>${this.escape(this.formatNumber(summary.total_quantity) || "0")}</strong></div>
-              <div><span>批次加权综合单价</span><strong>${moneyCell(summary.weighted_total_unit_rmb)}</strong></div>
+              <div><span>${ocTranslate("批次号")}</span><strong>${this.escape(summary.batch_no || "—")}</strong></div>
+              <div><span>${ocTranslate("物流单号")}</span><strong>${this.escape(summary.logistics_no || ocTranslate("未填写"))}</strong></div>
+              <div><span>${ocTranslate("批次总货值")}</span><strong class="ocw-result-summary-stack">${purchaseTotalHtml}</strong></div>
+              <div><span>${ocTranslate("总运费")}</span><strong>${moneyCell(summary.total_freight_rmb)}</strong></div>
+              <div><span>${ocTranslate("总关税/税费")}</span><strong>${moneyCell(summary.total_tax_rmb)}</strong></div>
+              <div><span>${ocTranslate("总清关费")}</span><strong>${moneyCell(summary.total_clearance_rmb)}</strong></div>
+              <div><span>${ocTranslate("总数量")}</span><strong>${this.escape(this.formatNumber(summary.total_quantity) || "0")}</strong></div>
+              <div><span>${ocTranslate("批次加权综合单价")}</span><strong>${moneyCell(summary.weighted_total_unit_rmb)}</strong></div>
             </div>
-            ${otherCost > 0 ? `<p class="ocw-result-other-cost">另有 ${moneyCell(otherCost)} 其他费用已计入综合单价</p>` : ""}
-            ${calculationPending ? `<p class="ocw-result-pending-note">当前版本尚未完成计算，核算结果显示为“未计算”。</p>` : ""}
+            ${otherCost > 0 ? `<p class="ocw-result-other-cost">${ocTranslate("另有 {0} 其他费用已计入综合单价", [moneyCell(otherCost)])}</p>` : ""}
+            ${calculationPending ? `<p class="ocw-result-pending-note">${ocTranslate("当前版本尚未完成计算，核算结果显示为“未计算”。")}</p>` : ""}
             <div class="ocw-result-scroll-controls">
-              <button class="ocw-scroll-arrow" type="button" data-action="result-preview-scroll" data-direction="-1" aria-label="向左滚动 SKU 结果">‹</button>
-              <div class="ocw-horizontal-scrollbar ocw-result-scrollbar" data-role="result-preview-scrollbar" data-ocw-scrollbar tabindex="0" aria-label="横向滚动 SKU 结果"><div data-role="result-preview-scrollbar-spacer"></div></div>
-              <button class="ocw-scroll-arrow" type="button" data-action="result-preview-scroll" data-direction="1" aria-label="向右滚动 SKU 结果">›</button>
+              <button class="ocw-scroll-arrow" type="button" data-action="result-preview-scroll" data-direction="-1" aria-label="${ocTranslate('向左滚动 SKU 结果')}">‹</button>
+              <div class="ocw-horizontal-scrollbar ocw-result-scrollbar" data-role="result-preview-scrollbar" data-ocw-scrollbar tabindex="0" aria-label="${ocTranslate('横向滚动 SKU 结果')}"><div data-role="result-preview-scrollbar-spacer"></div></div>
+              <button class="ocw-scroll-arrow" type="button" data-action="result-preview-scroll" data-direction="1" aria-label="${ocTranslate('向右滚动 SKU 结果')}">›</button>
             </div>
             <div class="ocw-result-header-scroll" data-role="result-preview-header-scroll" aria-hidden="true">
               <table class="ocw-result-table ocw-result-header-table" role="presentation">
@@ -819,19 +819,19 @@
             </div>
           </div>
           <div class="ocw-result-table-scroll" data-role="result-preview-table-scroll">
-            <table class="ocw-result-table ocw-result-data-table" aria-label="当前批次 SKU 核算明细" aria-colcount="9">
+            <table class="ocw-result-table ocw-result-data-table" aria-label="${ocTranslate('当前批次 SKU 核算明细')}" aria-colcount="9">
               ${columnGroup}
               <thead class="ocw-result-semantic-head"><tr>${semanticHeaders}</tr></thead>
-              <tbody>${rows || `<tr><td class="ocw-result-empty" colspan="9">当前批次没有 SKU 明细</td></tr>`}</tbody>
+              <tbody>${rows || `<tr><td class="ocw-result-empty" colspan="9">${ocTranslate("当前批次没有 SKU 明细")}</td></tr>`}</tbody>
             </table>
           </div>
         </div>
         <div class="ocw-result-pagination">
-          <span>共 ${total} 个 SKU</span>
+          <span>${ocTranslate("共 {0} 个 SKU", [total])}</span>
           <div>
-            <button class="ocw-outline-btn" type="button" data-action="result-preview-page" data-batch-name="${this.escape(data.batch_name || this.resultPreviewState?.batchName || "")}" data-page="${page - 1}" ${page <= 1 ? "disabled" : ""}>上一页</button>
-            <span>第 ${page} / ${pageCount} 页</span>
-            <button class="ocw-outline-btn" type="button" data-action="result-preview-page" data-batch-name="${this.escape(data.batch_name || this.resultPreviewState?.batchName || "")}" data-page="${page + 1}" ${page >= pageCount ? "disabled" : ""}>下一页</button>
+            <button class="ocw-outline-btn" type="button" data-action="result-preview-page" data-batch-name="${this.escape(data.batch_name || this.resultPreviewState?.batchName || "")}" data-page="${page - 1}" ${page <= 1 ? "disabled" : ""}>${ocTranslate("上一页")}</button>
+            <span>${ocTranslate("第 {0} / {1} 页", [page, pageCount])}</span>
+            <button class="ocw-outline-btn" type="button" data-action="result-preview-page" data-batch-name="${this.escape(data.batch_name || this.resultPreviewState?.batchName || "")}" data-page="${page + 1}" ${page >= pageCount ? "disabled" : ""}>${ocTranslate("下一页")}</button>
           </div>
         </div>
       </section>
@@ -858,25 +858,25 @@
     const pageCount = Math.ceil(this.workbenchTotal / 30);
     const isReview = this.viewState.task === "cost";
     const isHistory = isReview && this.filters.review_status === "confirmed";
-    const title = this.viewState.task === "pending" ? "待处理批次" : this.viewState.task === "erp" ? "ERP 处理队列" : isHistory ? "已核对批次" : "待核对批次";
+    const title = this.viewState.task === "pending" ? ocTranslate("待处理批次") : this.viewState.task === "erp" ? ocTranslate("ERP 处理队列") : isHistory ? ocTranslate("已核对批次") : ocTranslate("待核对批次");
     const rows = this.batches.map((batch) => this.renderWorkbenchBatchRow(batch)).join("");
     const $batchList = this.$root.find("[data-area='batch-list']");
     $batchList.toggleClass("has-expanded-preview", Boolean(this.resultPreviewState?.batchName));
     $batchList.html(`
       <div class="ocw-list-head">
-        <div><h2>${title}</h2><span>${this.workbenchTotal} 个结果</span></div>
-        <span>${isReview ? "暂估与待补凭证仅作提示；最终确认仍须通过校验" : "点击批次号查看详情，按下一步处理阻断项"}</span>
+        <div><h2>${title}</h2><span>${ocTranslate("{0} 个结果", [this.workbenchTotal])}</span></div>
+        <span>${isReview ? ocTranslate("暂估与待补凭证仅作提示；最终确认仍须通过校验") : ocTranslate("点击批次号查看详情，按下一步处理阻断项")}</span>
       </div>
       <div class="ocw-batch-grid ocw-batch-grid-head" aria-hidden="true">
-        <span></span><span>批次 / 物流单号</span><span>业务类型 / SKU</span><span>${isReview ? "核对状态" : "当前问题"}</span><span>采购货值</span><span>综合成本</span><span>流程发起时间</span><span>下一步</span>
+        <span></span><span>${ocTranslate("批次 / 物流单号")}</span><span>${ocTranslate("业务类型 / SKU")}</span><span>${isReview ? ocTranslate("核对状态") : ocTranslate("当前问题")}</span><span>${ocTranslate("采购货值")}</span><span>${ocTranslate("综合成本")}</span><span>${ocTranslate("流程发起时间")}</span><span>${ocTranslate("下一步")}</span>
       </div>
       <div class="ocw-batch-grid-body">
-        ${rows || `<div class="ocw-state-panel"><strong>当前条件下没有${title}</strong><span>${isReview && !isHistory ? "请先在待处理中补齐计算所需资料并完成试算；旧结果不会进入待核对。" : "可调整日期、清空筛选或切换任务视图。"}</span></div>`}
+        ${rows || `<div class="ocw-state-panel"><strong>${ocTranslate("当前条件下没有{0}", [title])}</strong><span>${isReview && !isHistory ? ocTranslate("请先在待处理中补齐计算所需资料并完成试算；旧结果不会进入待核对。") : ocTranslate("可调整日期、清空筛选或切换任务视图。")}</span></div>`}
       </div>
       <div class="ocw-pagination">
-        <button class="ocw-outline-btn" type="button" data-action="workbench-page" data-page="${this.viewState.page - 1}" ${this.viewState.page <= 1 ? "disabled" : ""}>上一页</button>
-        <span>第 ${this.viewState.page} / ${Math.max(pageCount, 1)} 页</span>
-        <button class="ocw-outline-btn" type="button" data-action="workbench-page" data-page="${this.viewState.page + 1}" ${this.viewState.page >= pageCount ? "disabled" : ""}>下一页</button>
+        <button class="ocw-outline-btn" type="button" data-action="workbench-page" data-page="${this.viewState.page - 1}" ${this.viewState.page <= 1 ? "disabled" : ""}>${ocTranslate("上一页")}</button>
+        <span>${ocTranslate("第 {0} / {1} 页", [this.viewState.page, Math.max(pageCount, 1)])}</span>
+        <button class="ocw-outline-btn" type="button" data-action="workbench-page" data-page="${this.viewState.page + 1}" ${this.viewState.page >= pageCount ? "disabled" : ""}>${ocTranslate("下一页")}</button>
       </div>
     `);
     window.requestAnimationFrame(() => this.bindResultPreviewScrollControls());
@@ -884,22 +884,22 @@
 
   renderWorkbenchBatchRow(batch) {
     const reference = batch.batch_no || batch.source_approval_no || batch.name;
-    const logisticsNo = batch.waybill_no || batch.customs_no || "未填写物流单号";
+    const logisticsNo = batch.waybill_no || batch.customs_no || ocTranslate("未填写物流单号");
     const remediationState = String(batch.remediation_state || "").toLowerCase();
     let action;
     if (remediationState === "returned") {
-      action = {action: "review_remediation", label: `待整改 ${Number(batch.unresolved_count || batch.issue_count || 0)}`};
+      action = {action: "review_remediation", label: ocTranslate("待整改 {0}", [Number(batch.unresolved_count || batch.issue_count || 0)])};
     } else if (remediationState === "resubmitted") {
-      action = {action: "review_remediation", label: "待财务复核"};
+      action = {action: "review_remediation", label: ocTranslate("待财务复核")};
     } else if (this.viewState.task === "cost") {
-      action = {action: "review", label: "成本核算"};
+      action = {action: "review", label: ocTranslate("成本核算")};
     } else if (this.viewState.task === "erp") {
       action = {
         action: "erp_retry",
-        label: String(batch.writeback_status || "").toLowerCase().includes("success") ? "查看 ERP" : "处理 ERP",
+        label: String(batch.writeback_status || "").toLowerCase().includes("success") ? ocTranslate("查看 ERP") : ocTranslate("处理 ERP"),
       };
     } else {
-      action = {action: "supplement", label: "继续处理"};
+      action = {action: "supplement", label: ocTranslate("继续处理")};
     }
     const totalCost = batch.summary_snapshot?.calculation_schema === 2 ? batch.summary_snapshot.total_cost_rmb : batch.actual_total_cost_rmb || batch.estimated_total_cost_rmb;
     const rowStatus = this.workbenchRowStatusLabel(batch);
@@ -909,18 +909,18 @@
     return `
       <div class="ocw-workbench-record ${expanded ? "is-expanded" : ""}" data-batch-name="${this.escape(batch.name)}">
         <article class="ocw-batch-grid ocw-workbench-row">
-          <button class="ocw-result-preview-toggle" type="button" data-action="toggle-result-preview" data-batch-name="${this.escape(batch.name)}" aria-expanded="${expanded}" aria-label="${expanded ? "收起" : "展开"} ${this.escape(reference)} 的 SKU 核算结果">
+          <button class="ocw-result-preview-toggle" type="button" data-action="toggle-result-preview" data-batch-name="${this.escape(batch.name)}" aria-expanded="${expanded}" aria-label="${this.escape(ocTranslate("{0} {1} 的 SKU 核算结果", [expanded ? "收起" : "展开", reference]))}">
             <span aria-hidden="true">›</span>
           </button>
           <div class="ocw-batch-identity">
             <button type="button" class="ocw-batch-link" data-action="open-batch-detail" data-batch-name="${this.escape(batch.name)}">${this.escape(reference)}</button>
             <span>${this.escape(logisticsNo)}</span>
           </div>
-          <div><strong>${this.escape(this.businessTypeLabel(batch.business_type) || batch.transport_mode || "-")}</strong><span>${Number(batch.item_count || 0)} 个 SKU</span></div>
+          <div><strong>${this.escape(this.businessTypeLabel(batch.business_type) || batch.transport_mode || "-")}</strong><span>${ocTranslate("{0} 个 SKU", [Number(batch.item_count || 0)])}</span></div>
           <div><strong class="ocw-issue is-${this.escape(batch.primary_issue)}">${this.escape(rowStatus)}</strong>${reviewTags}</div>
           <div><strong>${this.escape(this.formatMoney(batch.total_goods_value || 0))}</strong><span>RMB</span></div>
-          <div><strong>${this.escape(this.formatMoney(totalCost || 0))}</strong><span>RMB${batch.result_is_current === false && hasSavedResult ? " · 上次结果，待更新" : ""}</span></div>
-          <div><strong>${this.escape(this.formatDateTimeMinute(batch.source_created_at) || "—")}</strong><span>${this.escape(batch.review_state === "confirmed" ? `确认版本 ${batch.reviewed_version || batch.current_version || "—"}` : batch.result_is_current === false ? "待重新试算" : batch.status || "")}</span></div>
+          <div><strong>${this.escape(this.formatMoney(totalCost || 0))}</strong><span>RMB${batch.result_is_current === false && hasSavedResult ? ocTranslate(" · 上次结果，待更新") : ""}</span></div>
+          <div><strong>${this.escape(this.formatDateTimeMinute(batch.source_created_at) || "—")}</strong><span>${this.escape(batch.review_state === "confirmed" ? ocTranslate("确认版本 {0}", [batch.reviewed_version || batch.current_version || "—"]) : batch.result_is_current === false ? ocTranslate("待重新试算") : ocTranslate(batch.status || ""))}</span></div>
           <div class="ocw-row-actions">
             <button class="ocw-primary-btn" type="button" data-action="workbench-primary" data-primary-action="${action.action}" data-batch-name="${this.escape(batch.name)}">${action.label}</button>
           </div>

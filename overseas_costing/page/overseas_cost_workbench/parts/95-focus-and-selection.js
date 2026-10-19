@@ -116,7 +116,7 @@
     const batch = this.findBatchByUrlKey(batchKey);
     if (!batch) {
       this.updateBatchUrl("", { replace: true });
-      frappe.show_alert({ message: `链接中的批次不存在或已删除：${batchKey}`, indicator: "orange" });
+      frappe.show_alert({ message: ocTranslate("链接中的批次不存在或已删除：{0}", [batchKey]), indicator: "orange" });
       return null;
     }
     if (batchKey !== this.batchUrlKey(batch)) {
@@ -143,7 +143,7 @@
     }
     const batch = this.findBatchByUrlKey(batchKey);
     if (!batch) {
-      frappe.show_alert({ message: `链接中的批次不存在或已删除：${batchKey}`, indicator: "orange" });
+      frappe.show_alert({ message: ocTranslate("链接中的批次不存在或已删除：{0}", [batchKey]), indicator: "orange" });
       return;
     }
     if (!this.visibleBatches.some((row) => row.name === batch.name)) {

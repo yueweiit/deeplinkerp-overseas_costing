@@ -1,4 +1,11 @@
 """Durable matching for one logistics source. Never binds or scans other logistics bodies."""
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import InvalidOperation
@@ -25,7 +32,7 @@ def candidates(store, logistics):
 def prepare(store, logistics_id):
     logistics = store.get('source', logistics_id)
     if not logistics or logistics['kind'] != 'logistics' or logistics['invalid']:
-        raise ValueError('当前国际物流来源缺失或已失效，请先核对来源')
+        raise ValueError(_('当前国际物流来源缺失或已失效，请先核对来源'))
     bindings = store.find('binding')
     occupied = {b['expense_id'] for b in bindings}
     expenses = [e for e in store.find('source', kind='expense', corp=logistics['corp'])
@@ -225,7 +232,7 @@ def run(store, job_id, call_model, model=''):
                     rows = [p for p in proposals if isinstance(p, dict) and p.get('expense_id') == e['id']] if isinstance(proposals, list) else []
                     try:
                         if len(rows) != 1:
-                            raise ValueError('AI 未唯一返回此采购支出的结果')
+                            raise ValueError(_('AI 未唯一返回此采购支出的结果'))
                         outcome = ai.adopt_suggestion(store, job, group, e['id'], rows[0])
                         if outcome == 'no_match':
                             previous = store.get('candidate', digest(job['logistics_id'], e['id']))

@@ -1,6 +1,13 @@
 """Independent transport/import comparison. No batch or accounting writes."""
 from __future__ import annotations
 
+try:
+    from frappe import _ as _i18n
+except ImportError:
+    def _i18n(message):
+        return message
+
+
 import json
 import re
 from decimal import Decimal, InvalidOperation, localcontext
@@ -55,19 +62,19 @@ def number(raw):
 def normalize_payload(raw) -> dict:
     if isinstance(raw, str):
         if len(raw.encode("utf-8")) > 4_000_000:
-            raise ValueError("测算数据过大，请控制在 4 MB 以内。")
+            raise ValueError(_i18n("测算数据过大，请控制在 4 MB 以内。"))
         raw = json.loads(raw)
     if not isinstance(raw, dict):
-        raise ValueError("测算数据必须是对象。")
+        raise ValueError(_i18n("测算数据必须是对象。"))
     rows = raw.get("rows", [])
     if not isinstance(rows, list) or len(rows) > 5000:
-        raise ValueError("装箱明细最多支持 5000 行。")
+        raise ValueError(_i18n("装箱明细最多支持 5000 行。"))
     normalized = []
     for row in rows:
         if not isinstance(row, list) or len(row) > 30:
-            raise ValueError("装箱明细必须是最多 30 列的行数组。")
+            raise ValueError(_i18n("装箱明细必须是最多 30 列的行数组。"))
         if any(isinstance(cell, (dict, list, bool)) or len(str(cell or "")) > 10000 for cell in row):
-            raise ValueError("装箱单元格格式或长度无效。")
+            raise ValueError(_i18n("装箱单元格格式或长度无效。"))
         cells = [str(cell) if cell is not None else "" for cell in row] + [""] * (30 - len(row))
         if any(cell.strip() for cell in cells):
             normalized.append(cells)
@@ -75,21 +82,21 @@ def normalize_payload(raw) -> dict:
     for key, defaults in (("parameters", DEFAULTS), ("currencies", CURRENCY_DEFAULTS)):
         values = raw.get(key) or {}
         if not isinstance(values, dict):
-            raise ValueError(f"{key} 格式无效。")
+            raise ValueError(_i18n("{0} 格式无效。").format(key))
         if any(isinstance(v, (dict, list, bool)) or len(str(v)) > 100 for v in values.values()):
-            raise ValueError(f"{key} 的值无效。")
+            raise ValueError(_i18n("{0} 的值无效。").format(key))
         result[key] = {name: values.get(name, default) for name, default in defaults.items()}
     overrides = raw.get("totals_override") or {}
     if not isinstance(overrides, dict):
-        raise ValueError("整票汇总格式无效。")
+        raise ValueError(_i18n("整票汇总格式无效。"))
     result["totals_override"] = {key: overrides.get(key) for key in ("grossWeight", "volume")}
     if any(isinstance(v, (dict, list, bool)) or len(str(v or "")) > 100 for v in result["totals_override"].values()):
-        raise ValueError("整票汇总值无效。")
+        raise ValueError(_i18n("整票汇总值无效。"))
     result["source"] = raw.get("source") or None
     if result["source"] is not None and not isinstance(result["source"], dict):
-        raise ValueError("来源信息格式无效。")
+        raise ValueError(_i18n("来源信息格式无效。"))
     if len(json.dumps(result, ensure_ascii=False).encode("utf-8")) > 4_000_000:
-        raise ValueError("测算数据过大，请控制在 4 MB 以内。")
+        raise ValueError(_i18n("测算数据过大，请控制在 4 MB 以内。"))
     return result
 
 

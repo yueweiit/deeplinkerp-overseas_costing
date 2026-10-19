@@ -1,4 +1,11 @@
 """有界后台状态机；清单、失败和游标先持久化，随后才推进阶段。"""
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 from datetime import datetime, timedelta, timezone
 
 from .matching import match_source, confirm_candidate, refresh_candidate_snapshots
@@ -20,7 +27,7 @@ def save_job(store, job):
 
 def start_job(store, *, mode, actor, start='', end='', now=None, request_key=None):
     if mode not in {'initialize', 'incremental', 'reconcile'}:
-        raise ValueError('不支持的同步任务')
+        raise ValueError(_('不支持的同步任务'))
     now = now or utcnow()
     # One active job prevents initialization and increment from racing the watermark.
     with store.atomic():
@@ -82,7 +89,7 @@ def run_step(store, archive, job_id, *, logistics_codes, now=None, apply_source=
                         with store.atomic():
                             if item.get('inventory_only'):
                                 if item['source_id'] not in fetched:
-                                    raise ValueError('来源暂时无法读取，保留原状态待重试')
+                                    raise ValueError(_('来源暂时无法读取，保留原状态待重试'))
                                 item['raw'] = fetched[item['source_id']]
                                 item['inventory_only'] = False
                             parsed = parse_source(item['raw'], logistics_codes=logistics_codes)
@@ -157,10 +164,10 @@ def retry_job(store, job_id):
         store.get('state', 'job_lock', lock=True)
         job = store.get('job', job_id, lock=True)
         if not job:
-            raise ValueError('任务不存在')
+            raise ValueError(_('任务不存在'))
         for status in ('queued', 'running', 'paused'):
             if any(other['id'] != job_id for other in store.find('job', status=status)):
-                raise ValueError('其他同步任务正在进行，请先完成当前任务再重试')
+                raise ValueError(_('其他同步任务正在进行，请先完成当前任务再重试'))
         if job['status'] not in {'partial', 'failed', 'paused'}:
             return job
         for item in store.find('job_item', job_id=job_id, status='failed'):
@@ -185,7 +192,7 @@ def start_reparse_job(store, source_ids, *, actor):
     from .model import PARSER_VERSION
     source_ids = sorted(set(source_ids))
     if not source_ids or len(source_ids) > 200:
-        raise ValueError('每次重新解析必须明确选择 1 至 200 个来源')
+        raise ValueError(_('每次重新解析必须明确选择 1 至 200 个来源'))
     key = digest('reparse', PARSER_VERSION, source_ids)
     with store.atomic():
         store.get('state', 'job_lock', lock=True)
@@ -193,14 +200,14 @@ def start_reparse_job(store, source_ids, *, actor):
         if existing:
             return existing
         if any(store.count('job', status=s) for s in ('queued','running','paused')):
-            raise ValueError('请先完成或结束当前同步任务')
+            raise ValueError(_('请先完成或结束当前同步任务'))
         now = utcnow()
         job = {'id':key, 'job_key':key, 'status':'queued', 'phase':'load', 'mode':'reparse', 'actor':actor,
                'started_at':now, 'upper':now, 'lower':'', 'start':'', 'end':'', 'round':0, 'caught_up':False}
         for sid in source_ids:
             source = store.get('source', sid)
             if not source:
-                raise ValueError('指定来源不存在')
+                raise ValueError(_('指定来源不存在'))
             raw = {'corp_id':source['corp'], 'process_instance_id':source['instance'], 'process_code':source['process_code'],
                    'business_id':source['approval_no'], 'status':source['status'], 'result':source.get('approval_result'),
                    'deleted_at':source.get('deleted_at'), 'updated_at':source['source_updated_at'],

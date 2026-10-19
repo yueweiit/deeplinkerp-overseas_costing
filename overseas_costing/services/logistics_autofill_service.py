@@ -1,6 +1,13 @@
 """Server-owned shipment rows and compact, read-only autofill previews."""
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 from copy import deepcopy
 from datetime import datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -509,25 +516,25 @@ def apply_reconciliation(
         raise ValueError(proposal.get("reason") or "存在待核对的人工物流差异。")
     existing = {row["name"] for row in current}
     if set(payload.get("original_item_names") or []) != existing:
-        raise ValueError("物流行已变化，请重新分析。")
+        raise ValueError(_("物流行已变化，请重新分析。"))
     rows = payload.get("rows") or []
     retained = [row["_existing_name"] for row in rows if row.get("_existing_name")]
     excluded = [str(name or "") for name in payload.get("excluded_item_names") or []]
     if (set(retained).intersection(excluded) or set(retained).union(excluded) != existing
             or len(retained) != len(set(retained)) or len(excluded) != len(set(excluded))):
-        raise ValueError("物流物料范围已变化，请重新分析。")
+        raise ValueError(_("物流物料范围已变化，请重新分析。"))
     keys = [row.get("stable_line_key") for row in rows]
     if not all(keys) or len(set(keys)) != len(keys):
-        raise ValueError("物流行身份重复或缺失。")
+        raise ValueError(_("物流行身份重复或缺失。"))
     settled = {row['name']:row for row in current if extra(row).get('settlement_cargo')}
     if settled and not initialization_reset:
         if len(rows) != len(current) or any(not row.get('_existing_name') for row in rows):
-            raise ValueError('已采用物流结算货物清单，不能从装箱来源拆分或新增结算物料行；请核对采购支出关联。')
+            raise ValueError(_('已采用物流结算货物清单，不能从装箱来源拆分或新增结算物料行；请核对采购支出关联。'))
         for row in rows:
             previous = settled.get(row.get('_existing_name'))
             if previous and (extra(previous).get('settlement_cargo') != extra(row).get('settlement_cargo')
                              or any(str(previous.get(key) or '') != str(row.get(key) or '') for key in ('material_code','spec_model'))):
-                raise ValueError('结算货物身份由采购支出确定，装箱资料只能补充物理信息。')
+                raise ValueError(_('结算货物身份由采购支出确定，装箱资料只能补充物理信息。'))
     allowed = (set(GRID_FIELDS) | {"extra_json", "manual_override_flag", "manual_override_reason"}) - {"name", "modified"}
     created = []
     excluded_at = datetime.now().isoformat(timespec="seconds")
@@ -578,7 +585,7 @@ def plan_authoritative_scope_membership(
     }
     expected = {str(name or '') for name in payload.get('original_item_names') or []}
     if expected != set(eligible):
-        raise ValueError('历史版本物料范围已变化，请重新生成修复计划。')
+        raise ValueError(_('历史版本物料范围已变化，请重新生成修复计划。'))
     retained = {
         str(row.get('_existing_name') or '')
         for row in payload.get('rows') or []
@@ -586,7 +593,7 @@ def plan_authoritative_scope_membership(
     }
     excluded = {str(name or '') for name in payload.get('excluded_item_names') or []}
     if retained & excluded or retained | excluded != set(eligible):
-        raise ValueError('国际物流物料范围不完整，不执行历史修复。')
+        raise ValueError(_('国际物流物料范围不完整，不执行历史修复。'))
     exclude = sorted(
         name for name in excluded if not int(eligible[name].get('is_excluded') or 0)
     )
@@ -622,7 +629,7 @@ def backfill_current_material_scopes(batch_names=None, *, dry_run=True, limit=50
 
     from .material_scope_reset_service import reset_all_material_scopes
     if not dry_run:
-        raise ValueError('正式执行需先调用 reset_all_material_scopes 生成只读计划哈希。')
+        raise ValueError(_('正式执行需先调用 reset_all_material_scopes 生成只读计划哈希。'))
     result = reset_all_material_scopes(
         batch_names=batch_names, dry_run=True,
         include_all_versions=False, limit=limit)

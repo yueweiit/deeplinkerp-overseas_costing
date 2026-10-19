@@ -5,6 +5,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import hashlib
 import json
 import re
@@ -103,7 +110,7 @@ def parse_shanghai_window(
     start_utc = _parse_boundary(start, end=False)
     end_utc = _parse_boundary(end, end=True)
     if end_utc <= start_utc:
-        raise ValueError("结束时间必须晚于开始时间")
+        raise ValueError(_("结束时间必须晚于开始时间"))
     return start_utc, end_utc
 
 
@@ -439,7 +446,7 @@ class PostgresApprovalSource:
 def _repair_identifier(value: str, label: str) -> str:
     normalized = str(value or "").strip()
     if not REPAIR_ID_PATTERN.fullmatch(normalized):
-        raise ValueError(f"{label}不合法。")
+        raise ValueError(_("{0}不合法。").format(label))
     return normalized
 
 
@@ -483,13 +490,13 @@ class ApprovalRepairSubmitter:
     ) -> int:
         purpose = str(expected_purpose or "").strip()
         if purpose not in {"international_logistics", "purchase_expense"}:
-            raise ValueError("审批修复用途不合法。")
+            raise ValueError(_("审批修复用途不合法。"))
         trigger = str(trigger_source or "").strip()
         if trigger not in {"costing_audit", "manual", "linked_purchase"}:
-            raise ValueError("审批修复触发来源不合法。")
+            raise ValueError(_("审批修复触发来源不合法。"))
         key = str(request_key or "").strip().lower()
         if not REPAIR_HASH_PATTERN.fullmatch(key):
-            raise ValueError("审批修复请求 ID 必须是 64 位小写 SHA-256。")
+            raise ValueError(_("审批修复请求 ID 必须是 64 位小写 SHA-256。"))
         params = (
             _repair_identifier(corp_id, "企业 ID"),
             _repair_identifier(process_instance_id, "流程实例 ID"),
@@ -525,7 +532,7 @@ class MinioArchiveClient:
 
         object_key = str(manifest.get("object_key") or "").strip()
         if not object_key:
-            raise ArchiveIntegrityError("已归档附件缺少 object_key")
+            raise ArchiveIntegrityError(_("已归档附件缺少 object_key"))
 
         response = self.client.get_object(self.bucket, object_key)
         try:
@@ -537,13 +544,13 @@ class MinioArchiveClient:
         expected_size = manifest.get("actual_size")
         if expected_size is not None and len(content) != int(expected_size):
             raise ArchiveIntegrityError(
-                f"附件大小校验失败：期望 {expected_size}，实际 {len(content)}"
+                _("附件大小校验失败：期望 {0}，实际 {1}").format(expected_size, len(content))
             )
 
         actual_sha256 = hashlib.sha256(content).hexdigest()
         expected_sha256 = str(manifest.get("sha256") or "").strip().lower()
         if expected_sha256 and actual_sha256 != expected_sha256:
-            raise ArchiveIntegrityError("附件 SHA-256 校验失败")
+            raise ArchiveIntegrityError(_("附件 SHA-256 校验失败"))
 
         return content, {
             "content_length": len(content),

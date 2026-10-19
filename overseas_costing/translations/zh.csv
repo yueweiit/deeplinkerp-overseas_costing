@@ -1,0 +1,230 @@
+0 MXN,0 MXN
+ACTIVE,ACTIVE
+ACTUAL,ACTUAL
+AIR,AIR
+AIR_DDP,AIR_DDP
+AIR_STANDARD,AIR_STANDARD
+ALL_ITEMS,ALL_ITEMS
+AMBIGUOUS_SUPPLIER,AMBIGUOUS_SUPPLIER
+APPLIED,APPLIED
+ATTACHMENT_VIEW,ATTACHMENT_VIEW
+Active,激活
+Actual,实际
+Addressed,已解决
+Adjustment,调整
+Archived,已存档
+Attachment,附件
+BATCH_EDIT,BATCH_EDIT
+BATCH_VIEW,BATCH_VIEW
+CALCULATED,CALCULATED
+COMPLEMENTO DE MANIOBRAS,COMPLEMENTO DE MANIOBRAS
+COMPLETE,COMPLETE
+CONFIRMED,CONFIRMED
+CONFIRMING,CONFIRMING
+CONFIRM_RESULT,CONFIRM_RESULT
+CONFLICT,CONFLICT
+COST,COST
+CREATE,CREATE
+CREATE_VERSION,CREATE_VERSION
+CREDIT,CREDIT
+CUSTOMS_SERVICE,CUSTOMS_SERVICE
+Calculated,已计算
+Clone,克隆
+Comment,评论
+Commercial Invoice,商业发票
+Confirmed,确认
+Customs Declaration,报关
+DATA_CHECK,DATA_CHECK
+DEBIT,DEBIT
+DEFAULT_PURCHASE,DEFAULT_PURCHASE
+DESCONSOLIDACION,DESCONSOLIDACION
+DINGTALK_PULL,DINGTALK_PULL
+DIRECT_ITEM,DIRECT_ITEM
+DISABLED,DISABLED
+DISABLED_SUPPLIER_EXISTS,DISABLED_SUPPLIER_EXISTS
+DISCARDED,DISCARDED
+DRAFT,草稿
+DRAFT_PURCHASE_ORDER,DRAFT_PURCHASE_ORDER
+DTA,DTA
+Dirty,脏
+Draft,草稿
+EDIT,EDIT
+ESTIMATE,ESTIMATE
+ESTIMATED,ESTIMATED
+EXCEL_IMPORT,EXCEL_IMPORT
+EXPLICIT_SOURCE,EXPLICIT_SOURCE
+EXPORT,EXPORT
+EXPRESS,EXPRESS
+Estimated,估计
+Excel,Excel
+Excel Main Table,Excel 主表
+FAILED,FAILED
+FILE_PARSE,FILE_PARSE
+FINAL_BILL,FINAL_BILL
+FINAL_INVOICE,FINAL_INVOICE
+FREIGHT_COMPARE,FREIGHT_COMPARE
+Failed,失败
+Form,表单
+Frappe runtime is required,需要冰沙运行时间
+HONORARIOS,HONORARIOS
+IGI,IGI
+IMPORT,IMPORT
+IMPORT_TAX,IMPORT_TAX
+INCLUDED,INCLUDED
+INVALID,INVALID
+INVALID_SUPPLIER_NAME,INVALID_SUPPLIER_NAME
+ITEMS,ITEMS
+IVA,IVA
+Import,导入
+Imported,进口
+LEDGER_ONLY,LEDGER_ONLY
+LEGACY_UNVERIFIED,LEGACY_UNVERIFIED
+LIMPIEZA DE CONTENEDOR,LIMPIEZA DE CONTENEDOR
+Logistics Bill,物流账单
+MANIOBRA EN FALSO,MANIOBRA EN FALSO
+MANUAL,MANUAL
+MANUAL_CONFIRMED,MANUAL_CONFIRMED
+MANUAL_REQUIRED,MANUAL_REQUIRED
+MISSING,MISSING
+MXN,MXN
+Manual,手动
+Migration Stock Reconciliation pairs are missing or incomplete,迁移库存调节对缺失或不完整
+Migration reconciliation documents already exist while source stock remains; restore the release backup or complete the reviewed plan manually,迁移调节文件已经存在，而源库存仍然存在；恢复发布备份或手动完成审核计划
+NOT_INCURRED,NOT_INCURRED
+No ERP payload was produced.,没有产生 ERP 有效负载。
+No local ERPNext Company is available.,当地没有可用的 ERPNext 公司。
+No source inventory was found to transfer,未找到可转移的源库存
+Not Started,未开始
+OA,OA
+OTHER,OTHER
+OVERRIDDEN,OVERRIDDEN
+Open,待处理
+Other,其他
+Overseas Air Sea Comparison,海外空运海运比较
+Overseas Cost Allocation Rule,海外成本分配规则
+Overseas Cost Attachment,海外费用附件
+Overseas Cost Audit Log,海外成本审核日志
+Overseas Cost Batch,海外成本批次
+Overseas Cost ERP Document Link,海外费用 ERP 文件链接
+Overseas Cost ERP Settings,海外费用 ERP 设置
+Overseas Cost ERP Site,海外费用 ERP 网站
+Overseas Cost ERP Sync Request,海外费用 ERP 同步请求
+Overseas Cost Fee Evidence,海外费用证明
+Overseas Cost Fee Evidence AI Run,海外成本费凭证AI运行
+Overseas Cost Fee SKU Component,海外成本费 SKU 组件
+Overseas Cost Item,海外费用项目
+Overseas Cost Material AI Run,海外成本物料AI运行
+Overseas Cost Project Route,海外成本项目路线
+Overseas Cost Review Issue,海外成本审查问题
+Overseas Cost Review Round,海外成本审查回合
+Overseas Cost Trial AI Run,海外成本试用AI运行
+Overseas Cost Usage Log,海外费用使用日志
+Overseas Cost Version,海外成本版
+Overseas Freight Comparison,海外运费比较
+Overseas Packing Snapshot,海外装箱快照
+PACKING_CONFIRM,PACKING_CONFIRM
+PAGE_VIEW,PAGE_VIEW
+PARTIAL,PARTIAL
+PATCH,补丁
+PATIO REGULADOR,PATIO REGULADOR
+PAYMENT,PAYMENT
+PENDING,PENDING
+POST,POST
+PREPAYMENT,PREPAYMENT
+PREVIEW_ERP,PREVIEW_ERP
+PRV,PRV
+PRV IVA,PRV IVA
+PRV_IVA,PRV_IVA
+PUSH_ERP,PUSH_ERP
+PUT,PUT
+Packing List,包装清单
+Parsed,已解析
+Partially Confirmed,部分确认
+Pending,待处理
+Purchase Order,采购订单
+QA batch is missing.,QA 批次缺失。
+QUEUED,QUEUED
+QUOTE,QUOTE
+Queued,排队
+READY,READY
+READY_WITH_WARNINGS,READY_WITH_WARNINGS
+RECALCULATE,RECALCULATE
+RECONOCIMIENTO ADUANERO,RECONOCIMIENTO ADUANERO
+REFERENCE,REFERENCE
+REFUND,REFUND
+REFUND_REVERSAL,REFUND_REVERSAL
+RESOLVED,RESOLVED
+REVIEW_REPLY,REVIEW_REPLY
+REVIEW_RESOLVE,REVIEW_RESOLVE
+REVIEW_RESUBMIT,REVIEW_RESUBMIT
+REVIEW_RETURN,REVIEW_RETURN
+RMB,RMB
+RUNNING,RUNNING
+Ready,可确认
+Refusing to create an Item outside the QA prefix.,拒绝创建 QA 前缀之外的项目。
+Refusing to delete QA supplier while a purchase order remains.,当采购订单仍然存在时，拒绝删除 QA 供应商。
+Refusing to delete an item outside the QA prefix.,拒绝删除 QA 前缀之外的项目。
+Resolved,已解决
+Resubmitted,重新提交
+Returned,已退回
+SEA,SEA
+SEA_DDP,SEA_DDP
+SEA_STANDARD,SEA_STANDARD
+SETTLEMENT,SETTLEMENT
+SIMILAR_SUPPLIER_CONFIRMATION_REQUIRED,SIMILAR_SUPPLIER_CONFIRMATION_REQUIRED
+SOURCE_ARCHIVE_INCOMPLETE,SOURCE_ARCHIVE_INCOMPLETE
+STALE,STALE
+SUCCESS,SUCCESS
+SUPERSEDED,SUPERSEDED
+SUPPLIER_GROUP_REQUIRED,SUPPLIER_GROUP_REQUIRED
+SWITCH_VERSION,SWITCH_VERSION
+Success,成功
+Superseded,已替代
+TAX_CERTIFICATE,TAX_CERTIFICATE
+Tax Certificate,税务证明
+This script must run inside a Frappe bench.,该脚本必须在 Frappe 工作台内运行。
+UNAVAILABLE,UNAVAILABLE
+UNCERTAIN,UNCERTAIN
+UNLINKED,UNLINKED
+UNRESOLVED,UNRESOLVED
+UNVERIFIED,UNVERIFIED
+UPDATE_COST,UPDATE_COST
+UPLOAD_ATTACHMENT,UPLOAD_ATTACHMENT
+USD,USD
+VALID,VALID
+VERIFIED,VERIFIED
+VERIFY,VERIFY
+VOID,VOID
+Voucher,凭证
+WRITEBACK,WRITEBACK
+Writeback Failed,写回失败
+Writeback gate is not ready.,写回门未准备好。
+Written Back,回写
+approval_attachment,approval_attachment
+approval_comment,approval_comment
+attachment_parse,attachment_parse
+business_key is required,business_key 为必填项
+chargeable_weight,chargeable_weight
+create_request_hash,create_request_hash
+create_request_id,create_request_id
+equal,平等
+erp_purchase,erp_purchase
+excel,卓越
+generic_resource,generic_resource
+goods_value,goods_value
+gross_weight,gross_weight
+last_request_hash,last_request_hash
+last_request_id,last_request_id
+manual,手册
+manual_attachment,manual_attachment
+oa_logistics,oa_logistics
+source_unavailable,source_unavailable
+stable_line_key generator returned an empty value,stable_line_key 生成器返回空值
+standard_purchase,standard_purchase
+title,标题
+unconfirmed,未证实
+volume,体积
+weight,重量
+wiki_sheet,wiki_sheet
+{0} {1},{0}{1}
+{0} · {1} · {2},{0} · {1} · {2}

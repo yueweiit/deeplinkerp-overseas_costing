@@ -37,11 +37,11 @@ class OverseasCostWorkbench {
     this.selectOptions = {
       transport_mode: ["SEA", "AIR", "EXPRESS"],
       business_type: [
-        { value: "SEA_STANDARD", label: "\u6d77\u8fd0\u6b63\u62a5\u6b63\u6e05" },
-        { value: "SEA_DDP", label: "\u6d77\u8fd0 DDP\uff08\u53cc\u6e05\u5305\u7a0e\uff09" },
-        { value: "AIR_DDP", label: "\u7a7a\u8fd0 DDP\uff08\u53cc\u6e05\u5305\u7a0e\uff09" },
-        { value: "AIR_STANDARD", label: "\u6b63\u5e38\u7a7a\u8fd0" },
-        { value: "EXPRESS", label: "\u5feb\u9012" },
+        { value: "SEA_STANDARD", label: ocTranslate("海运正报正清") },
+        { value: "SEA_DDP", label: ocTranslate("海运 DDP（双清包税）") },
+        { value: "AIR_DDP", label: ocTranslate("空运 DDP（双清包税）") },
+        { value: "AIR_STANDARD", label: ocTranslate("正常空运") },
+        { value: "EXPRESS", label: ocTranslate("快递") },
       ],
       purchase_currency: ["RMB", "USD", "MXN"],
     };
@@ -112,7 +112,7 @@ class OverseasCostWorkbench {
     this.prepareWorkbenchContainer();
     this.page = frappe.ui.make_app_page({
       parent: this.wrapper,
-      title: "海外采购综合成本核算",
+      title: ocTranslate("海外采购综合成本核算"),
       single_column: true,
     });
     this.applyDeskLayout();
@@ -220,28 +220,28 @@ class OverseasCostWorkbench {
               <div class="ocw-logo">YW</div>
               <div>
                 <p>Mexico Ocean Costing</p>
-                <h1>海外采购综合成本核算</h1>
+                <h1>${ocTranslate("海外采购综合成本核算")}</h1>
               </div>
             </div>
             <section class="ocw-logistics-panel">
               <div class="ocw-logistics-panel-head">
-                <span>业务类型</span>
+                <span>${ocTranslate("业务类型")}</span>
                 <button
                   class="ocw-sidebar-toggle"
                   type="button"
                   data-action="toggle-transport-sidebar"
                   aria-expanded="true"
-                  aria-label="收起业务类型栏"
-                  title="收起业务类型栏"
+                  aria-label="${ocTranslate('收起业务类型栏')}"
+                  title="${ocTranslate('收起业务类型栏')}"
                 >
                   <span class="ocw-sidebar-toggle-icon" aria-hidden="true"></span>
                 </button>
-                <button class="ocw-text-btn" type="button" data-action="set-transport-filter" data-transport-mode="">全部</button>
+                <button class="ocw-text-btn" type="button" data-action="set-transport-filter" data-transport-mode="">${ocTranslate("全部")}</button>
               </div>
               <div class="ocw-logistics-list" data-area="transport-workbench"></div>
               <div class="ocw-sidebar-scope-note">
-                <span>默认最近 30 天</span>
-                <span>可按审批发起时间筛选</span>
+                <span>${ocTranslate("默认最近 30 天")}</span>
+                <span>${ocTranslate("可按审批发起时间筛选")}</span>
               </div>
             </section>
           </aside>
@@ -250,114 +250,114 @@ class OverseasCostWorkbench {
             <section class="ocw-workbench-card">
               <div class="ocw-workbench-head">
                 <div>
-                  <h3>SKU 成本分摊明细 / 物料详情</h3>
+                  <h3>${ocTranslate("SKU 成本分摊明细 / 物料详情")}</h3>
                 </div>
                 <div class="ocw-head-actions">
-                  <button class="ocw-success-btn ocw-mini-btn" data-action="export-current">导出当前全部批次结果</button>
-                  <button class="ocw-warning-btn ocw-mini-btn" data-action="file-parse">凭证对比</button>
-                  <button class="ocw-outline-btn ocw-mini-btn" data-action="preview-categories">商品归类</button>
-                  <button class="ocw-outline-btn ocw-mini-btn" data-action="pull-oa-logistics">钉钉拉取</button>
-                  <button class="ocw-outline-btn ocw-mini-btn" data-action="open-import">Excel 导入</button>
-                  <button class="ocw-primary-btn ocw-mini-btn" data-action="add-batch">+ 添加报关运单</button>
+                  <button class="ocw-success-btn ocw-mini-btn" data-action="export-current">${ocTranslate("导出当前全部批次结果")}</button>
+                  <button class="ocw-warning-btn ocw-mini-btn" data-action="file-parse">${ocTranslate("凭证对比")}</button>
+                  <button class="ocw-outline-btn ocw-mini-btn" data-action="preview-categories">${ocTranslate("商品归类")}</button>
+                  <button class="ocw-outline-btn ocw-mini-btn" data-action="pull-oa-logistics">${ocTranslate("钉钉拉取")}</button>
+                  <button class="ocw-outline-btn ocw-mini-btn" data-action="open-import">${ocTranslate("Excel 导入")}</button>
+                  <button class="ocw-primary-btn ocw-mini-btn" data-action="add-batch">${ocTranslate("+ 添加报关运单")}</button>
                 </div>
               </div>
 
               <div class="ocw-query-toolbar">
                 <div class="ocw-filter-grid">
                   <label class="ocw-toolbar-field ocw-toolbar-field-date">
-                    <span>开始日期</span>
+                    <span>${ocTranslate("开始日期")}</span>
                     <input data-filter="start_date" class="form-control" type="date" value="${this.escape(this.filters.start_date)}" />
                   </label>
                   <label class="ocw-toolbar-field ocw-toolbar-field-date">
-                    <span>结束日期</span>
+                    <span>${ocTranslate("结束日期")}</span>
                     <input data-filter="end_date" class="form-control" type="date" value="${this.escape(this.filters.end_date)}" />
                   </label>
                   <label class="ocw-toolbar-field ocw-toolbar-field-entity">
-                    <span>业务主体</span>
+                    <span>${ocTranslate("业务主体")}</span>
                     <select data-filter="subsidiary_code" class="form-control">
-                      <option value="">全部业务主体</option>
+                      <option value="">${ocTranslate("全部业务主体")}</option>
                     </select>
                   </label>
                   <label class="ocw-toolbar-field ocw-toolbar-field-erp">
-                    <span>ERP 状态</span>
+                    <span>${ocTranslate("ERP 状态")}</span>
                     <select data-filter="erp_status" class="form-control">
-                      <option value="">全部</option>
-                      <option value="not_started">未开始</option>
-                      <option value="pending">待接口推送</option>
-                      <option value="success">推送成功</option>
-                      <option value="failed">推送失败</option>
+                      <option value="">${ocTranslate("全部")}</option>
+                      <option value="not_started">${ocTranslate("未开始")}</option>
+                      <option value="pending">${ocTranslate("待接口推送")}</option>
+                      <option value="success">${ocTranslate("推送成功")}</option>
+                      <option value="failed">${ocTranslate("推送失败")}</option>
                     </select>
                   </label>
                   <div class="ocw-filter-actions">
-                    <button class="ocw-primary-btn ocw-mini-btn" data-action="apply-filters">查询</button>
-                    <button class="ocw-outline-btn ocw-mini-btn" data-action="clear-filters">重置</button>
+                    <button class="ocw-primary-btn ocw-mini-btn" data-action="apply-filters">${ocTranslate("查询")}</button>
+                    <button class="ocw-outline-btn ocw-mini-btn" data-action="clear-filters">${ocTranslate("重置")}</button>
                   </div>
                 </div>
                 <div class="ocw-query-footer">
-                  <div class="ocw-search-result" data-area="search-result">查询后会锁定当前结果；回到全部批次请点击“重置”</div>
-                  <button class="ocw-text-btn" type="button" data-action="toggle-more-filters" aria-expanded="false">更多筛选 +</button>
+                  <div class="ocw-search-result" data-area="search-result">${ocTranslate("查询后会锁定当前结果；回到全部批次请点击“重置”")}</div>
+                  <button class="ocw-text-btn" type="button" data-action="toggle-more-filters" aria-expanded="false">${ocTranslate("更多筛选 +")}</button>
                 </div>
                 <div class="ocw-filter-chips" data-area="filter-chips" aria-live="polite"></div>
                 <div class="ocw-more-filter-grid" data-area="more-filters" hidden>
                   <label class="ocw-toolbar-field">
-                    <span>核算状态</span>
+                    <span>${ocTranslate("核算状态")}</span>
                     <select data-filter="calculation_status" class="form-control">
-                      <option value="">全部</option>
-                      <option value="草稿">草稿</option>
-                      <option value="已导入">已导入</option>
-                      <option value="待重算">待重算</option>
-                      <option value="已试算">已试算</option>
-                      <option value="已确认">已确认</option>
+                      <option value="">${ocTranslate("全部")}</option>
+                      <option value="草稿">${ocTranslate("草稿")}</option>
+                      <option value="已导入">${ocTranslate("已导入")}</option>
+                      <option value="待重算">${ocTranslate("待重算")}</option>
+                      <option value="已试算">${ocTranslate("已试算")}</option>
+                      <option value="已确认">${ocTranslate("已确认")}</option>
                     </select>
                   </label>
                   <label class="ocw-toolbar-field">
-                    <span>批次/报关单号/钉钉审批编号</span>
-                    <input data-filter="customs_no" class="form-control" type="search" placeholder="请输入批次号、报关单号或钉钉审批编号" />
+                    <span>${ocTranslate("批次/报关单号/钉钉审批编号")}</span>
+                    <input data-filter="customs_no" class="form-control" type="search" placeholder="${ocTranslate('请输入批次号、报关单号或钉钉审批编号')}" />
                   </label>
                   <label class="ocw-toolbar-field">
-                    <span>物料编码</span>
-                    <input data-filter="material_code" class="form-control" type="search" placeholder="请输入物料编码" />
+                    <span>${ocTranslate("物料编码")}</span>
+                    <input data-filter="material_code" class="form-control" type="search" placeholder="${ocTranslate('请输入物料编码')}" />
                   </label>
                   <label class="ocw-toolbar-field">
-                    <span>物料名称</span>
-                    <input data-filter="product_name" class="form-control" type="search" placeholder="请输入物料名称" />
+                    <span>${ocTranslate("物料名称")}</span>
+                    <input data-filter="product_name" class="form-control" type="search" placeholder="${ocTranslate('请输入物料名称')}" />
                   </label>
                   <label class="ocw-toolbar-field">
-                    <span>海关进口名称</span>
-                    <input data-filter="import_name" class="form-control" type="search" placeholder="请输入海关进口名称" />
+                    <span>${ocTranslate("海关进口名称")}</span>
+                    <input data-filter="import_name" class="form-control" type="search" placeholder="${ocTranslate('请输入海关进口名称')}" />
                   </label>
                   <label class="ocw-toolbar-field">
-                    <span>海关分类编码</span>
-                    <input data-filter="hs_code" class="form-control" type="search" placeholder="请输入海关分类编码" />
+                    <span>${ocTranslate("海关分类编码")}</span>
+                    <input data-filter="hs_code" class="form-control" type="search" placeholder="${ocTranslate('请输入海关分类编码')}" />
                   </label>
                   <label class="ocw-toolbar-field">
-                    <span>大类</span>
-                    <input data-filter="category" class="form-control" type="search" placeholder="请输入大类" />
+                    <span>${ocTranslate("大类")}</span>
+                    <input data-filter="category" class="form-control" type="search" placeholder="${ocTranslate('请输入大类')}" />
                   </label>
                 </div>
               </div>
 
                 <div class="ocw-table-toolbar">
                   <div class="ocw-table-toolbar-left">
-                    <button class="ocw-outline-btn ocw-mini-btn" data-action="clear-batch-focus" hidden>返回全部批次</button>
-                    <button class="ocw-outline-btn ocw-mini-btn" data-action="expand-current">+ 全部展开</button>
-                    <button class="ocw-outline-btn ocw-mini-btn" data-action="collapse-current">- 全部收起</button>
-                    <div class="ocw-role-switch" aria-label="岗位工作视图">
-                      <button class="active" type="button" data-action="set-work-role" data-role="purchase">采购</button>
-                      <button type="button" data-action="set-work-role" data-role="finance">财务</button>
+                    <button class="ocw-outline-btn ocw-mini-btn" data-action="clear-batch-focus" hidden>${ocTranslate("返回全部批次")}</button>
+                    <button class="ocw-outline-btn ocw-mini-btn" data-action="expand-current">${ocTranslate("+ 全部展开")}</button>
+                    <button class="ocw-outline-btn ocw-mini-btn" data-action="collapse-current">${ocTranslate("- 全部收起")}</button>
+                    <div class="ocw-role-switch" aria-label="${ocTranslate('岗位工作视图')}">
+                      <button class="active" type="button" data-action="set-work-role" data-role="purchase">${ocTranslate("采购")}</button>
+                      <button type="button" data-action="set-work-role" data-role="finance">${ocTranslate("财务")}</button>
                     </div>
-                    <strong class="ocw-role-title" data-area="table-title">采购待补资料</strong>
+                    <strong class="ocw-role-title" data-area="table-title">${ocTranslate("采购待补资料")}</strong>
                     <span data-area="table-count"></span>
                   </div>
                   <div class="ocw-table-hint">
-                    <span data-area="role-description">采购视图：处理数据不完整批次，补齐资料</span>
-                    <span>单击批次可选中并锁定；双击批次打开详情侧边栏</span>
+                    <span data-area="role-description">${ocTranslate("采购视图：处理数据不完整批次，补齐资料")}</span>
+                    <span>${ocTranslate("单击批次可选中并锁定；双击批次打开详情侧边栏")}</span>
                   </div>
                   <div class="ocw-table-actions">
-                    <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="configure-sku-columns">SKU重点字段</button>
+                    <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="configure-sku-columns">${ocTranslate("SKU重点字段")}</button>
                     <div class="ocw-view-switch">
-                      <button class="active" type="button" data-action="set-main-view" data-view="cost">成本列表</button>
-                      <button type="button" data-action="set-main-view" data-view="erp_queue">ERP 队列</button>
+                      <button class="active" type="button" data-action="set-main-view" data-view="cost">${ocTranslate("成本列表")}</button>
+                      <button type="button" data-action="set-main-view" data-view="erp_queue">${ocTranslate("ERP 队列")}</button>
                   </div>
                 </div>
               </div>
@@ -368,22 +368,22 @@ class OverseasCostWorkbench {
             <aside class="ocw-batch-drawer" data-area="batch-drawer" aria-hidden="true">
               <div class="ocw-batch-drawer-head">
                 <div>
-                  <span>批次详情</span>
-                  <strong data-area="batch-drawer-title">批次详情（字段修改请在明细区操作）</strong>
+                  <span>${ocTranslate("批次详情")}</span>
+                  <strong data-area="batch-drawer-title">${ocTranslate("批次详情（字段修改请在明细区操作）")}</strong>
                 </div>
                 <div class="ocw-batch-drawer-head-actions">
-                  <button class="ocw-outline-btn ocw-mini-btn" data-action="export-drawer-batch">导出当前批次</button>
-                  <button class="ocw-outline-btn ocw-mini-btn" data-action="open-batch-drawer-dingtalk">钉钉原单</button>
-                  <button class="ocw-outline-btn ocw-mini-btn" data-action="open-batch-drawer-recalculate">重新试算</button>
-                  <button class="ocw-icon-btn" data-action="close-batch-drawer" aria-label="关闭">×</button>
+                  <button class="ocw-outline-btn ocw-mini-btn" data-action="export-drawer-batch">${ocTranslate("导出当前批次")}</button>
+                  <button class="ocw-outline-btn ocw-mini-btn" data-action="open-batch-drawer-dingtalk">${ocTranslate("钉钉原单")}</button>
+                  <button class="ocw-outline-btn ocw-mini-btn" data-action="open-batch-drawer-recalculate">${ocTranslate("重新试算")}</button>
+                  <button class="ocw-icon-btn" data-action="close-batch-drawer" aria-label="${ocTranslate('关闭')}">×</button>
                 </div>
               </div>
               <div class="ocw-batch-drawer-tabs">
-                <button class="ocw-batch-drawer-tab active" data-action="switch-batch-drawer-tab" data-tab="overview">概览</button>
-                <button class="ocw-batch-drawer-tab" data-action="switch-batch-drawer-tab" data-tab="items">物料明细</button>
-                <button class="ocw-batch-drawer-tab" data-action="switch-batch-drawer-tab" data-tab="allocation">AI 分摊</button>
-                <button class="ocw-batch-drawer-tab" data-action="switch-batch-drawer-tab" data-tab="audit">修改记录</button>
-                <button class="ocw-batch-drawer-tab" data-action="switch-batch-drawer-tab" data-tab="usage">使用记录</button>
+                <button class="ocw-batch-drawer-tab active" data-action="switch-batch-drawer-tab" data-tab="overview">${ocTranslate("概览")}</button>
+                <button class="ocw-batch-drawer-tab" data-action="switch-batch-drawer-tab" data-tab="items">${ocTranslate("物料明细")}</button>
+                <button class="ocw-batch-drawer-tab" data-action="switch-batch-drawer-tab" data-tab="allocation">${ocTranslate("AI 分摊")}</button>
+                <button class="ocw-batch-drawer-tab" data-action="switch-batch-drawer-tab" data-tab="audit">${ocTranslate("修改记录")}</button>
+                <button class="ocw-batch-drawer-tab" data-action="switch-batch-drawer-tab" data-tab="usage">${ocTranslate("使用记录")}</button>
               </div>
               <div class="ocw-batch-drawer-body" data-area="batch-drawer-body"></div>
             </aside>
@@ -427,7 +427,7 @@ class OverseasCostWorkbench {
     $toggle.attr({
       "aria-expanded": String(!this.transportSidebarCollapsed),
       "aria-label": this.transportSidebarCollapsed ? "展开业务类型栏" : "收起业务类型栏",
-      title: this.transportSidebarCollapsed ? "展开业务类型栏" : "收起业务类型栏",
+      title: this.transportSidebarCollapsed ? ocTranslate("展开业务类型栏") : ocTranslate("收起业务类型栏"),
     });
   }
 

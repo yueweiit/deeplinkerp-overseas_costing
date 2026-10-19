@@ -7,12 +7,19 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 
 def require_value(value, field_label: str) -> None:
     if value in (None, ""):
-        raise ValueError(f"{field_label} 不能为空")
+        raise ValueError(_("{0} 不能为空").format(field_label))
 
 
 def require_in(value: str, allowed: tuple[str, ...], field_label: str) -> None:
     if value not in allowed:
-        raise ValueError(f"{field_label} 不合法，当前值：{value}")
+        raise ValueError(_("{0} 不合法，当前值：{1}").format(field_label, value))

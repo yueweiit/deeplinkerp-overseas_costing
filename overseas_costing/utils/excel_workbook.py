@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _ as _i18n
+except ImportError:
+    def _i18n(message):
+        return message
+
+
 import re
 from datetime import date, datetime, time
 from pathlib import Path
@@ -99,17 +106,17 @@ def read_packing_grid(
         preflight_workbook = load_workbook(path, data_only=False, read_only=True)
         try:
             if not requested_sheet:
-                raise PackingSheetNotFound("必须选择一个明确的工作表。")
+                raise PackingSheetNotFound(_i18n("必须选择一个明确的工作表。"))
             if requested_sheet not in preflight_workbook.sheetnames:
                 available = "、".join(preflight_workbook.sheetnames)
                 raise PackingSheetNotFound(
-                    f"工作簿中不存在工作表：{requested_sheet}。当前文件包含：{available}。"
+                    _i18n("工作簿中不存在工作表：{0}。当前文件包含：{1}。").format(requested_sheet, available)
                 )
             preflight_sheet = preflight_workbook[requested_sheet]
             if max_rows is not None and preflight_sheet.max_row > max_rows:
-                raise ValueError(f"Excel 最多支持 {max_rows} 行。")
+                raise ValueError(_i18n("Excel 最多支持 {0} 行。").format(max_rows))
             if max_columns is not None and preflight_sheet.max_column > max_columns:
-                raise ValueError(f"Excel 最多支持 {max_columns} 列。")
+                raise ValueError(_i18n("Excel 最多支持 {0} 列。").format(max_columns))
         finally:
             preflight_workbook.close()
 
@@ -118,11 +125,11 @@ def read_packing_grid(
     try:
         if require_exact_sheet:
             if not requested_sheet:
-                raise PackingSheetNotFound("必须选择一个明确的工作表。")
+                raise PackingSheetNotFound(_i18n("必须选择一个明确的工作表。"))
             if requested_sheet not in formula_workbook.sheetnames:
                 available = "、".join(formula_workbook.sheetnames)
                 raise PackingSheetNotFound(
-                    f"工作簿中不存在工作表：{requested_sheet}。当前文件包含：{available}。"
+                    _i18n("工作簿中不存在工作表：{0}。当前文件包含：{1}。").format(requested_sheet, available)
                 )
             selected_sheet = requested_sheet
         else:
@@ -131,9 +138,9 @@ def read_packing_grid(
         formula_sheet = formula_workbook[selected_sheet]
         value_sheet = value_workbook[selected_sheet]
         if max_rows is not None and formula_sheet.max_row > max_rows:
-            raise ValueError(f"Excel 最多支持 {max_rows} 行。")
+            raise ValueError(_i18n("Excel 最多支持 {0} 行。").format(max_rows))
         if max_columns is not None and formula_sheet.max_column > max_columns:
-            raise ValueError(f"Excel 最多支持 {max_columns} 列。")
+            raise ValueError(_i18n("Excel 最多支持 {0} 列。").format(max_columns))
         cells: list[list[dict[str, Any]]] = []
         for row_number in range(1, formula_sheet.max_row + 1):
             row: list[dict[str, Any]] = []
@@ -217,7 +224,7 @@ def col_to_index(column: str) -> int:
     value = 0
     for char in column.upper():
         if not ("A" <= char <= "Z"):
-            raise ValueError(f"非法 Excel 列名：{column}")
+            raise ValueError(_i18n("非法 Excel 列名：{0}").format(column))
         value = value * 26 + ord(char) - ord("A") + 1
     return value
 
@@ -294,7 +301,7 @@ def _select_sheet(workbook, sheet_name: str | None) -> tuple[str, str, str]:
             parser_name = _detect_sheet_parser(workbook[only_sheet])
             return only_sheet, parser_name, f"未找到工作表“{requested_sheet}”，当前文件只有“{only_sheet}”，已自动使用该工作表。"
         available = "、".join(available_sheets)
-        raise ValueError(f"工作簿中不存在工作表：{requested_sheet}。当前文件包含：{available}。也可以把工作表名称留空，由系统自动识别。")
+        raise ValueError(_i18n("工作簿中不存在工作表：{0}。当前文件包含：{1}。也可以把工作表名称留空，由系统自动识别。").format(requested_sheet, available))
 
     first_sheet = available_sheets[0]
     return first_sheet, _detect_sheet_parser(workbook[first_sheet]), ""

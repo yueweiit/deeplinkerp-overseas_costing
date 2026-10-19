@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 from copy import deepcopy
 from datetime import datetime
 import json
@@ -13,11 +20,11 @@ MAX_BULK_MATERIALS = 1000
 def _stable_keys(values):
     keys = [str(value or '').strip() for value in values or []]
     if not keys or any(not key for key in keys):
-        raise ValueError('请选择至少一行可删除物料。')
+        raise ValueError(_('请选择至少一行可删除物料。'))
     if len(keys) != len(set(keys)):
-        raise ValueError('物料选择存在重复，请清除后重试。')
+        raise ValueError(_('物料选择存在重复，请清除后重试。'))
     if len(keys) > MAX_BULK_MATERIALS:
-        raise ValueError(f'一次最多删除 {MAX_BULK_MATERIALS} 行物料。')
+        raise ValueError(_("一次最多删除 {0} 行物料。").format(MAX_BULK_MATERIALS))
     return keys
 
 
@@ -29,23 +36,23 @@ def bulk_exclude_materials(batch_name, version_name, stable_line_keys, edit_toke
     repo.assert_write(batch_name, edit_token, expected_modified)
     state = repo.load(batch_name, version_name, lock=True)
     if str(state.get('batch_modified') or '') != str(expected_modified or ''):
-        raise ValueError('批次已变化，请刷新后重新选择。')
+        raise ValueError(_('批次已变化，请刷新后重新选择。'))
     if not state.get('editable'):
-        raise ValueError('历史、已确认、已回写或锁定版本不能删除物料。')
+        raise ValueError(_('历史、已确认、已回写或锁定版本不能删除物料。'))
     by_key = {}
     for item in state.get('items') or []:
         key = str(item.get('stable_line_key') or '').strip()
         if key:
             by_key.setdefault(key, []).append(item)
     if any(len(by_key.get(key) or []) != 1 or int((by_key[key][0]).get('is_excluded') or 0) for key in keys):
-        raise ValueError('所选物料已变化，请刷新后重新选择。')
+        raise ValueError(_('所选物料已变化，请刷新后重新选择。'))
     selected_keys = set(keys)
     for group in state.get('groups') or []:
         if group.get('status') == 'removed':
             continue
         members = {str(key or '').strip() for key in group.get('member_keys') or [] if str(key or '').strip()}
         if selected_keys.intersection(members) and not members.issubset(selected_keys):
-            raise ValueError('删除组内物料时必须选择完整装箱组；如只删除单个组员，请先解除合并。')
+            raise ValueError(_('删除组内物料时必须选择完整装箱组；如只删除单个组员，请先解除合并。'))
     selected = [deepcopy(by_key[key][0]) for key in keys]
     saved = repo.save_exclusions(
         state, selected, keys, str(reason or '').strip() or '批量软排除物料', str(actor or ''),
@@ -96,7 +103,7 @@ class FrappeMaterialBulkEditRepository:
                 key = str(getattr(doc, 'stable_line_key', '') or '').strip()
                 if (key not in selected or doc.batch != state['batch'] or doc.version != state['version']
                         or int(getattr(doc, 'is_excluded', 0) or 0)):
-                    raise ValueError('所选物料已变化，本次未删除任何物料。')
+                    raise ValueError(_('所选物料已变化，本次未删除任何物料。'))
                 old_value = json.dumps({
                     'name':doc.name, 'stable_line_key':key, 'row_no':getattr(doc, 'row_no', None),
                     'material_code':getattr(doc, 'material_code', ''),

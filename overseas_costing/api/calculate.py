@@ -12,6 +12,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import frappe
 
 from overseas_costing.services import calculate_service, cost_preview_service, cost_trial_ai_service
@@ -60,7 +67,7 @@ def batch_update_items(
 
     batch_name = require_batch_permission(batch_name, "write")
     if len(str(updates or "").encode("utf-8")) > MAX_BATCH_UPDATES_BYTES:
-        raise ValueError("批量单元格更新参数过大。")
+        raise ValueError(_("批量单元格更新参数过大。"))
     return calculate_service.batch_update_items(
         batch_name=batch_name,
         updates=updates,

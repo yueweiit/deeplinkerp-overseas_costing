@@ -7,6 +7,13 @@ candidate inside the caller's transaction.
 """
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 from copy import deepcopy
 from decimal import Decimal, InvalidOperation
 import re
@@ -102,7 +109,7 @@ def _current_logistics(store, ledger, batch_name: str, version_name: str, *, loc
     batch = ledger.get("batch", batch_name, lock=lock) or {}
     version = ledger.get("version", version_name, lock=lock) or {}
     if batch.get("current_version") != version_name or version.get("batch") != batch_name:
-        raise ValueError("当前成本版本已变化，请刷新")
+        raise ValueError(_("当前成本版本已变化，请刷新"))
     mappings = store.find("batch_map", batch=batch_name)
     if len(mappings) != 1:
         return None
@@ -154,10 +161,10 @@ def select_preview_candidate(store, ledger, batch_name: str, version_name: str, 
 
 def _validate_reference(reference: dict, version_name: str) -> dict:
     if not isinstance(reference, dict) or set(reference) != REFERENCE_KEYS:
-        raise ValueError("付款匹配凭证格式不正确")
+        raise ValueError(_("付款匹配凭证格式不正确"))
     clean = {key: str(reference.get(key) or "") for key in REFERENCE_KEYS}
     if not all(clean.values()) or clean["version"] != str(version_name):
-        raise ValueError("付款匹配凭证已变化，请刷新")
+        raise ValueError(_("付款匹配凭证已变化，请刷新"))
     return clean
 
 
@@ -207,10 +214,10 @@ def validate_preview_references(store, ledger, batch_name: str, version_name: st
     """Validate ID-only user choices against the current shipment matcher."""
 
     if not isinstance(references, list):
-        raise ValueError("支付来源选择格式不正确")
+        raise ValueError(_("支付来源选择格式不正确"))
     logistics = _current_logistics(store, ledger, batch_name, version_name, lock=lock)
     if not logistics:
-        raise ValueError("本票国际物流来源已变化，请刷新")
+        raise ValueError(_("本票国际物流来源已变化，请刷新"))
     from .logistics_settlement.freight_matching import CANDIDATE_SCOPE_POLICY, candidates
     available = {}
     for row in candidates(store, logistics["id"]):
@@ -229,10 +236,10 @@ def validate_preview_references(store, ledger, batch_name: str, version_name: st
         current = _validate_reference(reference, version_name)
         candidate = available.get(current["candidate_id"])
         if not candidate or str(candidate.get("revision") or "") != current["revision"]:
-            raise ValueError("支付来源候选已变化，请刷新")
+            raise ValueError(_("支付来源候选已变化，请刷新"))
         key = tuple(current[name] for name in ("candidate_id", "revision", "version"))
         if key in seen:
-            raise ValueError("支付来源选择重复")
+            raise ValueError(_("支付来源选择重复"))
         seen.add(key)
         clean.append(current)
     return clean
@@ -408,7 +415,7 @@ def confirm_preview_candidate(
     """Revalidate an exact candidate and return a server-owned relation."""
 
     if not freight_mode:
-        raise ValueError("当前模式不支持付款明细匹配")
+        raise ValueError(_("当前模式不支持付款明细匹配"))
     version_name = str((reference or {}).get("version") or "")
     clean = _validate_reference(reference, version_name)
     # Serialize candidate arbitration with freight_matching.save_candidate.
@@ -437,7 +444,7 @@ def confirm_preview_candidate(
             store, ledger, batch_name, version_name, lock=True
         )
         if len(current) != 1 or current[0].get("id") != clean["candidate_id"]:
-            raise ValueError("付款匹配候选已变化或存在冲突，请刷新")
+            raise ValueError(_("付款匹配候选已变化或存在冲突，请刷新"))
     from .logistics_settlement.jobs import utcnow
     return {
         "policy": POLICY,
@@ -455,12 +462,12 @@ def confirm_preview_candidate(
 
 def _validate_relation(relation: dict, version_name: str, actor: str) -> dict:
     if not isinstance(relation, dict) or set(relation) != RELATION_KEYS:
-        raise ValueError("付款匹配关系格式不正确")
+        raise ValueError(_("付款匹配关系格式不正确"))
     clean = {key: str(relation.get(key) or "") for key in RELATION_KEYS}
     if (not all(clean.values()) or clean["policy"] != POLICY
             or clean["version"] != str(version_name)
             or clean["confirmed_by"] != str(actor or "")):
-        raise ValueError("付款匹配关系已变化，请刷新")
+        raise ValueError(_("付款匹配关系已变化，请刷新"))
     return clean
 
 
@@ -487,7 +494,7 @@ def persist_relation(store, ledger, batch_name: str, version_name: str,
     else:
         current = _current_candidates(store, ledger, batch_name, version_name, lock=True)
         if len(current) != 1 or current[0].get("id") != clean["candidate_id"]:
-            raise ValueError("付款匹配候选已变化或存在冲突，请刷新")
+            raise ValueError(_("付款匹配候选已变化或存在冲突，请刷新"))
     expected = {
         "logistics_id": candidate.get("logistics_id"),
         "expense_id": candidate.get("expense_id"),
@@ -495,7 +502,7 @@ def persist_relation(store, ledger, batch_name: str, version_name: str,
         "expense_snapshot": candidate.get("expense_snapshot"),
     }
     if any(clean[key] != str(value or "") for key, value in expected.items()):
-        raise ValueError("付款匹配来源快照已变化，请刷新")
+        raise ValueError(_("付款匹配来源快照已变化，请刷新"))
 
     from .logistics_settlement.application import row_meta
     metadata = row_meta(version)

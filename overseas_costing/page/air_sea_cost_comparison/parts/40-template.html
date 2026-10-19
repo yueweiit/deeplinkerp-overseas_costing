@@ -1,80 +1,80 @@
 <main class="shell">
 
-    <section class="section" aria-label="装箱单明细与基础数据录入">
+    <section class="section" aria-label="{%= __('装箱单明细与基础数据录入') %}">
       <div class="section-body">
         <div class="packing-toolbar">
           <div>
-            <h3>装箱单明细</h3>
-            <p>表头顺序与“空运成本”一致；点击起始单元格后可直接粘贴 Excel 行或多行。</p>
+            <h3>{%= __("装箱单明细") %}</h3>
+            <p>{%= __("表头顺序与“空运成本”一致；点击起始单元格后可直接粘贴 Excel 行或多行。") %}</p>
           </div>
-          <div class="packing-actions"><button class="btn ghost" data-field="importBatch" type="button">从批次导入</button><button class="btn ghost" data-field="newRecord" type="button">新建</button>
-            <button class="btn ghost" data-field="loadSample" type="button">载入样例</button>
-            <button class="btn primary" data-field="recalculate" type="button">重新计算成本</button>
-            <button class="btn" data-field="resetAll" type="button">重置参数</button>
-            <button class="btn ghost" data-field="saveRecord" type="button">保存到团队</button>
-            <button class="btn ghost" data-field="loadRecord" type="button">团队记录</button>
+          <div class="packing-actions"><button class="btn ghost" data-field="importBatch" type="button">{%= __("从批次导入") %}</button><button class="btn ghost" data-field="newRecord" type="button">{%= __("新建") %}</button>
+            <button class="btn ghost" data-field="loadSample" type="button">{%= __("载入样例") %}</button>
+            <button class="btn primary" data-field="recalculate" type="button">{%= __("重新计算成本") %}</button>
+            <button class="btn" data-field="resetAll" type="button">{%= __("重置参数") %}</button>
+            <button class="btn ghost" data-field="saveRecord" type="button">{%= __("保存到团队") %}</button>
+            <button class="btn ghost" data-field="loadRecord" type="button">{%= __("团队记录") %}</button>
           </div>
         </div>
-        <div class="grid-status" data-field="gridStatus">默认保留 1 行空白，直接编辑或粘贴数据。</div>
-        <div class="record-name-row"><label>记录名称<input data-field="recordName" type="text" maxlength="140" placeholder="填写记录名称，可保存未完成的草稿"></label><span class="pill blue" data-field="saveState">未保存</span></div>
+        <div class="grid-status" data-field="gridStatus">{%= __("默认保留 1 行空白，直接编辑或粘贴数据。") %}</div>
+        <div class="record-name-row"><label>{%= __("记录名称") %}<input data-field="recordName" type="text" maxlength="140" placeholder="{%= __('填写记录名称，可保存未完成的草稿') %}"></label><span class="pill blue" data-field="saveState">{%= __("未保存") %}</span></div>
         <div class="source-note" data-field="sourceNote" hidden></div>
-        <section class="record-panel" data-field="browserPanel" hidden aria-label="团队记录与批次选择">
-          <div class="record-panel-head"><h3 data-field="browserTitle">团队记录</h3><button class="btn" data-action="close-browser" type="button">关闭</button></div>
-          <div class="record-name-row"><input data-field="searchKeyword" placeholder="搜索批次、订单号或记录名称" aria-label="搜索关键词"><button class="btn" data-action="search" type="button">搜索</button></div>
+        <section class="record-panel" data-field="browserPanel" hidden aria-label="{%= __('团队记录与批次选择') %}">
+          <div class="record-panel-head"><h3 data-field="browserTitle">{%= __("团队记录") %}</h3><button class="btn" data-action="close-browser" type="button">{%= __("关闭") %}</button></div>
+          <div class="record-name-row"><input data-field="searchKeyword" placeholder="{%= __('搜索批次、订单号或记录名称') %}" aria-label="{%= __('搜索关键词') %}"><button class="btn" data-action="search" type="button">{%= __("搜索") %}</button></div>
           <div data-field="browserStatus" role="status"></div><div class="record-list" data-field="browserList"></div>
-          <div class="pager"><button class="btn" data-action="previous" type="button">上一页</button><span data-field="pageInfo"></span><button class="btn" data-action="next" type="button">下一页</button></div>
+          <div class="pager"><button class="btn" data-action="previous" type="button">{%= __("上一页") %}</button><span data-field="pageInfo"></span><button class="btn" data-action="next" type="button">{%= __("下一页") %}</button></div>
         </section>
-        <section class="record-panel" data-field="previewPanel" hidden aria-label="批次导入预览"></section>
-        <div class="empty-data-hint" data-field="emptyDataHint">请先录入或粘贴装箱单数据</div>
+        <section class="record-panel" data-field="previewPanel" hidden aria-label="{%= __('批次导入预览') %}"></section>
+        <div class="empty-data-hint" data-field="emptyDataHint">{%= __("请先录入或粘贴装箱单数据") %}</div>
         <div class="packing-entry">
           <div class="packing-table-scroll">
-            <table class="packing-table" aria-label="装箱单明细录入表">
+            <table class="packing-table" aria-label="{%= __('装箱单明细录入表') %}">
               <colgroup data-field="packingColgroup"></colgroup>
               <thead><tr data-field="packingHeaders"></tr></thead>
               <tbody data-field="packingRows"></tbody>
             </table>
           </div>
         </div>
-        <div class="override-panel"><label class="override-toggle"><input type="checkbox" data-field="overrideEnabled">使用整票毛重 / 体积</label><div data-field="overrideFields" hidden><div class="override-grid"><label>整票总毛重（kg）<input data-field="grossWeightOverride" inputmode="decimal" placeholder="留空按明细汇总"></label><label>整票总体积（m³）<input data-field="volumeOverride" inputmode="decimal" placeholder="留空按明细汇总"></label></div><small>仅覆盖当前测算的整票汇总，不向每行重复分配；留空时由明细合计。体积不参与当前运费公式。</small></div></div>
-        <div class="summary-head">解析汇总</div>
-        <div class="summary-strip" aria-label="装箱单核心汇总">
-          <div class="summary-item"><div class="summary-label">核算数量</div><div class="summary-value" data-field="summaryQuantity">0 <small>件</small></div></div>
-          <div class="summary-item"><div class="summary-label">总毛重</div><div class="summary-value" data-field="summaryGross">0.000 <small>kg</small></div></div>
-          <div class="summary-item"><div class="summary-label">总体积</div><div class="summary-value" data-field="summaryVolume">0.000000 <small>m³</small></div></div>
-          <div class="summary-item"><div class="summary-label">申报单价</div><div class="summary-value-row"><div class="summary-value" data-field="summaryUnitPrice">0.000000 <small>USD</small></div><select class="summary-currency-select" data-field="declaredCurrency" aria-label="申报单价币种"><option value="CNY">CNY</option><option value="USD" selected>USD</option><option value="MXN">MXN</option></select></div></div>
+        <div class="override-panel"><label class="override-toggle"><input type="checkbox" data-field="overrideEnabled">{%= __("使用整票毛重 / 体积") %}</label><div data-field="overrideFields" hidden><div class="override-grid"><label>{%= __("整票总毛重（kg）") %}<input data-field="grossWeightOverride" inputmode="decimal" placeholder="{%= __('留空按明细汇总') %}"></label><label>{%= __("整票总体积（m³）") %}<input data-field="volumeOverride" inputmode="decimal" placeholder="{%= __('留空按明细汇总') %}"></label></div><small>{%= __("仅覆盖当前测算的整票汇总，不向每行重复分配；留空时由明细合计。体积不参与当前运费公式。") %}</small></div></div>
+        <div class="summary-head">{%= __("解析汇总") %}</div>
+        <div class="summary-strip" aria-label="{%= __('装箱单核心汇总') %}">
+          <div class="summary-item"><div class="summary-label">{%= __("核算数量") %}</div><div class="summary-value" data-field="summaryQuantity">0 <small>{%= __("件") %}</small></div></div>
+          <div class="summary-item"><div class="summary-label">{%= __("总毛重") %}</div><div class="summary-value" data-field="summaryGross">0.000 <small>kg</small></div></div>
+          <div class="summary-item"><div class="summary-label">{%= __("总体积") %}</div><div class="summary-value" data-field="summaryVolume">0.000000 <small>m³</small></div></div>
+          <div class="summary-item"><div class="summary-label">{%= __("申报单价") %}</div><div class="summary-value-row"><div class="summary-value" data-field="summaryUnitPrice">0.000000 <small>USD</small></div><select class="summary-currency-select" data-field="declaredCurrency" aria-label="{%= __('申报单价币种') %}"><option value="CNY">CNY</option><option value="USD" selected>USD</option><option value="MXN">MXN</option></select></div></div>
         </div>
         <div class="mapping-hint" data-field="mappingHint" hidden></div>
         <div class="field-groups">
           <details class="parameter-group">
-            <summary>本批次核算参数 <small>当前批次独立保存，修改后实时计算</small></summary>
+            <summary>{%= __("本批次核算参数") %} <small>{%= __("当前批次独立保存，修改后实时计算") %}</small></summary>
             <div class="parameter-sections">
               <div class="parameter-section">
-                <div class="parameter-section-title">海运专属参数</div>
+                <div class="parameter-section-title">{%= __("海运专属参数") %}</div>
                 <div class="group-fields">
-                  <div class="field"><label data-for="oceanPortFee">海运本地费用</label><div class="currency-control"><input data-field="oceanPortFee" data-number min="0" step="0.001" value="3482.575"><select class="currency-select" data-field="oceanPortFeeCurrency" aria-label="海运本地费用币种"><option value="CNY" selected>CNY</option><option value="USD">USD</option><option value="MXN">MXN</option></select></div></div>
-                  <div class="field"><label data-for="oceanRate">海运美元兑人民币汇率</label><div class="exchange-wrap"><div class="input-wrap"><input class="exchange-input" data-field="oceanRate" data-number min="0" step="0.0001" value="7.01"></div><span class="exchange-display" data-field="oceanRateDisplay">1 USD = 7.01 CNY</span></div></div>
-                  <div class="field reference-field" hidden><label data-for="oceanContainerFee">整柜海运费（参考）</label><div class="currency-control"><input data-field="oceanContainerFee" data-number min="0" step="0.01" placeholder="可选"><select class="currency-select" data-field="oceanContainerFeeCurrency" aria-label="整柜海运费参考币种"><option value="CNY" selected>CNY</option><option value="USD">USD</option><option value="MXN">MXN</option></select></div></div>
-                  <div class="field reference-field" hidden><label data-for="oceanContainerWeight">整柜总重量（参考）</label><div class="input-wrap"><input data-field="oceanContainerWeight" data-number min="0" step="0.001" placeholder="可选"><span class="unit">kg</span></div></div>
-                  <div class="field reference-field" hidden><label data-for="oceanContainerVolume">整柜总体积（参考）</label><div class="input-wrap"><input data-field="oceanContainerVolume" data-number min="0" step="0.000001" placeholder="可选"><span class="unit">m³</span></div></div>
+                  <div class="field"><label data-for="oceanPortFee">{%= __("海运本地费用") %}</label><div class="currency-control"><input data-field="oceanPortFee" data-number min="0" step="0.001" value="3482.575"><select class="currency-select" data-field="oceanPortFeeCurrency" aria-label="{%= __('海运本地费用币种') %}"><option value="CNY" selected>CNY</option><option value="USD">USD</option><option value="MXN">MXN</option></select></div></div>
+                  <div class="field"><label data-for="oceanRate">{%= __("海运美元兑人民币汇率") %}</label><div class="exchange-wrap"><div class="input-wrap"><input class="exchange-input" data-field="oceanRate" data-number min="0" step="0.0001" value="7.01"></div><span class="exchange-display" data-field="oceanRateDisplay">1 USD = 7.01 CNY</span></div></div>
+                  <div class="field reference-field" hidden><label data-for="oceanContainerFee">{%= __("整柜海运费（参考）") %}</label><div class="currency-control"><input data-field="oceanContainerFee" data-number min="0" step="0.01" placeholder="{%= __('可选') %}"><select class="currency-select" data-field="oceanContainerFeeCurrency" aria-label="{%= __('整柜海运费参考币种') %}"><option value="CNY" selected>CNY</option><option value="USD">USD</option><option value="MXN">MXN</option></select></div></div>
+                  <div class="field reference-field" hidden><label data-for="oceanContainerWeight">{%= __("整柜总重量（参考）") %}</label><div class="input-wrap"><input data-field="oceanContainerWeight" data-number min="0" step="0.001" placeholder="{%= __('可选') %}"><span class="unit">kg</span></div></div>
+                  <div class="field reference-field" hidden><label data-for="oceanContainerVolume">{%= __("整柜总体积（参考）") %}</label><div class="input-wrap"><input data-field="oceanContainerVolume" data-number min="0" step="0.000001" placeholder="{%= __('可选') %}"><span class="unit">m³</span></div></div>
                 </div>
-                <div class="reference-note" hidden>整柜参考参数用于后续占比分摊，暂不改变当前整批成本。</div>
+                <div class="reference-note" hidden>{%= __("整柜参考参数用于后续占比分摊，暂不改变当前整批成本。") %}</div>
               </div>
               <div class="parameter-section">
-                <div class="parameter-section-title">空运专属参数</div>
+                <div class="parameter-section-title">{%= __("空运专属参数") %}</div>
                 <div class="group-fields">
-                  <div class="field"><label data-for="airKgRate">空运公斤单价</label><div class="currency-control"><input data-field="airKgRate" data-number min="0" step="0.01" value="40"><select class="currency-select" data-field="airKgRateCurrency" aria-label="空运公斤单价币种"><option value="CNY" selected>CNY</option><option value="USD">USD</option><option value="MXN">MXN</option></select></div></div>
-                  <div class="field"><label data-for="airFixedFee">空运固定费</label><div class="currency-control"><input data-field="airFixedFee" data-number min="0" step="0.01" value="2000"><select class="currency-select" data-field="airFixedFeeCurrency" aria-label="空运固定费币种"><option value="CNY" selected>CNY</option><option value="USD">USD</option><option value="MXN">MXN</option></select></div></div>
-                  <div class="field"><label data-for="airRateFx">空运美元兑人民币汇率</label><div class="exchange-wrap"><div class="input-wrap"><input class="exchange-input" data-field="airRateFx" data-number min="0" step="0.0001" value="6.9236"></div><span class="exchange-display" data-field="airRateDisplay">1 USD = 6.9236 CNY</span></div></div>
+                  <div class="field"><label data-for="airKgRate">{%= __("空运公斤单价") %}</label><div class="currency-control"><input data-field="airKgRate" data-number min="0" step="0.01" value="40"><select class="currency-select" data-field="airKgRateCurrency" aria-label="{%= __('空运公斤单价币种') %}"><option value="CNY" selected>CNY</option><option value="USD">USD</option><option value="MXN">MXN</option></select></div></div>
+                  <div class="field"><label data-for="airFixedFee">{%= __("空运固定费") %}</label><div class="currency-control"><input data-field="airFixedFee" data-number min="0" step="0.01" value="2000"><select class="currency-select" data-field="airFixedFeeCurrency" aria-label="{%= __('空运固定费币种') %}"><option value="CNY" selected>CNY</option><option value="USD">USD</option><option value="MXN">MXN</option></select></div></div>
+                  <div class="field"><label data-for="airRateFx">{%= __("空运美元兑人民币汇率") %}</label><div class="exchange-wrap"><div class="input-wrap"><input class="exchange-input" data-field="airRateFx" data-number min="0" step="0.0001" value="6.9236"></div><span class="exchange-display" data-field="airRateDisplay">1 USD = 6.9236 CNY</span></div></div>
                 </div>
               </div>
               <div class="parameter-section">
-                <div class="parameter-section-title">公共税费参数</div>
+                <div class="parameter-section-title">{%= __("公共税费参数") %}</div>
                 <div class="group-fields">
-                  <div class="field"><label data-for="tariffRate">关税率</label><div class="input-wrap"><input data-field="tariffRate" data-number min="0" step="0.0001" value="0"><span class="unit">%</span></div></div>
-                  <div class="field"><label data-for="vatRate">增值税率</label><div class="input-wrap"><input data-field="vatRate" data-number min="0" step="0.01" value="16"><span class="unit">%</span></div></div>
-                  <div class="field"><label data-for="clearanceMxn">清关杂费</label><div class="currency-control"><input data-field="clearanceMxn" data-number min="0" step="0.01" value="19500"><select class="currency-select" data-field="clearanceCurrency" aria-label="清关杂费币种"><option value="CNY">CNY</option><option value="USD">USD</option><option value="MXN" selected>MXN</option></select></div></div>
-                  <div class="field"><label data-for="mxnToCny">比索兑人民币汇率</label><div class="exchange-wrap"><div class="input-wrap"><input class="exchange-input" data-field="mxnToCny" data-number min="0" step="0.0001" value="2.6"></div><span class="exchange-display" data-field="mxnRateDisplay">1 CNY = 2.60 MXN</span></div></div>
-                  <div class="field"><label data-for="deliveryFee">目的地拖车费</label><div class="currency-control"><input data-field="deliveryFee" data-number min="0" step="0.01" value="600"><select class="currency-select" data-field="deliveryFeeCurrency" aria-label="目的地拖车费币种"><option value="CNY" selected>CNY</option><option value="USD">USD</option><option value="MXN">MXN</option></select></div></div>
+                  <div class="field"><label data-for="tariffRate">{%= __("关税率") %}</label><div class="input-wrap"><input data-field="tariffRate" data-number min="0" step="0.0001" value="0"><span class="unit">%</span></div></div>
+                  <div class="field"><label data-for="vatRate">{%= __("增值税率") %}</label><div class="input-wrap"><input data-field="vatRate" data-number min="0" step="0.01" value="16"><span class="unit">%</span></div></div>
+                  <div class="field"><label data-for="clearanceMxn">{%= __("清关杂费") %}</label><div class="currency-control"><input data-field="clearanceMxn" data-number min="0" step="0.01" value="19500"><select class="currency-select" data-field="clearanceCurrency" aria-label="{%= __('清关杂费币种') %}"><option value="CNY">CNY</option><option value="USD">USD</option><option value="MXN" selected>MXN</option></select></div></div>
+                  <div class="field"><label data-for="mxnToCny">{%= __("比索兑人民币汇率") %}</label><div class="exchange-wrap"><div class="input-wrap"><input class="exchange-input" data-field="mxnToCny" data-number min="0" step="0.0001" value="2.6"></div><span class="exchange-display" data-field="mxnRateDisplay">1 CNY = 2.60 MXN</span></div></div>
+                  <div class="field"><label data-for="deliveryFee">{%= __("目的地拖车费") %}</label><div class="currency-control"><input data-field="deliveryFee" data-number min="0" step="0.01" value="600"><select class="currency-select" data-field="deliveryFeeCurrency" aria-label="{%= __('目的地拖车费币种') %}"><option value="CNY" selected>CNY</option><option value="USD">USD</option><option value="MXN">MXN</option></select></div></div>
                 </div>
               </div>
             </div>
@@ -83,60 +83,60 @@
       </div>
     </section>
 
-    <section class="section" aria-label="运输方式成本明细">
+    <section class="section" aria-label="{%= __('运输方式成本明细') %}">
       <div class="section-head">
         <div>
-          <h2 data-field="cost-title">运输方式成本明细</h2>
-          <p>按当前参数实时计算；金额均换算为人民币。</p>
+          <h2 data-field="cost-title">{%= __("运输方式成本明细") %}</h2>
+          <p>{%= __("按当前参数实时计算；金额均换算为人民币。") %}</p>
         </div>
-        <span class="section-kicker">金额单位：CNY</span>
+        <span class="section-kicker">{%= __("金额单位：CNY") %}</span>
       </div>
       <div class="section-body">
         <div class="calculation-issues" data-field="issues" role="status"></div><div class="compare-grid">
           <article class="mode-panel">
             <div class="mode-head sea">
-              <div><div class="mode-title" style="color: var(--sea)"><span class="mode-dot"></span>海运成本</div><div class="mode-meta">港杂费用 + 进口环节费用</div></div>
-              <span class="pill sea" data-field="oceanBadge">待补充</span>
+              <div><div class="mode-title" style="color: var(--sea)"><span class="mode-dot"></span>{%= __("海运成本") %}</div><div class="mode-meta">{%= __("港杂费用 + 进口环节费用") %}</div></div>
+              <span class="pill sea" data-field="oceanBadge">{%= __("待补充") %}</span>
             </div>
             <div class="cost-list">
-              <div class="cost-row"><div class="cost-name">海运费</div><div class="cost-value-stack"><div class="cost-value" data-field="oceanTransport">待补充</div><div class="cost-diff neutral"></div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="直接取海运本地费用输入值。">i</span></div></div>
-              <div class="cost-row"><div class="cost-name">申报货值</div><div class="cost-value-stack"><div class="cost-value" data-field="oceanDeclared">待补充</div><div class="cost-diff neutral"></div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="核算数量 × 申报单价 × 海运美元汇率。">i</span></div></div>
-              <div class="cost-row"><div class="cost-name">CIF价值</div><div class="cost-value-stack"><div class="cost-value" data-field="oceanCif">待补充</div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="CIF = 海运费 + 申报货值。">i</span></div></div>
-              <div class="cost-row"><div class="cost-name">关税率</div><div class="cost-value-stack"><div class="cost-value" data-field="oceanTariffRate">待补充</div></div><div class="cost-formula">按参数配置</div></div>
-              <div class="cost-row"><div class="cost-name">关税费用</div><div class="cost-value-stack"><div class="cost-value" data-field="oceanTariff">待补充</div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="CIF × 关税率。">i</span></div></div>
-              <div class="cost-row"><div class="cost-name">增值税率</div><div class="cost-value-stack"><div class="cost-value" data-field="oceanVatRate">待补充</div></div><div class="cost-formula">按参数配置</div></div>
-              <div class="cost-row"><div class="cost-name">增值税费用</div><div class="cost-value-stack"><div class="cost-value" data-field="oceanVat">待补充</div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="(CIF + 关税费用) × 增值税率。">i</span></div></div>
-              <div class="cost-row"><div class="cost-name">清关杂费</div><div class="cost-value-stack"><div class="cost-value" data-field="oceanClearance">待补充</div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="清关杂费（MXN） ÷ 比索汇率。">i</span></div></div>
-              <div class="cost-row"><div class="cost-name">DTA费用</div><div class="cost-value-stack"><div class="cost-value" data-field="oceanDta">待补充</div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="按当前表格口径，CIF × 0.08%。">i</span></div></div>
-              <div class="cost-row"><div class="cost-name">拖车费</div><div class="cost-value-stack"><div class="cost-value" data-field="oceanDelivery">待补充</div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="取目的地拖车费参数。">i</span></div></div>
-              <div class="cost-row total"><div class="cost-name">运输及进口费用合计</div><div class="cost-value-stack"><div class="cost-value" data-field="oceanTotal">待补充</div><div class="cost-diff neutral"></div></div><div class="cost-formula">不含申报货值</div></div>
-              <div class="cost-row time-row"><div class="cost-name">预计时效</div><div class="cost-value-stack"><div class="cost-value">30–40 天（参考）</div></div><div class="cost-formula">参考时效</div></div>
+              <div class="cost-row"><div class="cost-name">{%= __("海运费") %}</div><div class="cost-value-stack"><div class="cost-value" data-field="oceanTransport">{%= __("待补充") %}</div><div class="cost-diff neutral"></div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="直接取海运本地费用输入值。">i</span></div></div>
+              <div class="cost-row"><div class="cost-name">{%= __("申报货值") %}</div><div class="cost-value-stack"><div class="cost-value" data-field="oceanDeclared">{%= __("待补充") %}</div><div class="cost-diff neutral"></div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="核算数量 × 申报单价 × 海运美元汇率。">i</span></div></div>
+              <div class="cost-row"><div class="cost-name">{%= __("CIF价值") %}</div><div class="cost-value-stack"><div class="cost-value" data-field="oceanCif">{%= __("待补充") %}</div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="CIF = 海运费 + 申报货值。">i</span></div></div>
+              <div class="cost-row"><div class="cost-name">{%= __("关税率") %}</div><div class="cost-value-stack"><div class="cost-value" data-field="oceanTariffRate">{%= __("待补充") %}</div></div><div class="cost-formula">{%= __("按参数配置") %}</div></div>
+              <div class="cost-row"><div class="cost-name">{%= __("关税费用") %}</div><div class="cost-value-stack"><div class="cost-value" data-field="oceanTariff">{%= __("待补充") %}</div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="CIF × 关税率。">i</span></div></div>
+              <div class="cost-row"><div class="cost-name">{%= __("增值税率") %}</div><div class="cost-value-stack"><div class="cost-value" data-field="oceanVatRate">{%= __("待补充") %}</div></div><div class="cost-formula">{%= __("按参数配置") %}</div></div>
+              <div class="cost-row"><div class="cost-name">{%= __("增值税费用") %}</div><div class="cost-value-stack"><div class="cost-value" data-field="oceanVat">{%= __("待补充") %}</div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="(CIF + 关税费用) × 增值税率。">i</span></div></div>
+              <div class="cost-row"><div class="cost-name">{%= __("清关杂费") %}</div><div class="cost-value-stack"><div class="cost-value" data-field="oceanClearance">{%= __("待补充") %}</div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="清关杂费（MXN） ÷ 比索汇率。">i</span></div></div>
+              <div class="cost-row"><div class="cost-name">{%= __("DTA费用") %}</div><div class="cost-value-stack"><div class="cost-value" data-field="oceanDta">{%= __("待补充") %}</div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="按当前表格口径，CIF × 0.08%。">i</span></div></div>
+              <div class="cost-row"><div class="cost-name">{%= __("拖车费") %}</div><div class="cost-value-stack"><div class="cost-value" data-field="oceanDelivery">{%= __("待补充") %}</div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="取目的地拖车费参数。">i</span></div></div>
+              <div class="cost-row total"><div class="cost-name">{%= __("运输及进口费用合计") %}</div><div class="cost-value-stack"><div class="cost-value" data-field="oceanTotal">{%= __("待补充") %}</div><div class="cost-diff neutral"></div></div><div class="cost-formula">{%= __("不含申报货值") %}</div></div>
+              <div class="cost-row time-row"><div class="cost-name">{%= __("预计时效") %}</div><div class="cost-value-stack"><div class="cost-value">{%= __("30–40 天（参考）") %}</div></div><div class="cost-formula">{%= __("参考时效") %}</div></div>
             </div>
-            <div class="avg-block"><span class="avg-label">平均单位成本</span><strong class="avg-value" data-field="oceanAvg">待补充</strong></div>
-            <div class="mode-footnote">平均单位成本 = 运输及进口费用合计 ÷ 核算数量。</div>
+            <div class="avg-block"><span class="avg-label">{%= __("平均单位成本") %}</span><strong class="avg-value" data-field="oceanAvg">{%= __("待补充") %}</strong></div>
+            <div class="mode-footnote">{%= __("平均单位成本 = 运输及进口费用合计 ÷ 核算数量。") %}</div>
           </article>
 
           <article class="mode-panel">
             <div class="mode-head air">
-              <div><div class="mode-title" style="color: var(--air)"><span class="mode-dot"></span>空运成本</div><div class="mode-meta">按总毛重计算空运费</div></div>
-              <span class="pill air" data-field="airBadge">待补充</span>
+              <div><div class="mode-title" style="color: var(--air)"><span class="mode-dot"></span>{%= __("空运成本") %}</div><div class="mode-meta">{%= __("按总毛重计算空运费") %}</div></div>
+              <span class="pill air" data-field="airBadge">{%= __("待补充") %}</span>
             </div>
             <div class="cost-list">
-              <div class="cost-row"><div class="cost-name">空运费</div><div class="cost-value-stack"><div class="cost-value" data-field="airTransport">待补充</div><div class="cost-diff" data-field="diffTransport"></div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="空运公斤单价 × 总毛重 + 空运固定费。当前体积未进入公式。">i</span></div></div>
-              <div class="cost-row"><div class="cost-name">申报货值</div><div class="cost-value-stack"><div class="cost-value" data-field="airDeclared">待补充</div><div class="cost-diff" data-field="diffDeclared"></div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="核算数量 × 申报单价 × 空运美元汇率。">i</span></div></div>
-              <div class="cost-row"><div class="cost-name">CIF价值</div><div class="cost-value-stack"><div class="cost-value" data-field="airCif">待补充</div><div class="cost-diff" data-field="diffCif"></div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="CIF = 空运费 + 申报货值。">i</span></div></div>
-              <div class="cost-row"><div class="cost-name">关税率</div><div class="cost-value-stack"><div class="cost-value" data-field="airTariffRate">待补充</div></div><div class="cost-formula">按参数配置</div></div>
-              <div class="cost-row"><div class="cost-name">关税费用</div><div class="cost-value-stack"><div class="cost-value" data-field="airTariff">待补充</div><div class="cost-diff" data-field="diffTariff"></div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="CIF × 关税率。">i</span></div></div>
-              <div class="cost-row"><div class="cost-name">增值税率</div><div class="cost-value-stack"><div class="cost-value" data-field="airVatRate">待补充</div></div><div class="cost-formula">按参数配置</div></div>
-              <div class="cost-row"><div class="cost-name">增值税费用</div><div class="cost-value-stack"><div class="cost-value" data-field="airVat">待补充</div><div class="cost-diff" data-field="diffVat"></div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="(CIF + 关税费用) × 增值税率。">i</span></div></div>
-              <div class="cost-row"><div class="cost-name">清关杂费</div><div class="cost-value-stack"><div class="cost-value" data-field="airClearance">待补充</div><div class="cost-diff neutral" data-field="diffClearance"></div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="清关杂费（MXN） ÷ 比索汇率。">i</span></div></div>
-              <div class="cost-row"><div class="cost-name">DTA费用</div><div class="cost-value-stack"><div class="cost-value" data-field="airDta">待补充</div><div class="cost-diff" data-field="diffDta"></div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="按当前表格口径，CIF × 0.08%。">i</span></div></div>
-              <div class="cost-row"><div class="cost-name">拖车费</div><div class="cost-value-stack"><div class="cost-value" data-field="airDelivery">待补充</div><div class="cost-diff neutral" data-field="diffDelivery"></div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="取目的地拖车费参数。">i</span></div></div>
-              <div class="cost-row total"><div class="cost-name">运输及进口费用合计</div><div class="cost-value-stack"><div class="cost-value" data-field="airTotal">待补充</div><div class="cost-diff" data-field="diffTotal"></div></div><div class="cost-formula">不含申报货值</div></div>
-              <div class="cost-row time-row"><div class="cost-name">预计时效</div><div class="cost-value-stack"><div class="cost-value">待补充</div></div><div class="cost-formula">需确认</div></div>
+              <div class="cost-row"><div class="cost-name">{%= __("空运费") %}</div><div class="cost-value-stack"><div class="cost-value" data-field="airTransport">{%= __("待补充") %}</div><div class="cost-diff" data-field="diffTransport"></div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="空运公斤单价 × 总毛重 + 空运固定费。当前体积未进入公式。">i</span></div></div>
+              <div class="cost-row"><div class="cost-name">{%= __("申报货值") %}</div><div class="cost-value-stack"><div class="cost-value" data-field="airDeclared">{%= __("待补充") %}</div><div class="cost-diff" data-field="diffDeclared"></div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="核算数量 × 申报单价 × 空运美元汇率。">i</span></div></div>
+              <div class="cost-row"><div class="cost-name">{%= __("CIF价值") %}</div><div class="cost-value-stack"><div class="cost-value" data-field="airCif">{%= __("待补充") %}</div><div class="cost-diff" data-field="diffCif"></div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="CIF = 空运费 + 申报货值。">i</span></div></div>
+              <div class="cost-row"><div class="cost-name">{%= __("关税率") %}</div><div class="cost-value-stack"><div class="cost-value" data-field="airTariffRate">{%= __("待补充") %}</div></div><div class="cost-formula">{%= __("按参数配置") %}</div></div>
+              <div class="cost-row"><div class="cost-name">{%= __("关税费用") %}</div><div class="cost-value-stack"><div class="cost-value" data-field="airTariff">{%= __("待补充") %}</div><div class="cost-diff" data-field="diffTariff"></div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="CIF × 关税率。">i</span></div></div>
+              <div class="cost-row"><div class="cost-name">{%= __("增值税率") %}</div><div class="cost-value-stack"><div class="cost-value" data-field="airVatRate">{%= __("待补充") %}</div></div><div class="cost-formula">{%= __("按参数配置") %}</div></div>
+              <div class="cost-row"><div class="cost-name">{%= __("增值税费用") %}</div><div class="cost-value-stack"><div class="cost-value" data-field="airVat">{%= __("待补充") %}</div><div class="cost-diff" data-field="diffVat"></div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="(CIF + 关税费用) × 增值税率。">i</span></div></div>
+              <div class="cost-row"><div class="cost-name">{%= __("清关杂费") %}</div><div class="cost-value-stack"><div class="cost-value" data-field="airClearance">{%= __("待补充") %}</div><div class="cost-diff neutral" data-field="diffClearance"></div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="清关杂费（MXN） ÷ 比索汇率。">i</span></div></div>
+              <div class="cost-row"><div class="cost-name">{%= __("DTA费用") %}</div><div class="cost-value-stack"><div class="cost-value" data-field="airDta">{%= __("待补充") %}</div><div class="cost-diff" data-field="diffDta"></div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="按当前表格口径，CIF × 0.08%。">i</span></div></div>
+              <div class="cost-row"><div class="cost-name">{%= __("拖车费") %}</div><div class="cost-value-stack"><div class="cost-value" data-field="airDelivery">{%= __("待补充") %}</div><div class="cost-diff neutral" data-field="diffDelivery"></div></div><div class="cost-formula"><span class="formula-info" tabindex="0" data-tip="取目的地拖车费参数。">i</span></div></div>
+              <div class="cost-row total"><div class="cost-name">{%= __("运输及进口费用合计") %}</div><div class="cost-value-stack"><div class="cost-value" data-field="airTotal">{%= __("待补充") %}</div><div class="cost-diff" data-field="diffTotal"></div></div><div class="cost-formula">{%= __("不含申报货值") %}</div></div>
+              <div class="cost-row time-row"><div class="cost-name">{%= __("预计时效") %}</div><div class="cost-value-stack"><div class="cost-value">{%= __("待补充") %}</div></div><div class="cost-formula">{%= __("需确认") %}</div></div>
             </div>
-            <div class="avg-block"><span class="avg-label">平均单位成本</span><strong class="avg-value" data-field="airAvg">待补充</strong></div>
-            <div class="mode-footnote" data-field="airFootnote">空运公斤单价 × 总毛重 + 空运固定费。体积暂未进入计算。</div>
+            <div class="avg-block"><span class="avg-label">{%= __("平均单位成本") %}</span><strong class="avg-value" data-field="airAvg">{%= __("待补充") %}</strong></div>
+            <div class="mode-footnote" data-field="airFootnote">{%= __("空运公斤单价 × 总毛重 + 空运固定费。体积暂未进入计算。") %}</div>
           </article>
         </div>
       </div>

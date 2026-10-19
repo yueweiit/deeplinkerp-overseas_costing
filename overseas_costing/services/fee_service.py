@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _ as _i18n
+except ImportError:
+    def _i18n(message):
+        return message
+
+
 import json
 import uuid
 from copy import deepcopy
@@ -678,7 +685,7 @@ def _load_dict(value) -> dict:
         return dict(value)
     loaded = json.loads(value or "{}")
     if not isinstance(loaded, dict):
-        raise ValueError("费用参数必须是 JSON 对象。")
+        raise ValueError(_i18n("费用参数必须是 JSON 对象。"))
     return loaded
 
 
@@ -686,11 +693,11 @@ def _decimal_text(value) -> str:
     try:
         number = Decimal(str(value))
     except (InvalidOperation, TypeError, ValueError) as exc:
-        raise ValueError("费用金额格式不正确。") from exc
+        raise ValueError(_i18n("费用金额格式不正确。")) from exc
     if not number.is_finite():
-        raise ValueError("费用金额必须是有限数值。")
+        raise ValueError(_i18n("费用金额必须是有限数值。"))
     if number < 0:
-        raise ValueError("费用金额不能小于 0。")
+        raise ValueError(_i18n("费用金额不能小于 0。"))
     return format(number.normalize(), "f")
 
 
@@ -725,8 +732,8 @@ def validate_fee_status_transition(
     )
     if requires_reason and not normalized_reason:
         if current == "ACTUAL":
-            raise ValueError("没有已核对的最终凭证，改为实际费用时必须填写原因。")
-        raise ValueError("该费用状态变更必须填写原因。")
+            raise ValueError(_i18n("没有已核对的最终凭证，改为实际费用时必须填写原因。"))
+        raise ValueError(_i18n("该费用状态变更必须填写原因。"))
     return {
         "previous_status": previous,
         "next_status": current,
@@ -739,35 +746,35 @@ def normalize_fee_payload(payload, *, trusted_project_policy=False) -> dict:
     raw = _load_dict(payload)
     fee_key = str(raw.get("logical_fee_key") or "").strip()
     if not fee_key:
-        raise ValueError("逻辑费用标识不能为空。")
+        raise ValueError(_i18n("逻辑费用标识不能为空。"))
 
     status = default_status_for_amount_entry(raw.get("amount_status"), raw.get("amount"))
     if status not in AMOUNT_STATUSES:
-        raise ValueError("金额状态不合法。")
+        raise ValueError(_i18n("金额状态不合法。"))
     scope_type = str(raw.get("scope_type") or "ALL_ITEMS").strip().upper()
     if scope_type not in SCOPE_TYPES:
-        raise ValueError("费用适用范围不合法。")
+        raise ValueError(_i18n("费用适用范围不合法。"))
     basis = str(raw.get("allocation_basis") or raw.get("basis_field") or "goods_value").strip()
     if basis not in ALLOCATION_BASES:
-        raise ValueError("费用分摊依据不合法。")
+        raise ValueError(_i18n("费用分摊依据不合法。"))
 
     remark = str(raw.get("remark") or "").strip()
     included_in = str(raw.get("included_in_fee_key") or "").strip()
     if status in {"NOT_INCURRED", "INCLUDED"} and not remark:
-        raise ValueError("标记未发生或已包含时必须填写原因。")
+        raise ValueError(_i18n("标记未发生或已包含时必须填写原因。"))
     if status == "INCLUDED" and not included_in:
-        raise ValueError("标记已包含时必须选择“已包含于费用”或本批采购金额。")
+        raise ValueError(_i18n("标记已包含时必须选择“已包含于费用”或本批采购金额。"))
 
     keys = _scope_keys(raw)
     if scope_type in {"ITEMS", "DIRECT_ITEM"} and not keys:
-        raise ValueError("请选择费用适用的物料。")
+        raise ValueError(_i18n("请选择费用适用的物料。"))
     if scope_type == "DIRECT_ITEM" and len(keys) != 1:
-        raise ValueError("直接费用必须且只能选择一条物料。")
+        raise ValueError(_i18n("直接费用必须且只能选择一条物料。"))
 
     amount = ""
     if status in fee_allocation_service.COUNTED_AMOUNT_STATUSES:
         if raw.get("amount") in (None, ""):
-            raise ValueError("暂估或实际费用必须填写金额。")
+            raise ValueError(_i18n("暂估或实际费用必须填写金额。"))
         amount = _decimal_text(raw.get("amount"))
     elif raw.get("amount") not in (None, ""):
         amount = _decimal_text(raw.get("amount"))
@@ -780,7 +787,7 @@ def normalize_fee_payload(payload, *, trusted_project_policy=False) -> dict:
     if currency == "CNY":
         currency = "RMB"
     if currency not in {"RMB", "MXN", "USD"}:
-        raise ValueError("费用币种只能选择人民币（RMB）、墨西哥比索（MXN）或美金（USD）。")
+        raise ValueError(_i18n("费用币种只能选择人民币（RMB）、墨西哥比索（MXN）或美金（USD）。"))
 
     normalized = {key: raw[key] for key in FEE_FIELDS if key in raw}
     normalized.update(
@@ -804,10 +811,10 @@ def normalize_fee_payload(payload, *, trusted_project_policy=False) -> dict:
     policy = policy_from_fee(raw)
     if policy:
         if not trusted_project_policy:
-            raise ValueError('项目分摊规则只能由可信资料审核生成。')
+            raise ValueError(_i18n('项目分摊规则只能由可信资料审核生成。'))
         validate_policy(policy)
         if scope_type != 'ALL_ITEMS' or basis != 'gross_weight':
-            raise ValueError('项目毛重规则不能变更为其他范围或依据。')
+            raise ValueError(_i18n('项目毛重规则不能变更为其他范围或依据。'))
         normalized['scope_value_json'] = json.dumps({'item_keys': [], 'project_allocation': policy}, ensure_ascii=False, sort_keys=True)
     return normalized
 
@@ -834,10 +841,10 @@ def merge_logical_fee(existing_fees: list[dict], payload: dict, *, revision: str
     # Ordinary amount/status edits cannot erase a server-confirmed policy.
     if policy_from_fee(previous) and not policy_from_fee(payload):
         if merged.get('scope_type') != 'ALL_ITEMS' or merged.get('allocation_basis') != 'gross_weight':
-            raise ValueError('已有项目毛重分摊规则，请重新分析资料后调整。')
+            raise ValueError(_i18n('已有项目毛重分摊规则，请重新分析资料后调整。'))
         merged['scope_value_json'] = previous['scope_value_json']
     if previous and not fee_is_active(previous) and fee_is_active(merged):
-        raise ValueError("该费用已停用，请先核对历史记录，不能通过保存金额恢复启用。")
+        raise ValueError(_i18n("该费用已停用，请先核对历史记录，不能通过保存金额恢复启用。"))
     if previous.get("rule_code") == "oa_logistics_freight":
         merged["rule_code"] = previous["rule_code"]
     cost_inputs_changed = existing_index is None or any(
@@ -939,7 +946,7 @@ def _assert_write_context(batch_name: str, version_name: str | None, edit_token,
     if version_name:
         version_batch = frappe.db.get_value("Overseas Cost Version", version_name, "batch")
         if version_batch != batch_name:
-            raise ValueError("成本版本不属于当前批次。")
+            raise ValueError(_i18n("成本版本不属于当前批次。"))
     from overseas_costing.services.batch_service import _build_invalid_business_state
 
     batch = frappe.db.get_value(
@@ -1009,7 +1016,7 @@ def materialize_fee_rule(batch_name: str, version_name: str, logical_fee_key: st
         None,
     )
     if not template:
-        raise ValueError("当前批次没有该逻辑费用项。")
+        raise ValueError(_i18n("当前批次没有该逻辑费用项。"))
     values = {
         key: template.get(key)
         for key in FEE_FIELDS
@@ -1045,7 +1052,7 @@ def save_fee(
     from overseas_costing.services.effective_source_values import batch_source_context
     context = batch_source_context(batch_name, version_name, lock=True)
     if context.get('root_kind') == 'expense' and not context.get('separate_adoption'):
-        raise ValueError('当前费用统一来自已匹配采购支出，请通过采购支出资料审核采用完整费用明细。')
+        raise ValueError(_i18n('当前费用统一来自已匹配采购支出，请通过采购支出资料审核采用完整费用明细。'))
     _assert_write_context(batch_name, version_name, edit_token, expected_modified)
     transport_mode = frappe.db.get_value("Overseas Cost Batch", batch_name, "transport_mode") or ""
     existing = _decorate_historical_rules(_query_rules(batch_name, version_name), transport_mode)
@@ -1062,7 +1069,7 @@ def save_fee(
     from overseas_costing.services.project_freight_service import policy_from_fee
     submitted_policy = policy_from_fee(raw_payload)
     if submitted_policy and submitted_policy != policy_from_fee(previous):
-        raise ValueError('不能通过浏览器修改服务器签发的项目分摊规则。')
+        raise ValueError(_i18n('不能通过浏览器修改服务器签发的项目分摊规则。'))
     payload = normalize_fee_payload(raw_payload, trusted_project_policy=bool(submitted_policy))
     transition = validate_fee_status_transition(
         previous.get("amount_status") or "MISSING",
@@ -1146,7 +1153,7 @@ def link_fee_evidence(
         as_dict=True,
     ) or {}
     if rule.get("batch") != batch_name:
-        raise ValueError("费用规则不属于当前批次。")
+        raise ValueError(_i18n("费用规则不属于当前批次。"))
     _assert_write_context(batch_name, rule.get("version"), edit_token, expected_modified)
     attachment_row = frappe.db.get_value(
         "Overseas Cost Attachment",
@@ -1155,10 +1162,10 @@ def link_fee_evidence(
         as_dict=True,
     ) or {}
     if attachment_row.get("batch") != batch_name:
-        raise ValueError("凭证附件不属于当前批次。")
+        raise ValueError(_i18n("凭证附件不属于当前批次。"))
     role = str(evidence_role or "").strip()
     if not role:
-        raise ValueError("凭证角色不能为空。")
+        raise ValueError(_i18n("凭证角色不能为空。"))
     existing = frappe.db.get_value(
         "Overseas Cost Fee Evidence",
         {"fee_rule": fee_rule, "attachment": attachment, "evidence_role": role},
@@ -1204,7 +1211,7 @@ def set_fee_evidence_status(
 ) -> dict:
     normalized = str(status or "").strip().upper()
     if normalized not in EVIDENCE_STATUSES:
-        raise ValueError("费用凭证校验状态不合法。")
+        raise ValueError(_i18n("费用凭证校验状态不合法。"))
     if frappe is None:
         return {"ok": True, "dry_run": True, "evidence_name": evidence_name, "status": normalized}
     row = frappe.db.get_value(
@@ -1214,7 +1221,7 @@ def set_fee_evidence_status(
         as_dict=True,
     ) or {}
     if row.get("batch") != batch_name:
-        raise ValueError("费用凭证不属于当前批次。")
+        raise ValueError(_i18n("费用凭证不属于当前批次。"))
     _assert_write_context(batch_name, row.get("version"), edit_token, expected_modified)
     values = {
         "validation_status": normalized,
@@ -1292,9 +1299,9 @@ def get_fee_worklist(batch_name: str, version_name: str | None = None) -> dict:
         }
     version = version_name or frappe.db.get_value("Overseas Cost Batch", batch_name, "current_version")
     if not version:
-        raise ValueError("当前批次没有可用成本版本。")
+        raise ValueError(_i18n("当前批次没有可用成本版本。"))
     if frappe.db.get_value("Overseas Cost Version", version, "batch") != batch_name:
-        raise ValueError("成本版本不属于当前批次。")
+        raise ValueError(_i18n("成本版本不属于当前批次。"))
     transport_mode = frappe.db.get_value("Overseas Cost Batch", batch_name, "transport_mode") or ""
     from overseas_costing.services.effective_source_values import batch_source_context, project_source_values
     source_context = batch_source_context(batch_name,version)

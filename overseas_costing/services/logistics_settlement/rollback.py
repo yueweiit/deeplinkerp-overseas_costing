@@ -1,4 +1,11 @@
 """Operator recovery by application beforeimage; historical versions remain frozen."""
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 from decimal import Decimal
 from .application import row_meta
 from .jobs import utcnow, pause_job
@@ -23,7 +30,7 @@ def restore_source_metadata(evidence, target):
 
 def restore_application(store, ledger, application_id, expected_revision, reason, actor):
     if not str(reason).strip():
-        raise ValueError('请填写回退原因')
+        raise ValueError(_('请填写回退原因'))
     with store.atomic():
         # Stop jobs before taking source locks, matching the worker's lock order.
         store.get('state', 'job_lock', lock=True)
@@ -33,17 +40,17 @@ def restore_application(store, ledger, application_id, expected_revision, reason
         store.get('state', 'match_lock', lock=True)
         application = store.get('application', application_id, lock=True)
         if not application or application['status'] != 'applied':
-            raise ValueError('应用记录不存在或不可恢复')
+            raise ValueError(_('应用记录不存在或不可恢复'))
         binding = store.get('binding', application['binding_id'], lock=True)
         if not binding or binding['revision'] != int(expected_revision):
-            raise ValueError('当前关联已变化，请刷新后选择应用记录')
+            raise ValueError(_('当前关联已变化，请刷新后选择应用记录'))
         if application.get('expense_id') != binding['expense_id']:
-            raise ValueError('此应用属于已经更正的旧关联；请先按更正流程恢复关联')
+            raise ValueError(_('此应用属于已经更正的旧关联；请先按更正流程恢复关联'))
         store.get('source', binding['expense_id'], lock=True)
         store.get('source', binding['logistics_id'], lock=True)
         batch = application_context(store, ledger, binding)
         if not batch or locked(batch):
-            raise ValueError('批次正在编辑或尚未对应，请结束编辑后回退')
+            raise ValueError(_('批次正在编辑或尚未对应，请结束编辑后回退'))
         version = mutable_version(ledger, batch)
         current_items = ledger.rows('item', batch=batch['name'], version=version['name'])
         before = application.get('before') or {}

@@ -184,11 +184,11 @@
 
   function primaryActionForIssue(issue) {
     const actions = {
-      purchase: { action: "supplement", label: "补资料" },
-      logistics: { action: "supplement", label: "补资料" },
-      calculation: { action: "recalculate", label: "重新计算" },
-      erp_failed: { action: "erp_retry", label: "处理回写" },
-      ready: { action: "view", label: "查看详情" },
+      purchase: { action: "supplement", label: ocTranslate("补资料") },
+      logistics: { action: "supplement", label: ocTranslate("补资料") },
+      calculation: { action: "recalculate", label: ocTranslate("重新计算") },
+      erp_failed: { action: "erp_retry", label: ocTranslate("处理回写") },
+      ready: { action: "view", label: ocTranslate("查看详情") },
     };
     return actions[issue] || actions.ready;
   }

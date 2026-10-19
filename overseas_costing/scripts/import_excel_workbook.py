@@ -8,6 +8,13 @@ python -m overseas_costing.scripts.import_excel_workbook --file data/current_air
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import argparse
 import json
 import os
@@ -44,11 +51,11 @@ def _env_bool(name: str, default: bool = False) -> bool:
 def _resolve_file_path(file_path: str | None = None) -> Path:
     resolved = _clean(file_path) or _clean(os.environ.get("OVERSEAS_COST_EXCEL_FILE"))
     if not resolved:
-        raise FileNotFoundError("缺少 Excel 文件路径，请传入 file_path 或设置 OVERSEAS_COST_EXCEL_FILE。")
+        raise FileNotFoundError(_("缺少 Excel 文件路径，请传入 file_path 或设置 OVERSEAS_COST_EXCEL_FILE。"))
 
     path = Path(resolved).expanduser()
     if not path.exists():
-        raise FileNotFoundError(f"未找到 Excel 文件：{path}")
+        raise FileNotFoundError(_("未找到 Excel 文件：{0}").format(path))
     return path
 
 

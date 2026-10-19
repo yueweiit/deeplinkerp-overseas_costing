@@ -1,4 +1,11 @@
 """Prepare and confirm immutable, server-held AI row selections."""
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 from copy import deepcopy
 import re
 
@@ -263,14 +270,14 @@ def _inputs(repo, batch, run, *, locked=False):
     ai._assert_run_batch(run,batch)
     draft=ai._load_json(ai._record_value(run,'draft_json'),{})
     if draft.get('processing_version') != ai.SOURCE_REVIEW_PROCESSING_VERSION:
-        raise ValueError('AI 资料处理规则已升级，请重新分析资料。')
+        raise ValueError(_('AI 资料处理规则已升级，请重新分析资料。'))
     if int(ai._record_value(run,'proposal_version',0) or 0) > 0 and draft.get('row_review_policy') != rows.POLICY:
-        raise ValueError('AI 预览规则已升级，请重新分析资料。')
+        raise ValueError(_('AI 预览规则已升级，请重新分析资料。'))
     context=ai._review_context(repo,batch,str(ai._record_value(run,'version')),
         original_sources=ai._run_uses_original_sources(run))
     # Validate selected evidence below; one unavailable primary source must
     # not veto a valid lower-priority source in the same batch.
-    if ai._clarification_changed(repo,batch,run,locked=locked):raise ValueError('说明已变化，请按新说明重新分析。')
+    if ai._clarification_changed(repo,batch,run,locked=locked):raise ValueError(_('说明已变化，请按新说明重新分析。'))
     items=repo.get_items(batch,context['version'])
     sources=ai._reload_review_manifest(repo,batch,context['version'],run)
     sources=_sources_with_progress(
@@ -278,7 +285,7 @@ def _inputs(repo, batch, run, *, locked=False):
     fingerprint=ai._source_review_fingerprint(batch,context['version'],items,sources,str(ai._record_value(run,'clarification_text') or ''),context=context)
     saved_material=draft.get('material_input_fingerprint')
     if fingerprint!=ai._record_value(run,'input_fingerprint') and (not saved_material or saved_material!=material_fingerprint(items,sources,context)):
-        raise ValueError('来源、物料或版本已变化，请重新分析资料。')
+        raise ValueError(_('来源、物料或版本已变化，请重新分析资料。'))
     baseline=(draft.get('review_input') or {}).get('source_dependencies')
     if baseline is not None and callable(getattr(repo,'assert_row_dependencies',None)):
         repo.assert_row_dependencies(batch,baseline,lock=locked)
@@ -419,15 +426,15 @@ def _selected_packing_groups(items, candidates, selected_ids):
     candidates=deepcopy(candidates or [])
     by_id={str(candidate.get('candidate_id') or ''):candidate for candidate in candidates}
     if any(not candidate_id for candidate_id in by_id) or len(by_id)!=len(candidates):
-        raise ValueError('装箱组候选标识无效，请重新分析。')
+        raise ValueError(_('装箱组候选标识无效，请重新分析。'))
     if selected_ids is None:
         selected_ids=[candidate_id for candidate_id,candidate in by_id.items()
                       if candidate.get('default_selected') and candidate.get('can_apply')]
     if (not isinstance(selected_ids,list) or any(not isinstance(value,str) for value in selected_ids)
             or len(selected_ids)!=len(set(selected_ids))):
-        raise ValueError('装箱组选择格式不正确。')
+        raise ValueError(_('装箱组选择格式不正确。'))
     if set(selected_ids)-by_id.keys():
-        raise ValueError('所选装箱组不属于当前草稿，请刷新预览。')
+        raise ValueError(_('所选装箱组不属于当前草稿，请刷新预览。'))
     ordered_items=sorted(
         [item for item in items or [] if not int(item.get('is_excluded') or 0)],
         key=lambda item:(int(item.get('row_no') or 0),str(item.get('name') or '')),
@@ -439,7 +446,7 @@ def _selected_packing_groups(items, candidates, selected_ids):
     stable_keys=[str(item.get('stable_line_key') or (
         f"legacy:{item.get('name')}" if item.get('name') else '')) for item in ordered_items]
     if selected_ids and (any(not key for key in stable_keys) or len(stable_keys)!=len(set(stable_keys))):
-        raise ValueError('装箱组物料身份不稳定，请刷新后重新分析。')
+        raise ValueError(_('装箱组物料身份不稳定，请刷新后重新分析。'))
     occupied=set();selected=[]
     for candidate_id in selected_ids:
         candidate=by_id[candidate_id]
@@ -447,10 +454,10 @@ def _selected_packing_groups(items, candidates, selected_ids):
             raise ValueError(candidate.get('resolution_reason') or '该装箱组成员尚未确认，不能采用。')
         members=[str(value or '') for value in candidate.get('member_keys') or []]
         if len(members)<2 or len(members)!=len(set(members)) or any(member not in stable_keys for member in members):
-            raise ValueError('装箱组物料已变化，请刷新后重新选择。')
+            raise ValueError(_('装箱组物料已变化，请刷新后重新选择。'))
         positions=sorted(stable_keys.index(member) for member in members)
         if positions!=list(range(min(positions),max(positions)+1)) or occupied.intersection(members):
-            raise ValueError('装箱组只能覆盖连续且互不重复的物料行。')
+            raise ValueError(_('装箱组只能覆盖连续且互不重复的物料行。'))
         occupied.update(members);selected.append(candidate)
     return selected,sorted(selected_ids)
 
@@ -463,7 +470,7 @@ def _stable_item_index(items):
         key=str(item.get('stable_line_key') or (
             f"legacy:{item.get('name')}" if item.get('name') else '')).strip()
         if not key or key in index:
-            raise ValueError('装箱候选的物料身份不稳定，请刷新后重新分析。')
+            raise ValueError(_('装箱候选的物料身份不稳定，请刷新后重新分析。'))
         index[key]=item
     return index
 
@@ -516,7 +523,7 @@ def _selected_packing_assignments(items,candidates,selected_assignments,*,key_al
     candidates=deepcopy(candidates or [])
     by_id={str(candidate.get('candidate_id') or ''):candidate for candidate in candidates}
     if any(not candidate_id for candidate_id in by_id) or len(by_id)!=len(candidates):
-        raise ValueError('装箱候选标识无效，请重新分析。')
+        raise ValueError(_('装箱候选标识无效，请重新分析。'))
     if selected_assignments is None:
         selected_assignments={}
         for candidate_id,candidate in by_id.items():
@@ -527,9 +534,9 @@ def _selected_packing_assignments(items,candidates,selected_assignments,*,key_al
     if (not isinstance(selected_assignments,dict)
             or any(not isinstance(key,str) or not isinstance(value,str)
                    for key,value in selected_assignments.items())):
-        raise ValueError('装箱归属选择格式不正确。')
+        raise ValueError(_('装箱归属选择格式不正确。'))
     if set(selected_assignments)-by_id.keys():
-        raise ValueError('所选装箱候选不属于当前草稿，请刷新预览。')
+        raise ValueError(_('所选装箱候选不属于当前草稿，请刷新预览。'))
     item_index=_stable_item_index(items)
     occupied=set();groups=[];singles=[];validated={}
     for candidate_id,assignment_id in sorted(selected_assignments.items()):
@@ -538,7 +545,7 @@ def _selected_packing_assignments(items,candidates,selected_assignments,*,key_al
                  for option in candidate.get('assignment_options') or []}
         option=options.get(assignment_id)
         if not option:
-            raise ValueError('所选装箱归属已变化，请刷新预览。')
+            raise ValueError(_('所选装箱归属已变化，请刷新预览。'))
         if not option.get('can_apply'):
             raise ValueError(option.get('resolution_reason') or '该装箱归属不可采用。')
         aliases=key_aliases or {}
@@ -547,9 +554,9 @@ def _selected_packing_assignments(items,candidates,selected_assignments,*,key_al
         mode=str(option.get('mode') or '')
         expected_count=1 if mode=='single_item' else 2
         if len(members)<expected_count or len(members)!=len(set(members)) or any(member not in item_index for member in members):
-            raise ValueError('装箱候选的物料已变化，请刷新后重新选择。')
+            raise ValueError(_('装箱候选的物料已变化，请刷新后重新选择。'))
         if occupied.intersection(members):
-            raise ValueError('同一物料不能同时采用两组装箱事实。')
+            raise ValueError(_('同一物料不能同时采用两组装箱事实。'))
         occupied.update(members);validated[candidate_id]=assignment_id
         selected={**candidate,'member_keys':members,'member_labels':[
             str(item_index[key].get('material_code') or item_index[key].get('product_name') or key)
@@ -559,17 +566,17 @@ def _selected_packing_assignments(items,candidates,selected_assignments,*,key_al
         package_count_override=option.get('package_count_override')
         if package_count_override not in (None,''):
             if mode!='one_box_group' or str(package_count_override).strip()!='1':
-                raise ValueError('装箱归属的箱数确认值无效，请刷新预览。')
+                raise ValueError(_('装箱归属的箱数确认值无效，请刷新预览。'))
             selected['package_count']='1'
         if mode=='single_item':
             singles.append(selected)
         elif mode=='one_box_group':
             positions=sorted(list(item_index).index(member) for member in members)
             if positions!=list(range(min(positions),max(positions)+1)):
-                raise ValueError('共同装箱只能覆盖连续物料行。')
+                raise ValueError(_('共同装箱只能覆盖连续物料行。'))
             groups.append(selected)
         else:
-            raise ValueError('装箱归属类型无效，请重新分析。')
+            raise ValueError(_('装箱归属类型无效，请重新分析。'))
     return groups,singles,validated
 
 
@@ -581,7 +588,7 @@ def _apply_single_packing_assignments(projection,singles):
     for candidate in singles or []:
         key=candidate['member_keys'][0];row=rows_by_key.get(key)
         if row is None:
-            raise ValueError('装箱归属的目标物料已变化，请刷新。')
+            raise ValueError(_('装箱归属的目标物料已变化，请刷新。'))
         for field in ('package_count','net_weight_kg','gross_weight_kg','volume_m3'):
             value=candidate.get(field)
             if value is None:
@@ -618,21 +625,21 @@ def _internal_fee_ids(catalog, fee_ids):
     public_fees = public_catalog(catalog).get('fees') or []
     internal_fees = catalog.get('fees') or []
     if len(public_fees) != len(internal_fees):
-        raise ValueError('当前草稿费用标识无效，请刷新预览。')
+        raise ValueError(_('当前草稿费用标识无效，请刷新预览。'))
 
     mapping = {}
     for public_fee, internal_fee in zip(public_fees, internal_fees):
         public_id = str(public_fee.get('proposal_id') or '')
         internal_id = str(internal_fee.get('proposal_id') or '')
         if not public_id or not internal_id:
-            raise ValueError('当前草稿费用标识无效，请刷新预览。')
+            raise ValueError(_('当前草稿费用标识无效，请刷新预览。'))
         for accepted_id in (public_id, internal_id):
             if accepted_id in mapping and mapping[accepted_id] != internal_id:
-                raise ValueError('当前草稿费用标识无效，请刷新预览。')
+                raise ValueError(_('当前草稿费用标识无效，请刷新预览。'))
             mapping[accepted_id] = internal_id
 
     if set(fee_ids) - mapping.keys():
-        raise ValueError('所选内容不属于当前草稿，请刷新预览。')
+        raise ValueError(_('所选内容不属于当前草稿，请刷新预览。'))
     return [mapping[value] for value in fee_ids]
 
 
@@ -640,15 +647,15 @@ def prepare(batch_name,run_id,row_ids,fee_ids,mode,expected_version,*,field_choi
             packing_group_ids=None,packing_assignments=None,repository=None):
     from . import material_ai_fill_service as ai
     if mode == 'replace_all':
-        raise ValueError('整表替换仅能在独立的整源采纳流程中执行。')
+        raise ValueError(_('整表替换仅能在独立的整源采纳流程中执行。'))
     repo=repository or ai.FrappeMaterialAIFillRepository()
     initial=repo.get_run(run_id);ai._assert_run_batch(initial,batch_name)
     repo.lock_review_scope(batch_name)
     run=repo.lock_run(run_id)
     if not ai.is_material_ai_preview_ready(ai._record_value(run,'status')):
-        raise ValueError('此分析已经处理或过期，请重新读取草稿。')
+        raise ValueError(_('此分析已经处理或过期，请重新读取草稿。'))
     context,items,sources,current_fees,catalog=_inputs(repo,batch_name,run,locked=True)
-    if expected_version!=context['version']:raise ValueError('当前成本版本已变化，请刷新。')
+    if expected_version!=context['version']:raise ValueError(_('当前成本版本已变化，请刷新。'))
     draft=ai._load_json(ai._record_value(run,'draft_json'),{})
     saved_dependencies=(draft.get('review_input') or {}).get('source_dependencies')
     if saved_dependencies is not None:
@@ -739,14 +746,14 @@ def _reconstruct_locked_preview(repo,batch_name,run,receipt,draft):
     current['payment_match_candidates']=_payment_match_references(sources,context['version'])
     current['payment_match_candidate']=_payment_match_reference(sources,context['version'])
     if current.get('payment_match_candidates') != receipt.get('payment_match_candidates'):
-        raise ValueError('实际付款流程匹配已变化，请刷新预览；本次未保存。')
+        raise ValueError(_('实际付款流程匹配已变化，请刷新预览；本次未保存。'))
     if current.get('payment_match_candidate') != receipt.get('payment_match_candidate'):
-        raise ValueError('实际付款流程匹配已变化，请刷新预览；本次未保存。')
+        raise ValueError(_('实际付款流程匹配已变化，请刷新预览；本次未保存。'))
     revision=_preview_revision(context,items,sources,current_fees,catalog,current,dependencies)
     if revision!=receipt['revision']:
-        raise ValueError('来源、费用或物料已变化，请刷新预览；本次未保存。')
+        raise ValueError(_('来源、费用或物料已变化，请刷新预览；本次未保存。'))
     if current.get('merged_amount_blocking'):
-        raise ValueError('合并金额组尚未完成人工分摊或合计校验，本次未保存。')
+        raise ValueError(_('合并金额组尚未完成人工分摊或合计校验，本次未保存。'))
     selected_fee_ids=current.get('selected_fee_ids') or []
     selected_fees=current.get('fees') or []
     estimate_only=bool(selected_fee_ids) and len(selected_fees)==len(selected_fee_ids) and all(
@@ -757,7 +764,7 @@ def _reconstruct_locked_preview(repo,batch_name,run,receipt,draft):
     elif callable(getattr(repo,'assert_row_dependencies',None)):
         repo.assert_row_dependencies(batch_name,dependencies,lock=True,purpose='estimate')
     if not current['can_apply']:
-        raise ValueError('请选择需要填充的物料或费用。')
+        raise ValueError(_('请选择需要填充的物料或费用。'))
     fees.assert_allowed(current['fees'],current_fees,context.get('effective_source') or {})
     verified={**current,'id':receipt['id'],'revision':revision,'run_id':receipt['run_id'],'batch':batch_name,
               'version':context['version'],'source_context':context.get('effective_source') or {},
@@ -784,23 +791,23 @@ def _confirm_locked(batch_name,run_id,preview_id,preview_revision,edit_token,exp
     draft=ai._load_json(ai._record_value(run,'draft_json'),{})
     applied=draft.get('row_application') or {}
     if ai._record_value(run,'status')=='APPLIED':
-        if applied.get('preview_id')!=preview_id:raise ValueError('此分析已按其他选择采用，不能重复确认。')
+        if applied.get('preview_id')!=preview_id:raise ValueError(_('此分析已按其他选择采用，不能重复确认。'))
         return {**applied,'ok':True,'idempotent':True}
     receipt=(draft.get('row_previews') or {}).get(preview_id)
     if not receipt or receipt.get('revision')!=preview_revision:
-        raise ValueError('所选预览已变化，请刷新预览并使用最新预览后确认。')
+        raise ValueError(_('所选预览已变化，请刷新预览并使用最新预览后确认。'))
     if receipt.get('receipt_policy')!=RECEIPT_POLICY:
-        raise ValueError('AI 预览规则已升级，请重新分析资料。')
+        raise ValueError(_('AI 预览规则已升级，请重新分析资料。'))
     if (receipt.get('payment_match_candidates') or receipt.get('payment_match_candidate')) and not payment_match_lock_held:
-        raise ValueError('实际付款流程匹配已变化，请刷新预览；本次未保存。')
+        raise ValueError(_('实际付款流程匹配已变化，请刷新预览；本次未保存。'))
     if receipt.get('mode') == 'replace_all':
-        raise ValueError('整表替换仅能在独立的整源采纳流程中执行。')
+        raise ValueError(_('整表替换仅能在独立的整源采纳流程中执行。'))
     if (not ai.is_material_ai_preview_ready(ai._record_value(run,'status'))
             or draft.get('current_row_preview')!=preview_id):
-        raise ValueError('草稿或选择已变化，请使用最新预览。')
+        raise ValueError(_('草稿或选择已变化，请使用最新预览。'))
     if (receipt.get('id')!=preview_id or receipt.get('run_id')!=run_id
             or receipt.get('batch')!=batch_name):
-        raise ValueError('所选预览与当前分析不一致，请刷新预览后确认。')
+        raise ValueError(_('所选预览与当前分析不一致，请刷新预览后确认。'))
     repo.assert_write(batch_name,edit_token,expected_modified)
     repo.lock_review_inputs(batch_name,receipt['version'])
     verified,context=_reconstruct_locked_preview(repo,batch_name,run,receipt,draft)

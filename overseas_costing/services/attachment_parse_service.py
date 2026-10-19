@@ -10,6 +10,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import json
 import re
 import subprocess
@@ -83,7 +90,7 @@ def preview_source_document(
         text = _extract_plain_text_file(path)
         extraction_method = "txt_text"
     else:
-        raise ValueError(f"暂不支持识别 {suffix or '未知'} 格式附件。")
+        raise ValueError(_("暂不支持识别 {0} 格式附件。").format(suffix or '未知'))
 
     classification = classify_source_document_text(text, source_name=source_name or path.name)
     fields = extract_source_document_field_candidates(text, classification_code=classification["code"])
@@ -2385,10 +2392,10 @@ def _resolve_source_file_path(*, file_path: str | None = None, file_url: str | N
         path = Path(file_path).expanduser()
         if path.exists():
             return path
-        raise FileNotFoundError(f"未找到附件文件：{file_path}")
+        raise FileNotFoundError(_("未找到附件文件：{0}").format(file_path))
 
     if not file_url:
-        raise ValueError("请传入 file_path 或 file_url。")
+        raise ValueError(_("请传入 file_path 或 file_url。"))
 
     if frappe is not None:
         resolved_file_url = file_url
@@ -2410,12 +2417,12 @@ def _resolve_source_file_path(*, file_path: str | None = None, file_url: str | N
     path = Path(file_url).expanduser()
     if path.exists():
         return path
-    raise FileNotFoundError(f"无法解析附件文件路径：{file_url}")
+    raise FileNotFoundError(_("无法解析附件文件路径：{0}").format(file_url))
 
 
 def _ensure_pdf_path(path: Path) -> Path:
     if path.suffix.lower() != ".pdf":
-        raise ValueError("当前仅支持 .pdf 格式的完税凭证。")
+        raise ValueError(_("当前仅支持 .pdf 格式的完税凭证。"))
     return path
 
 

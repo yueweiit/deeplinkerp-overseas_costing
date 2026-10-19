@@ -1,4 +1,11 @@
 """Project adopted values without destroying original purchase/packing evidence."""
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 from copy import deepcopy
 from .shipment_cost_service import object_json
 
@@ -29,7 +36,7 @@ def project_batch_items(items, batch, version=None):
 def source_context_from_items(items):
     contexts = [item_source_context(item) for item in items if expense_context(item_source_context(item)) or item_source_context(item).get('separate_adoption')]
     if len({context.get('fingerprint') for context in contexts}) > 1:
-        raise ValueError('物料采用来源不一致，请重新应用当前采购支出')
+        raise ValueError(_('物料采用来源不一致，请重新应用当前采购支出'))
     return contexts[0] if contexts else {}
 
 
@@ -46,7 +53,7 @@ def physical_overlay_update(item, context, values, *, evidence, adopt_current_co
         meta['effective_logistics_source'] = deepcopy(context)
         adopted_context = meta['effective_logistics_source']
     if adopted_context.get('fingerprint') != context.get('fingerprint'):
-        raise ValueError('当前采购支出尚未应用或资料已变化，请重新读取资料')
+        raise ValueError(_('当前采购支出尚未应用或资料已变化，请重新读取资料'))
     previous = meta.get('settlement_physical') or {}
     current = previous if previous.get('source_context_fingerprint') == context.get('fingerprint') else {}
     adopted = dict(current.get('values') or {})

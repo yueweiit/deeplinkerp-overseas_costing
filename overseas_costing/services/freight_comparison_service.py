@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import json
 import re
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_HALF_UP
@@ -37,11 +44,11 @@ def compare_freight(
     cubic = _number(volume_m3, "volume_m3", required=True, positive=True)
     normalized_currency = str(currency or "").strip().upper()
     if not CURRENCY_PATTERN.fullmatch(normalized_currency):
-        raise ValueError("报价币种必须是三个字母的币种代码。")
+        raise ValueError(_("报价币种必须是三个字母的币种代码。"))
     for quote in (weight, volume):
         quote_currency = str(quote.get("currency") or normalized_currency).strip().upper()
         if quote_currency != normalized_currency:
-            raise ValueError("重量与体积报价必须使用同一币种。")
+            raise ValueError(_("重量与体积报价必须使用同一币种。"))
 
     weight_result = _calculate_basis(gross, weight, "weight")
     volume_result = _calculate_basis(cubic, volume, "volume")
@@ -118,7 +125,7 @@ def save_freight_comparison(
 ) -> dict[str, Any]:
     request_id = str(request_id or "").strip().lower()
     if not REQUEST_ID_PATTERN.fullmatch(request_id):
-        raise ValueError("运费试算请求 ID 必须是 64 位小写 SHA-256。")
+        raise ValueError(_("运费试算请求 ID 必须是 64 位小写 SHA-256。"))
     repo = repository or FrappeFreightComparisonRepository()
     repo.lock_batch(str(batch_name))
     try:
@@ -311,14 +318,14 @@ def _number(
 ) -> Decimal | None:
     if value in (None, ""):
         if required:
-            raise ValueError(f"{label} 不能为空。")
+            raise ValueError(_("{0} 不能为空。").format(label))
         return None
     try:
         result = Decimal(str(value).strip())
     except (InvalidOperation, ValueError) as error:
-        raise ValueError(f"{label} 必须是有效数字。") from error
+        raise ValueError(_("{0} 必须是有效数字。").format(label)) from error
     if not result.is_finite() or result < 0 or (positive and result <= 0):
-        raise ValueError(f"{label} 必须是有效的非负数字。")
+        raise ValueError(_("{0} 必须是有效的非负数字。").format(label))
     return result
 
 
@@ -334,7 +341,7 @@ def _strict_bool(value: Any) -> bool:
         return True
     if normalized in {"false", "no", "off"}:
         return False
-    raise ValueError("报价范围确认值无效。")
+    raise ValueError(_("报价范围确认值无效。"))
 
 
 def _text(value: Decimal) -> str:
@@ -369,7 +376,7 @@ class FrappeFreightComparisonRepository:
             (batch_name,),
         )
         if not rows:
-            raise ValueError("未找到当前批次。")
+            raise ValueError(_("未找到当前批次。"))
 
     def get_by_request_id(self, batch_name: str, request_id: str) -> Any:
         name = frappe.db.get_value(

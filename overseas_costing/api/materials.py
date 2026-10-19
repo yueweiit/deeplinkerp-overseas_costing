@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import json
 
 import frappe
@@ -65,24 +72,24 @@ def _choices_payload(value) -> dict:
     else:
         encoded = str(value or "{}")
         if len(encoded.encode("utf-8")) > MAX_CHOICES_BYTES:
-            raise ValueError("物料导入选择过大。")
+            raise ValueError(_("物料导入选择过大。"))
         try:
             payload = json.loads(encoded)
         except (TypeError, ValueError) as error:
-            raise ValueError("物料导入选择不是有效 JSON。") from error
+            raise ValueError(_("物料导入选择不是有效 JSON。")) from error
     if len(encoded.encode("utf-8")) > MAX_CHOICES_BYTES:
-        raise ValueError("物料导入选择过大。")
+        raise ValueError(_("物料导入选择过大。"))
     if not isinstance(payload, dict):
-        raise ValueError("物料导入选择必须是对象。")
+        raise ValueError(_("物料导入选择必须是对象。"))
     return payload
 
 
 def _trusted_source_id(value) -> str:
     source_id = str(value or "").strip()
     if not source_id or len(source_id) > MAX_SOURCE_ID_LENGTH:
-        raise ValueError("物料来源 ID 不合法。")
+        raise ValueError(_("物料来源 ID 不合法。"))
     if "://" in source_id or source_id.startswith(("/", "~")) or "\\" in source_id:
-        raise ValueError("物料来源只能使用系统内受控 ID。")
+        raise ValueError(_("物料来源只能使用系统内受控 ID。"))
     return source_id
 
 
@@ -93,15 +100,15 @@ def _ai_updates_payload(value) -> list:
     else:
         encoded = str(value or "[]")
         if len(encoded.encode("utf-8")) > MAX_AI_UPDATES_BYTES:
-            raise ValueError("AI 草稿更新内容过大。")
+            raise ValueError(_("AI 草稿更新内容过大。"))
         try:
             payload = json.loads(encoded)
         except (TypeError, ValueError) as error:
-            raise ValueError("AI 草稿更新不是有效 JSON。") from error
+            raise ValueError(_("AI 草稿更新不是有效 JSON。")) from error
     if len(encoded.encode("utf-8")) > MAX_AI_UPDATES_BYTES:
-        raise ValueError("AI 草稿更新内容过大。")
+        raise ValueError(_("AI 草稿更新内容过大。"))
     if not isinstance(payload, list):
-        raise ValueError("AI 草稿更新必须是数组。")
+        raise ValueError(_("AI 草稿更新必须是数组。"))
     return payload
 
 
@@ -112,15 +119,15 @@ def _ai_review_payload(value, expected_type, label):
     else:
         encoded = str(value or ("[]" if expected_type is list else "{}"))
         if len(encoded.encode("utf-8")) > MAX_AI_UPDATES_BYTES:
-            raise ValueError(f"{label}内容过大。")
+            raise ValueError(_("{0}内容过大。").format(label))
         try:
             payload = json.loads(encoded)
         except (TypeError, ValueError) as error:
-            raise ValueError(f"{label}不是有效 JSON。") from error
+            raise ValueError(_("{0}不是有效 JSON。").format(label)) from error
     if len(encoded.encode("utf-8")) > MAX_AI_UPDATES_BYTES:
-        raise ValueError(f"{label}内容过大。")
+        raise ValueError(_("{0}内容过大。").format(label))
     if not isinstance(payload, expected_type):
-        raise ValueError(f"{label}格式不正确。")
+        raise ValueError(_("{0}格式不正确。").format(label))
     return payload
 
 
@@ -257,7 +264,7 @@ def set_shipping_quantity(
     batch_name = require_batch_permission(batch_name, "write")
     normalized_mode = str(mode or "").strip()
     if normalized_mode not in USER_QUANTITY_MODES:
-        raise ValueError("发货数量来源状态不合法。")
+        raise ValueError(_("发货数量来源状态不合法。"))
     return material_input_service.set_shipping_quantity(
         batch_name=batch_name,
         item_name=str(item_name or "")[:200],

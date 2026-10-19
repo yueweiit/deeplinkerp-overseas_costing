@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _ as _i18n
+except ImportError:
+    def _i18n(message):
+        return message
+
+
 import json
 from pathlib import Path
 
@@ -10,11 +17,11 @@ def _parse_window_assignment(text: str, variable_name: str):
     marker = f"window.{variable_name}"
     marker_index = text.find(marker)
     if marker_index < 0:
-        raise ValueError(f"未找到变量：{marker}")
+        raise ValueError(_i18n("未找到变量：{0}").format(marker))
 
     equal_index = text.find("=", marker_index)
     if equal_index < 0:
-        raise ValueError(f"变量缺少赋值：{marker}")
+        raise ValueError(_i18n("变量缺少赋值：{0}").format(marker))
 
     start_index = equal_index + 1
     while start_index < len(text) and text[start_index].isspace():

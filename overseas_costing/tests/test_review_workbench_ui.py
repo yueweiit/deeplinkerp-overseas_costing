@@ -1003,10 +1003,10 @@ console.log(JSON.stringify({confirmed:v.confirmed||0,opened:v.opened||0,loaded:v
 
 def test_remediation_audit_actions_have_human_readable_labels():
     source = (PARTS / '90-audit-logs.js').read_text(encoding='utf-8')
-    assert 'REVIEW_RETURN: "退回整改"' in source
-    assert 'REVIEW_REPLY: "整改回复"' in source
-    assert 'REVIEW_RESUBMIT: "提交财务复核"' in source
-    assert 'REVIEW_RESOLVE: "确认整改"' in source
+    assert 'REVIEW_RETURN: ocTranslate("退回整改")' in source
+    assert 'REVIEW_REPLY: ocTranslate("整改回复")' in source
+    assert 'REVIEW_RESUBMIT: ocTranslate("提交财务复核")' in source
+    assert 'REVIEW_RESOLVE: ocTranslate("确认整改")' in source
 
 
 def test_erp_queue_offers_not_started_filter_and_links_pushed_rows_to_erp():

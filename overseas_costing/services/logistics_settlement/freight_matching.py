@@ -1,4 +1,11 @@
 """Durable, per-shipment matching; monthly statements are not globally occupied."""
+
+try:
+    from frappe import _ as _i18n
+except ImportError:
+    def _i18n(message):
+        return message
+
 import re
 from datetime import datetime, timedelta, timezone
 from .model import digest, dumps, identity, norm
@@ -109,7 +116,7 @@ def current_lines_many(store,sources):
 
 
 def _current_line_source_ids(store,column,token):
-    if column not in ('waybill','approval_no'):raise ValueError('未知物流标识类型')
+    if column not in ('waybill','approval_no'):raise ValueError(_i18n('未知物流标识类型'))
     return {row['source_id'] for row in store.sql(
         f'SELECT fl.source_id FROM oc_ls_freight_line fl JOIN oc_ls_source s '
         f'ON s.id=fl.source_id AND s.snapshot=fl.snapshot WHERE fl.{column}=%s',(token,))}
@@ -134,11 +141,11 @@ def save_candidate(store,logistics,expense,lines,method,reason,*,model='',confid
         prior=store.get('freight_candidate',cid,lock=True)
         legacy_scope=prior if prior and prior.get('line_scope_policy')!=CANDIDATE_SCOPE_POLICY else None
         if expected_revision=='' and prior:
-            raise ValueError('候选已存在，请刷新后重试')
+            raise ValueError(_i18n('候选已存在，请刷新后重试'))
         if expected_revision not in (None,'') and (prior or {}).get('revision')!=expected_revision:
-            raise ValueError('候选已变化，请刷新后重试')
+            raise ValueError(_i18n('候选已变化，请刷新后重试'))
         if prior and not legacy_scope and method=='manual' and expected_revision is None:
-            raise ValueError('候选已存在，请提供匹配的候选版本后重试')
+            raise ValueError(_i18n('候选已存在，请提供匹配的候选版本后重试'))
         # Rejection permanently protects a pair until the explicit reopen path.
         if prior and not legacy_scope and prior.get('status') in ('rejected','confirmed'):return prior
         if prior and not legacy_scope and CANDIDATE_PRIORITY.get(method,0)<CANDIDATE_PRIORITY.get(prior.get('method'),0):return prior
@@ -194,7 +201,7 @@ def _ranking_priority_source_ids(store,logistics):
 
 def rule_pass(store,logistics_id):
     logistics=store.get('source',logistics_id)
-    if not logistics or logistics['invalid']: raise ValueError('本票国际物流来源已失效')
+    if not logistics or logistics['invalid']: raise ValueError(_i18n('本票国际物流来源已失效'))
     # Indexed exact line identifiers plus explicit source links. No other logistics bodies.
     source_ids=_rule_source_ids(store,logistics)
     for eid in sorted(source_ids):
@@ -211,11 +218,11 @@ def rule_pass(store,logistics_id):
 
 def sanitize_hints(hints=None):
     if hints is None: return {key:'' for key in HINT_LIMITS}
-    if not isinstance(hints,dict): raise ValueError('hints 参数格式错误')
+    if not isinstance(hints,dict): raise ValueError(_i18n('hints 参数格式错误'))
     result={}
     for key,limit in HINT_LIMITS.items():
         value=hints.get(key,'')
-        if value is not None and not isinstance(value,str): raise ValueError(f'hints.{key} 参数格式错误')
+        if value is not None and not isinstance(value,str): raise ValueError(_i18n("hints.{0} 参数格式错误").format(key))
         result[key]=safe_text(str(value or '').strip(),limit)
     return result
 
@@ -244,10 +251,10 @@ def payment_candidate_state(store,logistics_id,expense_ids):
 
 def payment_pool(store,logistics_id,hints=None,offset=0,limit=30):
     logistics=store.get('source',logistics_id)
-    if not logistics or logistics.get('invalid') or logistics.get('kind')!='logistics':raise ValueError('当前国际物流来源缺失或失效')
+    if not logistics or logistics.get('invalid') or logistics.get('kind')!='logistics':raise ValueError(_i18n('当前国际物流来源缺失或失效'))
     try:offset=int(offset);limit=int(limit)
-    except (TypeError,ValueError):raise ValueError('offset/limit 参数格式错误')
-    if offset<0 or offset>10000:raise ValueError('offset 必须在 0 至 10000 之间')
+    except (TypeError,ValueError):raise ValueError(_i18n('offset/limit 参数格式错误'))
+    if offset<0 or offset>10000:raise ValueError(_i18n('offset 必须在 0 至 10000 之间'))
     limit=max(1,min(50,limit))
     clean=sanitize_hints(hints)
     priority_ids=_ranking_priority_source_ids(store,logistics)
@@ -281,7 +288,7 @@ def payment_pool_fresh(store,logistics_id,pool_snapshot):
 
 def record_rule_pass(store,logistics_id,actor=''):
     logistics=store.get('source',logistics_id)
-    if not logistics or logistics.get('invalid'):raise ValueError('当前国际物流来源缺失或失效')
+    if not logistics or logistics.get('invalid'):raise ValueError(_i18n('当前国际物流来源缺失或失效'))
     key,expenses=_rule_fingerprint(store,logistics)
     result=rule_pass(store,logistics_id)
     job={'id':digest(RULE_POLICY,logistics_id,key),'kind':'payment_rules','status':'completed','stage':'saved',
@@ -313,7 +320,7 @@ def rule_status(store,logistics_id):
 
 def input_state(store,logistics_id):
     logistics=store.get('source',logistics_id)
-    if not logistics or logistics.get('invalid'): raise ValueError('当前国际物流来源缺失或失效')
+    if not logistics or logistics.get('invalid'): raise ValueError(_i18n('当前国际物流来源缺失或失效'))
     related_ids={c['expense_id'] for c in store.find('freight_candidate',logistics_id=logistics_id)}
     for kind,token in logistics.get('identifiers') or []:
         related_ids.update(r['source_id'] for r in store.find('identifier',corp=logistics['corp'],token=token))
@@ -389,10 +396,10 @@ def run(store,job_id,call_model,model=''):
                     response=call_model(ai_messages(logistics,source,eligible))
                     with store.atomic():
                         store.get('state','match_lock',lock=True)
-                        if input_state(store,logistics['id'])[2]!=job['fingerprint']: raise ValueError('来源已变化，旧 AI 结果失效')
-                        if not isinstance(response,dict) or not isinstance(response.get('related'),bool) or not isinstance(response.get('line_ids'),list): raise ValueError('AI 返回格式无效')
+                        if input_state(store,logistics['id'])[2]!=job['fingerprint']: raise ValueError(_i18n('来源已变化，旧 AI 结果失效'))
+                        if not isinstance(response,dict) or not isinstance(response.get('related'),bool) or not isinstance(response.get('line_ids'),list): raise ValueError(_i18n('AI 返回格式无效'))
                         selected=set(response['line_ids']); valid={r['id']:r for r in eligible}
-                        if selected-set(valid): raise ValueError('AI 选择了其他票或未授权明细')
+                        if selected-set(valid): raise ValueError(_i18n('AI 选择了其他票或未授权明细'))
                         if response['related']:
                             save_candidate(store,logistics,source,[valid[i] for i in sorted(selected)],'deepseek',safe_text(response.get('reason'),1000))
                             outcome='recommended'

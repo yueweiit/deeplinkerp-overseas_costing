@@ -13,27 +13,27 @@
 
   openAddBatchDialog() {
     const dialog = new frappe.ui.Dialog({
-      title: "添加报关运单",
+      title: ocTranslate("添加报关运单"),
       fields: [
-        { fieldtype: "Data", fieldname: "batch_no", label: "批次号/来源单号", reqd: 1 },
-        { fieldtype: "Data", fieldname: "customs_no", label: "报关单号" },
-        { fieldtype: "Data", fieldname: "waybill_no", label: "运单号/物流单号" },
-        { fieldtype: "Data", fieldname: "container_no", label: "柜号" },
-        { fieldtype: "Select", fieldname: "transport_mode", label: "运输方式", options: "海运\n空运\n快递", default: "海运" },
+        { fieldtype: "Data", fieldname: "batch_no", label: ocTranslate("批次号/来源单号"), reqd: 1 },
+        { fieldtype: "Data", fieldname: "customs_no", label: ocTranslate("报关单号") },
+        { fieldtype: "Data", fieldname: "waybill_no", label: ocTranslate("运单号/物流单号") },
+        { fieldtype: "Data", fieldname: "container_no", label: ocTranslate("柜号") },
+        { fieldtype: "Select", fieldname: "transport_mode", label: ocTranslate("运输方式"), options: "海运\n空运\n快递", default: "海运" },
         {
           fieldtype: "Select",
           fieldname: "business_type",
-          label: "业务类型",
+          label: ocTranslate("业务类型"),
           options: "海运正报正清\n海运 DDP（双清包税）\n空运 DDP（双清包税）\n正常空运\n快递",
           default: "海运正报正清",
         },
-        { fieldtype: "Data", fieldname: "project_collection", label: "项目归集" },
-        { fieldtype: "Data", fieldname: "source_approval_no", label: "钉钉审批编号" },
-        { fieldtype: "Data", fieldname: "source_instance_id", label: "钉钉实例ID（procInstId）" },
-        { fieldtype: "Small Text", fieldname: "source_dingtalk_url", label: "钉钉审批链接" },
-        { fieldtype: "Small Text", fieldname: "source_remark", label: "备注" },
+        { fieldtype: "Data", fieldname: "project_collection", label: ocTranslate("项目归集") },
+        { fieldtype: "Data", fieldname: "source_approval_no", label: ocTranslate("钉钉审批编号") },
+        { fieldtype: "Data", fieldname: "source_instance_id", label: ocTranslate("钉钉实例ID（procInstId）") },
+        { fieldtype: "Small Text", fieldname: "source_dingtalk_url", label: ocTranslate("钉钉审批链接") },
+        { fieldtype: "Small Text", fieldname: "source_remark", label: ocTranslate("备注") },
       ],
-      primary_action_label: "确认新增",
+      primary_action_label: ocTranslate("确认新增"),
       primary_action: (values) => {
         const batchPayload = {
           ...values,
@@ -48,9 +48,9 @@
         frappe.confirm(
           `
             <div class="ocw-confirm-copy">
-              <h4>确认新增报关运单？</h4>
-              <p>将新增「${this.escape(label || "未命名批次")}」空白批次。</p>
-              <div class="ocw-confirm-note">新增后可继续添加物料或导入附件补数。</div>
+              <h4>${ocTranslate("确认新增报关运单？")}</h4>
+              <p>${ocTranslate("将新增「{0}」空白批次。", [this.escape(label || ocTranslate("未命名批次"))])}</p>
+              <div class="ocw-confirm-note">${ocTranslate("新增后可继续添加物料或导入附件补数。")}</div>
             </div>
           `,
           async () => {
@@ -83,7 +83,7 @@
         this.renderTable();
         this.updateSearchResult();
       }
-      frappe.show_alert({ message: result.message || "报关运单已新增", indicator: "green" });
+      frappe.show_alert({ message: result.message || ocTranslate("报关运单已新增"), indicator: "green" });
       return true;
     } catch (error) {
       this.showError(error);
@@ -97,21 +97,21 @@
     this.activeBatchName = batch.name;
     this.exportPinnedBatchName = batch.name;
     const dialog = new frappe.ui.Dialog({
-      title: "添加新物料",
+      title: ocTranslate("添加新物料"),
       fields: [
-        { fieldtype: "Data", fieldname: "material_code", label: "物料编码", reqd: 1 },
-        { fieldtype: "Data", fieldname: "product_name", label: "物料名称（中文）", reqd: 1 },
-        { fieldtype: "Data", fieldname: "product_name_es", label: "物料名称（西语）" },
-        { fieldtype: "Data", fieldname: "spec_model", label: "规格型号 Especificación / Modelo" },
-        { fieldtype: "Float", fieldname: "unit_price", label: "采购单价", default: 0 },
-        { fieldtype: "Float", fieldname: "quantity", label: "采购数量", default: 1 },
-        { fieldtype: "Data", fieldname: "unit", label: "单位" },
-        { fieldtype: "Data", fieldname: "recipient", label: "收件人" },
-        { fieldtype: "Data", fieldname: "import_name", label: "海关进口名称" },
-        { fieldtype: "Data", fieldname: "hs_code", label: "海关分类编码" },
-        { fieldtype: "Data", fieldname: "category", label: "大类分类" },
+        { fieldtype: "Data", fieldname: "material_code", label: ocTranslate("物料编码"), reqd: 1 },
+        { fieldtype: "Data", fieldname: "product_name", label: ocTranslate("物料名称（中文）"), reqd: 1 },
+        { fieldtype: "Data", fieldname: "product_name_es", label: ocTranslate("物料名称（西语）") },
+        { fieldtype: "Data", fieldname: "spec_model", label: ocTranslate("规格型号 Especificación / Modelo") },
+        { fieldtype: "Float", fieldname: "unit_price", label: ocTranslate("采购单价"), default: 0 },
+        { fieldtype: "Float", fieldname: "quantity", label: ocTranslate("采购数量"), default: 1 },
+        { fieldtype: "Data", fieldname: "unit", label: ocTranslate("单位") },
+        { fieldtype: "Data", fieldname: "recipient", label: ocTranslate("收件人") },
+        { fieldtype: "Data", fieldname: "import_name", label: ocTranslate("海关进口名称") },
+        { fieldtype: "Data", fieldname: "hs_code", label: ocTranslate("海关分类编码") },
+        { fieldtype: "Data", fieldname: "category", label: ocTranslate("大类分类") },
       ],
-      primary_action_label: "确认新增",
+      primary_action_label: ocTranslate("确认新增"),
       primary_action: (values) => {
         const itemPayload = {
           ...values,
@@ -123,8 +123,8 @@
         frappe.confirm(
           `
             <div class="ocw-confirm-copy">
-              <h4>确认新增物料？</h4>
-              <p>将在 ${this.escape(batch.waybill_no || batch.batch_no || batch.name)} 下新增「${this.escape(values.product_name || values.material_code)}」。</p>
+              <h4>${ocTranslate("确认新增物料？")}</h4>
+              <p>${ocTranslate("将在 {0} 下新增「{1}」。", [this.escape(batch.waybill_no || batch.batch_no || batch.name), this.escape(values.product_name || values.material_code)])}</p>
             </div>
           `,
           async () => {
@@ -169,7 +169,7 @@
       this.expandedBatchNames.add(batch.name);
       this.renderTable();
       this.updateSearchResult();
-      frappe.show_alert({ message: result.message || "物料已新增", indicator: "green" });
+      frappe.show_alert({ message: result.message || ocTranslate("物料已新增"), indicator: "green" });
       return true;
     } catch (error) {
       this.showError(error);
@@ -187,9 +187,9 @@
     frappe.confirm(
       `
         <div class="ocw-confirm-copy">
-          <h4>确认排除物料？</h4>
-          <p>将从 ${this.escape(batch.waybill_no || batch.batch_no || batch.name)} 的当前表中排除：${this.escape(itemLabel || itemName)}。</p>
-          <div class="ocw-confirm-note">该操作不会物理删除来源和历史，可从“已排除物料”恢复。</div>
+          <h4>${ocTranslate("确认排除物料？")}</h4>
+          <p>${ocTranslate("将从 {0} 的当前表中排除：{1}。", [this.escape(batch.waybill_no || batch.batch_no || batch.name), this.escape(itemLabel || itemName)])}</p>
+          <div class="ocw-confirm-note">${ocTranslate("该操作不会物理删除来源和历史，可从“已排除物料”恢复。")}</div>
         </div>
       `,
       async () => {
@@ -213,7 +213,7 @@
           item_name: itemName,
           batch_name: batch.name,
           version_name: inDetail ? this.detailState.versionName : batch.current_version,
-          remark: `前端软排除物料：${itemLabel || itemName}`,
+          remark: ocTranslate("前端软排除物料：{0}", [itemLabel || itemName]),
           edit_token: inDetail ? this.detailState.editToken : acquired.edit_token,
           expected_modified: inDetail ? this.detailState.expectedModified : acquired.modified,
         },
@@ -227,7 +227,7 @@
       await this.loadAuditLogs(batch.name, inDetail ? this.detailState.versionName : batch.current_version);
       this.expandedBatchNames.add(batch.name);
       this.renderTable();
-      frappe.show_alert({ message: result.message || "物料已排除，可恢复", indicator: "green" });
+      frappe.show_alert({ message: result.message || ocTranslate("物料已排除，可恢复"), indicator: "green" });
     } catch (error) {
       this.showError(error);
     } finally {
@@ -267,7 +267,7 @@
 
     if (options) {
       const hasSelectedOption = options.some((option) => String(option) === selectedValue);
-      const emptyOption = selectedValue ? "" : `<option value="" selected>请选择</option>`;
+      const emptyOption = selectedValue ? "" : `<option value="" selected>${ocTranslate("请选择")}</option>`;
       const currentOption =
         selectedValue && !hasSelectedOption
           ? `<option value="${this.escape(selectedValue)}" selected>${this.escape(this.selectOptionLabel(fieldname, selectedValue))}</option>`
@@ -278,12 +278,12 @@
             `<option value="${this.escape(option)}" ${String(option) === selectedValue ? "selected" : ""}>${this.escape(this.selectOptionLabel(fieldname, option))}</option>`
         )
         .join("");
-      $cell.html(`<select class="ocw-cell-editor ocw-cell-select" aria-label="${this.escape(label)}">${emptyOption}${currentOption}${optionHtml}</select>`);
+      $cell.html(`<select class="ocw-cell-editor ocw-cell-select" aria-label="${this.escape(ocTranslate(label))}">${emptyOption}${currentOption}${optionHtml}</select>`);
     } else {
       $cell.html(`
         <input
           class="ocw-cell-editor"
-          aria-label="${this.escape(label)}"
+          aria-label="${this.escape(ocTranslate(label))}"
           value="${this.escape(oldValue)}"
           ${isNumeric ? 'inputmode="decimal"' : ""}
         />
@@ -370,7 +370,7 @@
       }
     }
 
-    $cell.data("saving", true).addClass("is-saving").html(`<span class="ocw-cell-saving">保存中</span>`);
+    $cell.data("saving", true).addClass("is-saving").html(`<span class="ocw-cell-saving">${ocTranslate("保存中")}</span>`);
     try {
       const result = await this.call(
         "overseas_costing.api.calculate.update_item_field",
@@ -403,7 +403,7 @@
         await this.loadAuditLogs(batchName, versionName);
         this.renderTable();
       }
-      frappe.show_alert({ message: result.message || "字段已保存", indicator: result.changed ? "green" : "blue" });
+      frappe.show_alert({ message: result.message || ocTranslate("字段已保存"), indicator: result.changed ? "green" : "blue" });
     } catch (error) {
       $cell.removeData("saving committing");
       this.cancelCellEdit($cell);
@@ -416,8 +416,8 @@
       frappe.confirm(
         `
           <div class="ocw-confirm-copy">
-            <h4>确认修改</h4>
-            <p>确认将「${this.escape(fieldLabel)}」修改为「${this.escape(this.formatValue(newValue))}」？</p>
+            <h4>${ocTranslate("确认修改")}</h4>
+            <p>${ocTranslate("确认将「{0}」修改为「{1}」？", [this.escape(fieldLabel), this.escape(this.formatValue(newValue))])}</p>
           </div>
         `,
         () => resolve(true),
@@ -430,16 +430,16 @@
     return new Promise((resolve) => {
       let settled = false;
       const dialog = new frappe.ui.Dialog({
-        title: "填写修改原因",
+        title: ocTranslate("填写修改原因"),
         fields: [
           {
             fieldtype: "Small Text",
             fieldname: "remark",
-            label: `${fieldLabel} 修改原因`,
+            label: ocTranslate("{0} 修改原因", [fieldLabel]),
             reqd: 1,
           },
         ],
-        primary_action_label: "保存",
+        primary_action_label: ocTranslate("保存"),
         primary_action: (values) => {
           settled = true;
           dialog.hide();
@@ -478,5 +478,5 @@
     const code = row.material_code || "";
     const name = row.product_name || "";
     if (code && name) return `${code} / ${name}`;
-    return code || name || row.name || "未命名物料";
+    return code || name || row.name || ocTranslate("未命名物料");
   }

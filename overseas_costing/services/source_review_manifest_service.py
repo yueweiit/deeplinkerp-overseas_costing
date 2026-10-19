@@ -7,6 +7,13 @@ run manifest and are revalidated by the server before application.
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import hashlib
 from copy import deepcopy
 from pathlib import PurePath
@@ -35,7 +42,7 @@ def stable_source_identity(source: dict) -> tuple[str, str]:
 
     base = _text(source.get("logical_source_id") or source.get("source_id"), 500)
     if not base:
-        raise ValueError("资料来源缺少服务器标识。")
+        raise ValueError(_("资料来源缺少服务器标识。"))
     sheet_name = _text(source.get("sheet_name"), 200)
     if not sheet_name:
         return base, ""
@@ -93,7 +100,7 @@ def prepare_source_manifest(
                     own.get('root_source_id') and own.get('source_snapshot')
                     and str(own.get('corp_id') or '') == str(context.get('corp_id') or ''))))
             if not related:
-                raise ValueError('资料来源缺少同批次当前有效关联，请刷新来源。')
+                raise ValueError(_('资料来源缺少同批次当前有效关联，请刷新来源。'))
     prepared: list[dict] = []
     by_id: dict[str, dict] = {}
     if not any(row.get('analysis_allowed') is not False and not row.get('excluded')
@@ -110,7 +117,7 @@ def prepare_source_manifest(
             source.update(excluded=True, exclude_reason=source.get('analysis_reason') or '来源不可读取。')
         public_id, parent_id = stable_source_identity(source)
         if public_id in by_id:
-            raise ValueError(f"资料来源标识重复：{public_id}。")
+            raise ValueError(_("资料来源标识重复：{0}。").format(public_id))
         locked = _text(source.get("source_kind"), 60) == "approval_form" and not source.get("excluded") and not source.get('scoped_packing')
         selectable = (
             bool(source.get("available", True)) or bool(source.get("can_download"))
@@ -146,13 +153,13 @@ def prepare_source_manifest(
     if explicit is not None:
         unknown = sorted(explicit - set(by_id))
         if unknown:
-            raise ValueError(f"资料来源 {unknown[0]} 不属于当前批次或已失效。")
+            raise ValueError(_("资料来源 {0} 不属于当前批次或已失效。").format(unknown[0]))
         unavailable = sorted(source_id for source_id in explicit if not by_id[source_id]["selectable"])
         if unavailable:
             from .material_ai_source_dependencies import SourceEligibilityError
             source = by_id[unavailable[0]]
             reason = source.get('analysis_reason') or source.get('exclude_reason') or '资料不可读取，请核对来源。'
-            raise SourceEligibilityError(f'{reason} 当前不可选。', source=source,
+            raise SourceEligibilityError(_("{0} 当前不可选。").format(reason), source=source,
                 code=source.get('analysis_code') or 'SOURCE_UNAVAILABLE')
 
     for source in prepared:

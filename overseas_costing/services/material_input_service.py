@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Callable, Dict, Optional
 from uuid import uuid4
@@ -347,10 +354,10 @@ def assert_complete_purchase_values(items: list[dict]) -> dict:
 
     coverage = purchase_value_coverage(items)
     if not coverage["item_count"]:
-        raise ValueError("当前批次没有物料，请先补充物料后再试算。")
+        raise ValueError(_("当前批次没有物料，请先补充物料后再试算。"))
     if coverage["missing_count"]:
         raise ValueError(
-            f"还有 {coverage['missing_count']} 行本次发货货值缺失或失效，请先补齐后再试算。"
+            _("还有 {0} 行本次发货货值缺失或失效，请先补齐后再试算。").format(coverage['missing_count'])
         )
     return coverage
 
@@ -446,10 +453,10 @@ def get_material_grid(
 
     resolved_batch = batch_service._resolve_batch_name(str(batch_name or ""))
     if not resolved_batch:
-        raise ValueError(f"未找到批次：{batch_name}")
+        raise ValueError(_("未找到批次：{0}").format(batch_name))
     resolved_version = batch_service._resolve_version_name(resolved_batch, version_name)
     if not resolved_version:
-        raise ValueError("当前批次没有可用成本版本。")
+        raise ValueError(_("当前批次没有可用成本版本。"))
 
     filters = {"batch": resolved_batch, "version": resolved_version, "is_excluded": 0}
     total = int(frappe.db.count("Overseas Cost Item", filters=filters) or 0)
@@ -541,10 +548,10 @@ def get_excluded_materials(batch_name: str, version_name: str | None = None) -> 
     from overseas_costing.services import batch_service
     resolved_batch = batch_service._resolve_batch_name(str(batch_name or ""))
     if not resolved_batch:
-        raise ValueError(f"未找到批次：{batch_name}")
+        raise ValueError(_("未找到批次：{0}").format(batch_name))
     resolved_version = batch_service._resolve_version_name(resolved_batch, version_name)
     if not resolved_version:
-        raise ValueError("当前批次没有可用成本版本。")
+        raise ValueError(_("当前批次没有可用成本版本。"))
     rows = frappe.get_all(
         "Overseas Cost Item",
         filters={"batch": resolved_batch, "version": resolved_version, "is_excluded": 1},
@@ -562,20 +569,20 @@ def build_shipping_quantity_updates(
 ) -> dict:
     normalized_mode = str(mode or "").strip()
     if normalized_mode not in {"DEFAULT_PURCHASE", "MANUAL_CONFIRMED"}:
-        raise ValueError("发货数量来源状态不合法。")
+        raise ValueError(_("发货数量来源状态不合法。"))
     resolved_uom = str(uom or item.get("shipped_uom") or item.get("purchase_uom") or item.get("unit") or "").strip()
     if not resolved_uom:
-        raise ValueError("请填写发货单位。")
+        raise ValueError(_("请填写发货单位。"))
 
     if normalized_mode == "DEFAULT_PURCHASE":
         if _positive_decimal(item.get("quantity")) is None:
-            raise ValueError("采购数量缺失，不能设为采购数量默认。")
+            raise ValueError(_("采购数量缺失，不能设为采购数量默认。"))
         quantity = None
         revision = ""
     else:
         quantity_value = _positive_decimal(value)
         if quantity_value is None:
-            raise ValueError("手工确认的发货数量必须大于 0。")
+            raise ValueError(_("手工确认的发货数量必须大于 0。"))
         quantity = format(quantity_value, "f")
         revision = str(source_revision or "")
 
@@ -617,7 +624,7 @@ def set_shipping_quantity(
 
     resolved_batch = batch_service._resolve_batch_name(str(batch_name or ""))
     if not resolved_batch:
-        raise ValueError(f"未找到批次：{batch_name}")
+        raise ValueError(_("未找到批次：{0}").format(batch_name))
     edit_session_service.assert_batch_write(
         resolved_batch,
         edit_token=edit_token,
@@ -640,7 +647,7 @@ def set_shipping_quantity(
         as_dict=True,
     ) or {}
     if str(item.get("batch") or "") != resolved_batch:
-        raise ValueError("物料行不属于当前批次。")
+        raise ValueError(_("物料行不属于当前批次。"))
     current_version = str(frappe.db.get_value("Overseas Cost Batch", resolved_batch, "current_version") or "")
     if str(item.get("version") or "") != current_version:
         raise RuntimeError("物料行不属于当前版本，请刷新后重试。")

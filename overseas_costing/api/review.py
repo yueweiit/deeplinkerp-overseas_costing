@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import json
 
 import frappe
@@ -15,7 +22,7 @@ def _json_list(value) -> list:
         return value
     parsed = json.loads(value or "[]")
     if not isinstance(parsed, list):
-        raise ValueError("整改问题格式无效。")
+        raise ValueError(_("整改问题格式无效。"))
     return parsed
 
 

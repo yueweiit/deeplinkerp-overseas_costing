@@ -9970,6 +9970,51 @@ body.ocw-workspace-sidebar-collapsed .body-sidebar-container {
 }
 
 @media (max-width: 760px) {
+  .ocw-page .ocw-redesign-header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .ocw-page .ocw-redesign-title,
+  .ocw-page .ocw-redesign-title > div,
+  .ocw-page .ocw-header-actions,
+  .ocw-page .ocw-search-row > *,
+  .ocw-page .ocw-secondary-filter-row > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .ocw-page .ocw-header-actions {
+    flex-wrap: wrap;
+  }
+
+  .ocw-page .ocw-header-actions button {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .ocw-page .ocw-ingest-menu {
+    left: 0;
+    right: auto;
+    max-width: calc(100vw - 72px);
+  }
+
+  .ocw-page .ocw-search-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ocw-page .ocw-secondary-filter-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ocw-page .ocw-search-row .form-control,
+  .ocw-page .ocw-secondary-filter-row .form-control {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
   .ocw-page .ocw-shell,
   .ocw-page .ocw-shell.is-transport-sidebar-collapsed {
     grid-template-columns: 1fr;

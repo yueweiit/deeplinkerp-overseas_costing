@@ -1,4 +1,11 @@
 """Bounded background refresh and adoption gates for explicitly linked Wiki sheets."""
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 import hashlib
 import uuid
 
@@ -48,12 +55,12 @@ def acknowledge_wiki_review(store,binding,evidence,expected_context,*,complete,a
     if not pending or source_id not in pending:
         return
     if not complete or not evidence.get('full_table') or evidence.get('source_kind')!='wiki_sheet':
-        raise ValueError('已变化的装箱工作表需要重新核对完整资料。')
+        raise ValueError(_('已变化的装箱工作表需要重新核对完整资料。'))
     cached=load_bound_wiki_snapshot(expected_context,source_id,store=store) or {}
     sha=cached.get('source_hash')
     expected_hash=hashlib.sha256(f"{sha}|{expected_context['fingerprint']}".encode()).hexdigest()
     if not sha or sha!=pending[source_id]['new_sha'] or evidence.get('source_hash')!=expected_hash:
-        raise ValueError('装箱工作表已再次刷新，请重新预览后采用。')
+        raise ValueError(_('装箱工作表已再次刷新，请重新预览后采用。'))
     pending.pop(source_id)
     binding['wiki_pending']=pending
     if not pending:

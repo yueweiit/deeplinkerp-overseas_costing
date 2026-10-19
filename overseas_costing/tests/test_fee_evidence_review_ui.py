@@ -599,9 +599,9 @@ def test_evidence_picker_collapses_repeated_audit_only_rows() -> None:
     assert 'const auditOnly = group.rows.filter((candidate) => candidate.audit_only);' in picker
     assert 'const openAttribute = available.length ? "" : " open";' in picker
     assert '<details class="ocw-mf-evidence-audit-group"${openAttribute}>' in picker
-    assert "<summary>仅审计 ${auditOnly.length} 份</summary>" in picker
+    assert '<summary>${ocTranslate("仅审计 {0} 份", [auditOnly.length])}</summary>' in picker
     # 分组计数只算可用份数，折叠区自带审计份数，两个数字不重不漏。
-    assert "<b>${available.length} 份</b>" in picker
+    assert '<b>${ocTranslate("{0} 份", [available.length])}</b>' in picker
 
     css = CSS.read_text(encoding="utf-8")
     assert ".ocw-mf-evidence-audit-group > summary" in css
@@ -704,7 +704,8 @@ def test_evidence_picker_highlights_voucher_file_names() -> None:
     assert "is-voucher" in picker
     assert "ocw-mf-evidence-voucher-tag" in picker
     # 前端不得复制服务端的关键词判定。
-    assert '"凭证"' not in picker and "'凭证'" not in picker
+    assert '.includes("凭证")' not in picker and ".includes('凭证')" not in picker
+    assert '.match(' not in picker and '.test(' not in picker
 
     css = CSS.read_text(encoding="utf-8")
     assert ".ocw-mf-evidence-option.is-voucher" in css
@@ -754,11 +755,11 @@ def test_fee_row_previews_the_selected_voucher_next_to_the_link_action() -> None
     assert 'type="button" class="${className}"' in preview
     assert "data-mf-evidence-preview=" in preview
     # 文案恒为「预览」，不把文件名拼进按钮（长文件名会撑破操作列）。
-    assert preview.count(">预览</button>") == 2
+    assert preview.count('>${ocTranslate("预览")}</button>') == 2
     # 灰态：只用 class 调色，标记上绝不能出现 disabled。
     assert "is-muted" in muted_branch
     assert "disabled" not in muted_branch.split("<button", 1)[1]
-    assert 'title="需在关联并解析凭证选择附件"' in muted_branch
+    assert 'title="${ocTranslate(\'需在关联并解析凭证选择附件\')}"' in muted_branch
     # 蓝态：带上文件地址与文件名，点击才有得预览。
     assert "is-muted" not in ready_branch
     assert "data-file-url=" in ready_branch

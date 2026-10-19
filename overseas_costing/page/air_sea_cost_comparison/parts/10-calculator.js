@@ -4,8 +4,8 @@ const clone = value => JSON.parse(JSON.stringify(value));
 const emptyRow = () => Array(30).fill('');
 const normalizeRow = row => Array.from({length:30},(_,i)=>row && row[i] != null ? String(row[i]) : '');
 const normalizeUnit = value => !String(value || '').trim() || /^(PZ|PCS|PC|PIECES|PIECE|个|件)$/i.test(String(value).trim()) ? '件' : String(value).trim();
-const money = value => value != null && Number.isFinite(Number(value)) ? `¥${Number(value).toLocaleString('zh-CN',{minimumFractionDigits:2,maximumFractionDigits:2})}` : '待补充';
-const fixed = (value,digits) => value != null && Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : '待补充';
+const money = value => value != null && Number.isFinite(Number(value)) ? Number(value).toLocaleString(globalThis.frappe?.boot?.lang || 'zh-CN',{style:'currency',currency:'CNY',minimumFractionDigits:2,maximumFractionDigits:2}) : ocTranslate('待补充');
+const fixed = (value,digits) => value != null && Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : ocTranslate('待补充');
 const quantityText = value => fixed(value,6).replace(/\.?0+$/, '');
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
 
@@ -30,16 +30,16 @@ function calculate(payload = {}) {
   const currencies={...currencyDefaults,...(payload.currencies||{})};
   const parameters=Object.fromEntries(Object.entries(rawParams).map(([id,value])=>[id,parseNumber(value)]));
   const check=(value,label,required=false)=>{
-    if(blank(value)){if(required)issue(`${label}待补充`);return null;}
-    const n=parseNumber(value);if(n===null||n<0){issue(`${label}须为非负有效数字`);return null;}return n;
+    if(blank(value)){if(required)issue(ocTranslate("{0}待补充", [ocTranslate(label)]));return null;}
+    const n=parseNumber(value);if(n===null||n<0){issue(ocTranslate("{0}须为非负有效数字", [ocTranslate(label)]));return null;}return n;
   };
   ['tariffRate','vatRate','airKgRate','airFixedFee','clearanceMxn','deliveryFee','oceanPortFee'].forEach(id=>check(rawParams[id],parameterLabels[id],true));
   const activeCurrencies=Object.keys(currencyDefaults).filter(id=>id!=='oceanContainerFeeCurrency');
-  activeCurrencies.forEach(id=>{if(!['CNY','USD','MXN'].includes(currencies[id]))issue('费用币种须为 CNY、USD 或 MXN');});
+  activeCurrencies.forEach(id=>{if(!['CNY','USD','MXN'].includes(currencies[id]))issue(ocTranslate('费用币种须为 CNY、USD 或 MXN'));});
   const oceanUses=['declaredCurrency','oceanPortFeeCurrency','clearanceCurrency','deliveryFeeCurrency'];
   const airUses=['declaredCurrency','airKgRateCurrency','airFixedFeeCurrency','clearanceCurrency','deliveryFeeCurrency'];
   [[oceanUses.some(id=>currencies[id]==='USD'),'oceanRate'],[airUses.some(id=>currencies[id]==='USD'),'airRateFx'],[activeCurrencies.some(id=>currencies[id]==='MXN'),'mxnToCny']].forEach(([used,id])=>{
-    if(used && !(parameters[id]>0))issue(`${parameterLabels[id]}须为大于 0 的有效数字`);
+    if(used && !(parameters[id]>0))issue(ocTranslate("{0}须为大于 0 的有效数字", [ocTranslate(parameterLabels[id])]));
   });
   const rows=(Array.isArray(payload.rows)?payload.rows:[]).map(normalizeRow).filter(row=>row.some(value=>!blank(value)));
   const overrides=payload.totals_override||{};
@@ -49,7 +49,7 @@ function calculate(payload = {}) {
   let quantityComplete=true,grossComplete=true,volumeComplete=true,declaredComplete=true;
   const units=new Set();
   rows.forEach((row,index)=>{
-    const prefix=`第 ${index+1} 行`;
+    const prefix=ocTranslate("第 {0} 行", [index+1]);
     const values={};
     [12,13,14,15,16,17,18,19,20,22,23,24,25,26].forEach(column=>{values[column]=check(row[column],`${prefix}${headers[column]}`,column===20);});
     const qty=values[20];if(qty===null)quantityComplete=false;else quantity+=qty;
@@ -58,15 +58,15 @@ function calculate(payload = {}) {
     const vol=!blank(row[24])?values[24]:values[17]!==null&&qty!==null?values[17]*qty:null;
     const declared=!blank(row[25])?values[25]!==null&&qty!==null?values[25]*qty:null:values[26];
     if(qty!==0){
-      if(gross===null){grossComplete=false;if(grossOverride===null)issue(`${prefix}总毛重待补充`);}else grossWeight+=gross;
+      if(gross===null){grossComplete=false;if(grossOverride===null)issue(ocTranslate("{0}总毛重待补充", [prefix]));}else grossWeight+=gross;
       if(vol===null)volumeComplete=false;else volume+=vol;
-      if(declared===null){declaredComplete=false;issue(`${prefix}申报单价或总价待补充`);}else declaredValue+=declared;
+      if(declared===null){declaredComplete=false;issue(ocTranslate("{0}申报单价或总价待补充", [prefix]));}else declaredValue+=declared;
     }
   });
-  if(!(quantity>0))issue('核算总数量须大于 0');
+  if(!(quantity>0))issue(ocTranslate('核算总数量须大于 0'));
   if(grossOverride!==null)grossWeight=grossOverride;
   else if(!grossComplete)grossWeight=null;
-  if(!(grossWeight>0))issue('整票总毛重须大于 0');
+  if(!(grossWeight>0))issue(ocTranslate('整票总毛重须大于 0'));
   if(volumeOverride!==null)volume=volumeOverride;
   else if(!volumeComplete||!rows.length)volume=null;
   if(!quantityComplete)quantity=null;
@@ -97,7 +97,7 @@ function calculate(payload = {}) {
     r[mode+'Avg']=mixedUnits?null:r[mode+'Total']/v.quantity;
   }
   if(fields.some(key=>r[key]!==null&&!Number.isFinite(r[key]))){
-    r.status='Draft';r.issues.push('数值超出计算范围，请检查输入');fields.forEach(key=>r[key]=null);
+    r.status='Draft';r.issues.push(ocTranslate('数值超出计算范围，请检查输入'));fields.forEach(key=>r[key]=null);
   }
   return r;
 }

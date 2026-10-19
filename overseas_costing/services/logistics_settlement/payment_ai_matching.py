@@ -1,4 +1,11 @@
 """Explicit per-shipment AI matching over a bounded local payment shortlist."""
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 import uuid
@@ -99,7 +106,7 @@ def start(store,logistics_id,batch_name,version_name,actor,*,hints=None,offset=0
             'has_more':pool['has_more'],
             'sources':prepared_sources,
             'logistics':_source_summary(pool['logistics'],lines_by_source.get(pool['logistics']['id'],[]))}
-        if len(dumps(prepared))>200_000:raise ValueError('当前页待分析资料超过 AI 安全容量，请减少 limit 后重试')
+        if len(dumps(prepared))>200_000:raise ValueError(_('当前页待分析资料超过 AI 安全容量，请减少 limit 后重试'))
         if not prepared['sources']:
             return {'kind':'payment_ai','status':'no_work','total':0,'processed':0,'recommended':0,'no_match':0,'failed':0,
                     'offset':pool['offset'],'limit':pool['limit'],'has_more':False,'message':'当前页没有可供 AI 分析的本地已批准付款来源'}
@@ -164,37 +171,37 @@ def run(store,job_id,call_model,model='',current_version=None):
                 _terminal(store,job,'stale','来源或成本版本已变化，AI 结果已丢弃')
             else:
                 proposals=response.get('matches',[]) if isinstance(response,dict) else []
-                if not isinstance(proposals,list) or len(proposals)>50:raise ValueError('AI 返回格式无效')
+                if not isinstance(proposals,list) or len(proposals)>50:raise ValueError(_('AI 返回格式无效'))
                 allowed={row['id']:row for row in job['input']['sources']};seen=set()
                 for proposal in proposals:
                     try:
                         if not isinstance(proposal,dict) or proposal.get('expense_id') not in allowed or proposal['expense_id'] in seen:
-                            raise ValueError('AI 返回了未授权或重复的付款来源')
+                            raise ValueError(_('AI 返回了未授权或重复的付款来源'))
                         seen.add(proposal['expense_id']);source_summary=allowed[proposal['expense_id']]
                         confidence=Decimal(str(proposal.get('confidence',0)));reason=safe_text(proposal.get('reason'),1000).strip()
-                        if not confidence.is_finite() or not Decimal('0')<=confidence<=Decimal('1') or not reason:raise ValueError('AI 依据或置信度无效')
+                        if not confidence.is_finite() or not Decimal('0')<=confidence<=Decimal('1') or not reason:raise ValueError(_('AI 依据或置信度无效'))
                         if confidence<Decimal('0.75'):
                             job['no_match']+=1;continue
                         line_ids=proposal.get('line_ids') or []
-                        if not isinstance(line_ids,list) or len(line_ids)>50 or len(set(line_ids))!=len(line_ids):raise ValueError('AI 明细选择无效')
+                        if not isinstance(line_ids,list) or len(line_ids)>50 or len(set(line_ids))!=len(line_ids):raise ValueError(_('AI 明细选择无效'))
                         if not line_ids:
                             job['no_match']+=1;continue
                         input_allowed={line['id'] for line in source_summary['lines']}
-                        if set(line_ids)-input_allowed:raise ValueError('AI 选择了未授权明细')
+                        if set(line_ids)-input_allowed:raise ValueError(_('AI 选择了未授权明细'))
                         source=store.get('source',proposal['expense_id'],lock=True);logistics=store.get('source',job['logistics_id'],lock=True)
                         if (not source or not logistics or source.get('invalid') or not source.get('approved') or
                                 source.get('corp')!=logistics.get('corp') or source.get('snapshot')!=source_summary.get('snapshot') or
                                 (logistics.get('id'),logistics.get('snapshot'))!=tuple(job['pool_snapshot'].get('logistics') or ())):
-                            raise ValueError('AI 来源已失效、未批准或企业不一致')
+                            raise ValueError(_('AI 来源已失效、未批准或企业不一致'))
                         if any(c.get('status')=='rejected' for c in store.find('freight_candidate',logistics_id=logistics['id']) if c['expense_id']==source['id']):
-                            raise ValueError('该组合已被人工否决')
+                            raise ValueError(_('该组合已被人工否决'))
                         current_allowed={
                             line['id']:line
                             for line in shipment_candidate_lines(
                                 logistics,current_lines(store,source))
                         }
                         if not current_allowed or set(line_ids)-set(current_allowed):
-                            raise ValueError('AI 选择了未授权明细')
+                            raise ValueError(_('AI 选择了未授权明细'))
                         lines=[current_allowed[line_id] for line_id in line_ids]
                         save_candidate(store,logistics,source,lines,'deepseek',reason,model=job['model'],confidence=confidence)
                         job['recommended']+=1

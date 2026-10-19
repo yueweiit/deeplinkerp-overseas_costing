@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import copy
 import hashlib
 import json
@@ -51,7 +58,7 @@ def preview_packing_source_v2(
     )
     source_hash = str(trusted.get("source_hash") or "")
     if len(source_hash) != 64:
-        raise ValueError("可信装箱来源缺少 SHA-256。")
+        raise ValueError(_("可信装箱来源缺少 SHA-256。"))
     preview = copy.deepcopy(trusted.get("preview") or {})
     source = _public_source(trusted.get("source") or {})
     revision = packing_source_service._encode_revision(
@@ -378,9 +385,9 @@ def _parse_resolutions(value: str | dict[str, Any] | None) -> dict[str, Any]:
         try:
             result = json.loads(value or "{}")
         except (TypeError, ValueError) as error:
-            raise ValueError("装箱确认内容不是有效 JSON。") from error
+            raise ValueError(_("装箱确认内容不是有效 JSON。")) from error
     if not isinstance(result, dict):
-        raise ValueError("装箱确认内容必须是对象。")
+        raise ValueError(_("装箱确认内容必须是对象。"))
     return result
 
 
@@ -475,7 +482,7 @@ class FrappePackingSnapshotRepository:
             (batch_name,),
         )
         if not rows:
-            raise ValueError("未找到当前批次。")
+            raise ValueError(_("未找到当前批次。"))
 
     def current_version(self, batch_name: str) -> str:
         return str(frappe.db.get_value("Overseas Cost Batch", batch_name, "current_version") or "")
@@ -1302,7 +1309,7 @@ def _list_material_ai_sources(batch_name: str, version_name: str | None = None, 
 
             workbook_id, separator, sheet_id = current_wiki_source.partition(":")
             if not separator or not workbook_id or not sheet_id:
-                raise ValueError("当前装箱计划来源 ID 不合法。")
+                raise ValueError(_("当前装箱计划来源 ID 不合法。"))
             if detail.get('local_only'):
                 from .packing_sheet_cache_service import get_cached_sheet
                 cached = get_cached_sheet(current_wiki_source)
@@ -1312,7 +1319,7 @@ def _list_material_ai_sources(batch_name: str, version_name: str | None = None, 
                 manifest = get_packing_runtime_clients().catalog.get_latest_snapshot(workbook_id, sheet_id) or {}
             content_hash = str(manifest.get("content_sha256") or "")
             if not content_hash:
-                raise ValueError("当前装箱计划 Sheet 缺少可验证的归档哈希。")
+                raise ValueError(_("当前装箱计划 Sheet 缺少可验证的归档哈希。"))
             append_source({**current_snapshot, "content_hash": content_hash,
                            "source_updated_at": manifest.get("capture_finished_at") or ""})
         except Exception as exc:

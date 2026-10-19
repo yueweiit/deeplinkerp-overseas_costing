@@ -6,6 +6,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _ as _i18n
+except ImportError:
+    def _i18n(message):
+        return message
+
+
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from time import sleep as _sleep
@@ -103,7 +110,7 @@ def _begin_run(store, now: str) -> tuple[str, dict] | None:
 def _assert_run(store, token: str) -> dict:
     current = store.get("state", CATALOG_STATE_ID, lock=True) or {}
     if current.get("run_token") != token or current.get("run_status") != "running":
-        raise PackingSheetCacheError("装箱缓存同步已被更新的任务取代。")
+        raise PackingSheetCacheError(_i18n("装箱缓存同步已被更新的任务取代。"))
     return current
 
 
@@ -119,7 +126,7 @@ def _source_id(row: dict) -> str:
     workbook_id = str(row.get("workbook_id") or "").strip()
     sheet_id = str(row.get("sheet_id") or "").strip()
     if not workbook_id or not sheet_id:
-        raise ValueError("装箱计划表目录缺少工作簿或 Sheet 标识。")
+        raise ValueError(_i18n("装箱计划表目录缺少工作簿或 Sheet 标识。"))
     return f"{workbook_id}:{sheet_id}"
 
 
@@ -149,10 +156,10 @@ def _build_trusted_sheet(row: dict, payload: dict) -> tuple[dict, dict]:
     source_id = _source_id(row)
     workbook_id, _, sheet_id = source_id.partition(":")
     if str(payload.get("workbookId") or "") != workbook_id or str(payload.get("sheetId") or "") != sheet_id:
-        raise PackingSheetCacheError("归档内容不属于所选装箱计划 Sheet。")
+        raise PackingSheetCacheError(_i18n("归档内容不属于所选装箱计划 Sheet。"))
     source_hash = str(row.get("content_sha256") or "").strip().lower()
     if len(source_hash) != 64 or any(character not in "0123456789abcdef" for character in source_hash):
-        raise PackingSheetCacheError("装箱计划 Sheet 缺少可验证的 SHA-256。")
+        raise PackingSheetCacheError(_i18n("装箱计划 Sheet 缺少可验证的 SHA-256。"))
     grid = build_grid_from_dingtalk_snapshot(payload)
     preview = parse_packing_grid(grid)
     trusted = {
@@ -256,7 +263,7 @@ def refresh_catalog_cache(*, store=None, clients=None, now: str | None = None) -
         observed_hash = str(row.get("content_sha256") or "").strip().lower()
         try:
             if str(row.get("snapshot_status") or "") != "ready":
-                raise PackingSheetCacheError("装箱计划 Sheet 的最新归档尚未就绪。")
+                raise PackingSheetCacheError(_i18n("装箱计划 Sheet 的最新归档尚未就绪。"))
             if previous.get("trusted") and previous.get("content_hash") == observed_hash:
                 state = {
                     **{key: value for key, value in previous.items() if key not in {"id", "updated_at"}},
@@ -391,12 +398,12 @@ def get_cached_sheet(source_id: str, *, store=None) -> dict:
     store = store or _default_store()
     saved = store.get("state", _sheet_state_id(str(source_id))) or {}
     if saved.get("active") is False:
-        raise PackingSheetCacheError("该装箱计划 Sheet 已停用或移除。")
+        raise PackingSheetCacheError(_i18n("该装箱计划 Sheet 已停用或移除。"))
     trusted = saved.get("trusted")
     if not isinstance(trusted, dict):
-        raise PackingSheetCacheError("该装箱计划 Sheet 尚无可用的本地缓存。")
+        raise PackingSheetCacheError(_i18n("该装箱计划 Sheet 尚无可用的本地缓存。"))
     if str(trusted.get("source", {}).get("source_id") or "") != str(source_id):
-        raise PackingSheetCacheError("装箱计划 Sheet 缓存标识不一致。")
+        raise PackingSheetCacheError(_i18n("装箱计划 Sheet 缓存标识不一致。"))
     return deepcopy(trusted)
 
 
@@ -466,12 +473,12 @@ def refresh_sheet_cache(
             None,
         )
         if row is None:
-            raise PackingSheetCacheError("刷新后未找到所选装箱计划 Sheet。")
+            raise PackingSheetCacheError(_i18n("刷新后未找到所选装箱计划 Sheet。"))
         previous = store.get("state", _sheet_state_id(source_id)) or {}
         metadata = _metadata(row, source_id)
         observed_hash = str(row.get("content_sha256") or "").strip().lower()
         if str(row.get("snapshot_status") or "") != "ready":
-            raise PackingSheetCacheError("所选装箱计划 Sheet 的最新归档尚未就绪。")
+            raise PackingSheetCacheError(_i18n("所选装箱计划 Sheet 的最新归档尚未就绪。"))
         if previous.get("trusted") and previous.get("content_hash") == observed_hash:
             state = {
                 **{key: value for key, value in previous.items() if key not in {"id", "updated_at"}},
@@ -574,7 +581,7 @@ def register_manual_refresh(
                 for key in ("batch_name", "workbook_id", "sheet_id")
             )
             if previous_target != requested_target:
-                raise PackingSheetCacheError("该刷新请求 ID 已绑定其他批次或 Sheet。")
+                raise PackingSheetCacheError(_i18n("该刷新请求 ID 已绑定其他批次或 Sheet。"))
         else:
             _put_state(store, state_id, payload, now)
     _commit(store)
@@ -597,7 +604,7 @@ def complete_manual_refresh(request_key: str, *, store=None, clients=None) -> di
     if result.get("skipped"):
         return {"ok": False, "pending": True}
     if result.get("failed"):
-        raise PackingSheetCacheError("所选 Sheet 的本地缓存更新失败。")
+        raise PackingSheetCacheError(_i18n("所选 Sheet 的本地缓存更新失败。"))
     now = _now()
     request.update(status="success", completed_at=now, result=result)
     _put_state(store, state_id, request, now)
@@ -671,15 +678,15 @@ def prewarm_catalog_cache(
             sleeper(max(0.0, float(poll_seconds)))
     if pending:
         raise PackingSheetCacheError(
-            f"仍有 {len(pending)} 个装箱 Sheet 首次刷新未完成，请稍后重试部署。"
+            _i18n("仍有 {0} 个装箱 Sheet 首次刷新未完成，请稍后重试部署。").format(len(pending))
         )
 
     result = refresh_catalog_cache(store=store, clients=clients)
     if result.get("skipped"):
-        raise PackingSheetCacheError("装箱 Sheet 缓存正在由另一个任务同步，本次预热未完成。")
+        raise PackingSheetCacheError(_i18n("装箱 Sheet 缓存正在由另一个任务同步，本次预热未完成。"))
     if result.get("error") or result.get("failed"):
         raise PackingSheetCacheError(
-            f"装箱 Sheet 缓存预热失败：{result.get('error') or str(result.get('failed')) + ' 个 Sheet 未就绪。'}"
+            _i18n("装箱 Sheet 缓存预热失败：{0}").format(result.get('error') or str(result.get('failed')) + ' 个 Sheet 未就绪。')
         )
     catalog = get_cached_catalog(store=store)
     sheets = [
@@ -694,10 +701,10 @@ def prewarm_catalog_cache(
         if sheet.get("cache_status") != "ready" or not sheet.get("content_hash")
     ]
     if not sheets:
-        raise PackingSheetCacheError("装箱 Sheet 目录为空，不允许切换新前端。")
+        raise PackingSheetCacheError(_i18n("装箱 Sheet 目录为空，不允许切换新前端。"))
     if pending:
         raise PackingSheetCacheError(
-            f"仍有 {len(pending)} 个启用 Sheet 未完成本地物化。"
+            _i18n("仍有 {0} 个启用 Sheet 未完成本地物化。").format(len(pending))
         )
     return {
         **result,

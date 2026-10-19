@@ -8,6 +8,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import frappe
 
 from overseas_costing.services import import_service, packing_source_service
@@ -31,7 +38,7 @@ def _verified_packing_attachment(
     ptype: str,
 ) -> tuple[str, str]:
     if not str(attachment_name or "").strip():
-        frappe.throw("装箱预览和写入必须选择当前批次已有的附件。", frappe.PermissionError)
+        frappe.throw(_("装箱预览和写入必须选择当前批次已有的附件。"), frappe.PermissionError)
     resolved_name = require_attachment_permission(str(attachment_name), ptype)
     row = frappe.db.get_value(
         "Overseas Cost Attachment",
@@ -40,7 +47,7 @@ def _verified_packing_attachment(
         as_dict=True,
     ) or {}
     if str(row.get("batch") or "") != str(batch_name):
-        frappe.throw("装箱附件不属于当前批次。", frappe.PermissionError)
+        frappe.throw(_("装箱附件不属于当前批次。"), frappe.PermissionError)
     return resolved_name, str(row.get("file_url") or "")
 
 
@@ -732,12 +739,12 @@ def apply_packing_source(
     batch_name = require_batch_permission(batch_name, "write")
     claims = packing_source_service.get_source_revision_claims(source_revision)
     if str(claims.get("batch") or "") != batch_name:
-        frappe.throw("装箱预览不属于当前批次，请重新预览。", frappe.PermissionError)
+        frappe.throw(_("装箱预览不属于当前批次，请重新预览。"), frappe.PermissionError)
     if str(claims.get("kind") or "") == "attachment":
         attachment_name = require_attachment_permission(str(claims.get("id") or ""), "write")
         attachment_batch = frappe.db.get_value("Overseas Cost Attachment", attachment_name, "batch")
         if attachment_batch != batch_name:
-            frappe.throw("装箱附件不属于当前批次。", frappe.PermissionError)
+            frappe.throw(_("装箱附件不属于当前批次。"), frappe.PermissionError)
     return packing_source_service.apply_packing_source(
         batch_name=batch_name,
         source_revision=source_revision,

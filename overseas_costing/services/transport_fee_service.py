@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 from decimal import Decimal, InvalidOperation
 
 
@@ -31,7 +38,7 @@ def resolve_transport_mode(value: object) -> str:
 def primary_freight_definition(mode: object) -> dict:
     resolved = resolve_transport_mode(mode)
     if not resolved:
-        raise ValueError("运输方式未明确，无法确定国际物流费用类型。")
+        raise ValueError(_("运输方式未明确，无法确定国际物流费用类型。"))
     key, label, basis = PRIMARY_FREIGHT[resolved]
     return {"logical_fee_key": key, "expense_category": label, "allocation_basis": basis}
 
@@ -91,4 +98,4 @@ def assert_no_duplicate_fees(fees: list[dict]) -> None:
     for row in mark_duplicate_fees(fees):
         if row.get("conflict_code") == "DUPLICATE_LOGICAL_FEE" or row.get("duplicate_rule_names"):
             names = "、".join(str(name) for name in row.get("duplicate_rule_names", []))
-            raise ValueError(f"费用重复（{row.get('expense_category') or row.get('logical_fee_key')}）：{names}。请先核对并停用重复记录。")
+            raise ValueError(_("费用重复（{0}）：{1}。请先核对并停用重复记录。").format(row.get('expense_category') or row.get('logical_fee_key'), names))

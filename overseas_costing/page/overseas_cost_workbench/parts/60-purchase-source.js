@@ -12,7 +12,7 @@
     this.activeBatchName = batch.name;
     const batchLabel = batch.batch_no || batch.waybill_no || batch.name;
     const dialog = new frappe.ui.Dialog({
-      title: "审批单与 OA 来源",
+      title: ocTranslate("审批单与 OA 来源"),
       fields: [
         {
           fieldtype: "HTML",
@@ -20,18 +20,18 @@
           options: `
             <div class="ocw-quick-panel">
               <div class="ocw-quick-context">
-                <span>当前批次</span>
+                <span>${ocTranslate("当前批次")}</span>
                 <strong>${this.escape(batchLabel)}</strong>
               </div>
               <button class="ocw-quick-card" data-action="approval-open-original">
-                <strong>钉钉原单</strong>
-                <span>打开当前批次对应的钉钉审批表</span>
+                <strong>${ocTranslate("钉钉原单")}</strong>
+                <span>${ocTranslate("打开当前批次对应的钉钉审批表")}</span>
               </button>
             </div>
           `,
         },
       ],
-      primary_action_label: "关闭",
+      primary_action_label: ocTranslate("关闭"),
       primary_action: () => dialog.hide(),
     });
     dialog.show();
@@ -57,7 +57,7 @@
     };
     const focusSlotCodes = this.manualDocumentSlotsForGap(batch, focus, logisticsType);
     const dialog = new frappe.ui.Dialog({
-      title: focus.label ? `补齐资料：${focus.label}` : "资料上传与补齐",
+      title: focus.label ? ocTranslate("补齐资料：{0}", [focus.label]) : ocTranslate("资料上传与补齐"),
       size: "large",
       fields: [
         {
@@ -66,7 +66,7 @@
           options: `<div data-area="manual-documents">${this.renderManualDocumentPanel(batch, logisticsType, [], { ...focus, slotCodes: focusSlotCodes })}</div>`,
         },
       ],
-      primary_action_label: "关闭",
+      primary_action_label: ocTranslate("关闭"),
       primary_action: () => dialog.hide(),
     });
     dialog.show();

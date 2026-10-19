@@ -1,6 +1,13 @@
 """Team-owned air/sea drafts with authoritative calculation and optimistic saves."""
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import hashlib
 import json
 import uuid
@@ -24,7 +31,7 @@ def dumps(value):
 def prepare_values(title, payload):
     title = str(title or "").strip()
     if not title or len(title) > 80:
-        raise ValueError("记录名称须为 1 至 80 个字符。")
+        raise ValueError(_("记录名称须为 1 至 80 个字符。"))
     payload = normalize_payload(payload)
     source = air_sea_batch.validate_source(payload.get("source"), for_update=True)
     result = calculate(payload)
@@ -37,7 +44,7 @@ def prepare_values(title, payload):
 
 def check_revision(current, expected):
     if not expected or str(current) != str(expected):
-        raise ValueError("记录已被其他成员修改或当前版本缺失，请重新读取后再保存；当前输入未丢失。")
+        raise ValueError(_("记录已被其他成员修改或当前版本缺失，请重新读取后再保存；当前输入未丢失。"))
 
 
 def validate_request_id(value):
@@ -46,7 +53,7 @@ def validate_request_id(value):
         if len(value) != 36 or str(uuid.UUID(value)) != value.lower():
             raise ValueError
     except (ValueError, AttributeError):
-        raise ValueError("保存请求标识无效，请重新保存。") from None
+        raise ValueError(_("保存请求标识无效，请重新保存。")) from None
     return value.lower()
 
 
@@ -108,7 +115,7 @@ def save_record(title, payload_json, name=None, modified=None, request_id=None):
         _access(doc, "write")
         if doc.last_request_id == request_id:
             if doc.last_request_hash != digest:
-                raise ValueError("同一保存请求的内容发生变化，请使用新的保存请求。")
+                raise ValueError(_("同一保存请求的内容发生变化，请使用新的保存请求。"))
             return _response(doc, idempotent=True)
         check_revision(doc.modified, modified)
         doc.update(values)
@@ -122,9 +129,9 @@ def save_record(title, payload_json, name=None, modified=None, request_id=None):
             doc = _locked_doc(record_name)
             _access(doc)
             if doc.create_request_hash != digest:
-                raise ValueError("同一保存请求的内容发生变化，请使用新的保存请求。")
+                raise ValueError(_("同一保存请求的内容发生变化，请使用新的保存请求。"))
             if doc.last_request_id != request_id:
-                raise ValueError("记录已被其他成员修改，请重新读取；本次重试未覆盖任何修改。")
+                raise ValueError(_("记录已被其他成员修改，请重新读取；本次重试未覆盖任何修改。"))
             return _response(doc, idempotent=True)
         doc = frappe.get_doc({"doctype": DOCTYPE, **values, "create_request_id": request_id,
             "create_request_hash": digest, "last_request_id": request_id, "last_request_hash": digest})
@@ -136,9 +143,9 @@ def save_record(title, payload_json, name=None, modified=None, request_id=None):
             doc = _locked_doc(record_name)
             _access(doc)
             if doc.create_request_hash != digest:
-                raise ValueError("同一保存请求的内容发生变化，请重新保存。")
+                raise ValueError(_("同一保存请求的内容发生变化，请重新保存。"))
             if doc.last_request_id != request_id:
-                raise ValueError("记录已被其他成员修改，请重新读取；本次重试未覆盖任何修改。")
+                raise ValueError(_("记录已被其他成员修改，请重新读取；本次重试未覆盖任何修改。"))
             return _response(doc, idempotent=True)
     return _response(doc)
 

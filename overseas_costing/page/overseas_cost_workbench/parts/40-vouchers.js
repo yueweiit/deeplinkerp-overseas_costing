@@ -10,7 +10,7 @@
     const batchOptions = this.renderSelectableBatchOptions(batchName, selectableBatches);
     const batchSelectDisabled = pinnedBatch || !selectableBatches.length ? " disabled" : "";
     const dialog = new frappe.ui.Dialog({
-      title: "完税凭证对比",
+      title: ocTranslate("完税凭证对比"),
       fields: [
         {
           fieldtype: "HTML",
@@ -19,40 +19,40 @@
             <div class="ocw-file-parse-box">
               <div class="ocw-voucher-target">
                 <label class="ocw-voucher-batch-picker">
-                  <span>对比批次</span>
-                  <select class="form-control ocw-batch-select" data-role="voucher-batch-select" aria-label="选择凭证对比批次"${batchSelectDisabled}>${batchOptions}</select>
+                  <span>${ocTranslate("对比批次")}</span>
+                  <select class="form-control ocw-batch-select" data-role="voucher-batch-select" aria-label="${ocTranslate('选择凭证对比批次')}"${batchSelectDisabled}>${batchOptions}</select>
                 </label>
                 <em data-area="voucher-batch-hint">${this.escape(batchHint)}</em>
               </div>
-              <label class="ocw-import-file-label">上传完税凭证 PDF</label>
+              <label class="ocw-import-file-label">${ocTranslate("上传完税凭证 PDF")}</label>
               <div class="ocw-import-dropzone" data-voucher-dropzone="1" tabindex="0">
                 <input class="ocw-voucher-file-input" type="file" accept=".pdf" />
                 <div class="ocw-import-drop-icon">PDF</div>
                 <div>
-                  <strong data-area="voucher-file-name">拖放 PDF 到这里，或点击选择</strong>
-                  <span>当前仅做完税凭证识别与系统数据对比，不写入成本表。</span>
+                  <strong data-area="voucher-file-name">${ocTranslate("拖放 PDF 到这里，或点击选择")}</strong>
+                  <span>${ocTranslate("当前仅做完税凭证识别与系统数据对比，不写入成本表。")}</span>
                 </div>
               </div>
               <div class="ocw-import-preview-actions">
-                <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="preview-voucher">对比预览</button>
-                <span data-area="voucher-preview-status">选择文件后可先对比凭证字段。</span>
+                <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="preview-voucher">${ocTranslate("对比预览")}</button>
+                <span data-area="voucher-preview-status">${ocTranslate("选择文件后可先对比凭证字段。")}</span>
               </div>
-              <div class="ocw-voucher-preview empty" data-area="voucher-preview">尚未对比</div>
+              <div class="ocw-voucher-preview empty" data-area="voucher-preview">${ocTranslate("尚未对比")}</div>
               <div class="ocw-voucher-records">
                 <div class="ocw-voucher-records-head">
-                  <strong>已保存对比记录</strong>
+                  <strong>${ocTranslate("已保存对比记录")}</strong>
                   <div class="ocw-voucher-records-actions">
-                    <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="refresh-voucher-records">刷新</button>
-                    <button class="ocw-danger-btn ocw-mini-btn" type="button" data-action="delete-voucher-records">删除</button>
+                    <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="refresh-voucher-records">${ocTranslate("刷新")}</button>
+                    <button class="ocw-danger-btn ocw-mini-btn" type="button" data-action="delete-voucher-records">${ocTranslate("删除")}</button>
                   </div>
                 </div>
-                <div class="ocw-voucher-record-list loading" data-area="voucher-records">加载中</div>
+                <div class="ocw-voucher-record-list loading" data-area="voucher-records">${ocTranslate("加载中")}</div>
               </div>
             </div>
           `,
         },
       ],
-      primary_action_label: "保存对比结果",
+      primary_action_label: ocTranslate("保存对比结果"),
       primary_action: async () => {
         try {
           await this.saveTaxCertificateParseResult(dialog);
@@ -148,11 +148,11 @@
 
   validateVoucherFile(file) {
     if (!file) {
-      frappe.msgprint("请先上传完税凭证 PDF。");
+      frappe.msgprint(ocTranslate("请先上传完税凭证 PDF。"));
       return false;
     }
     if (!this.isPdfFileRef(file.name || "")) {
-      frappe.msgprint("请上传 .pdf 格式的完税凭证。");
+      frappe.msgprint(ocTranslate("请上传 .pdf 格式的完税凭证。"));
       return false;
     }
     return true;
@@ -204,12 +204,12 @@
 
     const preview = dialog.$wrapper.data("ocw-voucher-preview") || {};
     if (!preview.ok) {
-      frappe.msgprint("请先点击「对比预览」，确认凭证已匹配到系统批次后再保存。");
+      frappe.msgprint(ocTranslate("请先点击「对比预览」，确认凭证已匹配到系统批次后再保存。"));
       return;
     }
     const canSave = Boolean(preview.reconciliation && preview.reconciliation.batch && preview.reconciliation.batch.name);
     if (!canSave) {
-      frappe.msgprint("当前凭证还没有匹配到系统批次，暂不能保存对比结果。");
+      frappe.msgprint(ocTranslate("当前凭证还没有匹配到系统批次，暂不能保存对比结果。"));
       return;
     }
 
@@ -236,7 +236,7 @@
       return;
     }
     frappe.show_alert({
-      message: result.message || "保存完成。",
+      message: result.message || ocTranslate("保存完成。"),
       indicator: result.fx_sync && result.fx_sync.action === "updated" ? "orange" : "green",
     });
     if (result.batch_name) {
@@ -252,7 +252,7 @@
 
   async loadTaxCertificateRecords(dialog) {
     const $records = dialog.$wrapper.find("[data-area='voucher-records']");
-    $records.removeClass("empty ready").addClass("loading").text("加载中");
+    $records.removeClass("empty ready").addClass("loading").text(ocTranslate("加载中"));
     const result = await this.call(
       "overseas_costing.api.import_api.list_tax_certificate_parse_records",
       {
@@ -273,10 +273,10 @@
     dialog.$wrapper.find("[data-action='delete-voucher-records']").prop("disabled", false);
     $records.removeClass("loading ready empty");
     if (!items.length) {
-      $records.addClass("empty").text("暂无保存记录");
+      $records.addClass("empty").text(ocTranslate("暂无保存记录"));
       return;
     }
-    const fallbackTip = result.fallback_recent ? `<div class="ocw-voucher-record-tip">当前批次暂无凭证记录，以下为最近保存记录。</div>` : "";
+    const fallbackTip = result.fallback_recent ? `<div class="ocw-voucher-record-tip">${ocTranslate("当前批次暂无凭证记录，以下为最近保存记录。")}</div>` : "";
     $records.addClass("ready").html(`
       ${fallbackTip}
       ${items.map((row) => this.renderTaxCertificateRecord(row)).join("")}
@@ -297,17 +297,17 @@
           <span>${this.escape(batchLabel)} · ${this.escape(row.file_name || "--")}</span>
         </div>
         <div class="ocw-voucher-record-grid">
-          <div><span>状态</span><b>${this.escape(row.reconciliation_status_label || row.validation_status_label || row.parse_status || "--")}</b></div>
-          <div><span>凭证税费 MXN</span><b>${this.escape(this.formatMoney(row.paid_total_mxn) || "--")}</b></div>
-          <div><span>系统税费 MXN</span><b>${this.escape(this.formatMoney(row.system_tax_total_mxn) || "--")}</b></div>
-          <div><span>差额 MXN</span><b>${this.escape(this.formatMoney(row.tax_total_diff_mxn) || "--")}</b></div>
-          <div><span>差额方向</span><b>${this.escape(row.direction_label || "--")}</b></div>
-          <div><span>人工处理</span><b>${this.escape(resolutionLabel)}</b></div>
-          <div><span>行数</span><b>${this.escape(itemCount)}</b></div>
-          <div><span>保存时间</span><b>${this.escape(this.formatValue(row.modified || row.creation || "--"))}</b></div>
+          <div><span>${ocTranslate("状态")}</span><b>${this.escape(ocTranslate(row.reconciliation_status_label || row.validation_status_label || row.parse_status || "--"))}</b></div>
+          <div><span>${ocTranslate("凭证税费 MXN")}</span><b>${this.escape(this.formatMoney(row.paid_total_mxn) || "--")}</b></div>
+          <div><span>${ocTranslate("系统税费 MXN")}</span><b>${this.escape(this.formatMoney(row.system_tax_total_mxn) || "--")}</b></div>
+          <div><span>${ocTranslate("差额 MXN")}</span><b>${this.escape(this.formatMoney(row.tax_total_diff_mxn) || "--")}</b></div>
+          <div><span>${ocTranslate("差额方向")}</span><b>${this.escape(ocTranslate(row.direction_label || "--"))}</b></div>
+          <div><span>${ocTranslate("人工处理")}</span><b>${this.escape(ocTranslate(resolutionLabel))}</b></div>
+          <div><span>${ocTranslate("行数")}</span><b>${this.escape(itemCount)}</b></div>
+          <div><span>${ocTranslate("保存时间")}</span><b>${this.escape(this.formatValue(row.modified || row.creation || "--"))}</b></div>
           <div class="ocw-voucher-record-action">
-            <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="open-voucher-record" data-record-name="${this.escape(row.name)}">查看记录</button>
-            <button class="ocw-primary-btn ocw-mini-btn" type="button" data-action="ai-review-voucher" data-attachment-name="${this.escape(row.name)}" data-batch-name="${this.escape(batch.name || row.batch_name || "")}" data-version-name="${this.escape(row.version || "")}">AI 解析并分摊到 SKU</button>
+            <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="open-voucher-record" data-record-name="${this.escape(row.name)}">${ocTranslate("查看记录")}</button>
+            <button class="ocw-primary-btn ocw-mini-btn" type="button" data-action="ai-review-voucher" data-attachment-name="${this.escape(row.name)}" data-batch-name="${this.escape(batch.name || row.batch_name || "")}" data-version-name="${this.escape(row.version || "")}">${ocTranslate("AI 解析并分摊到 SKU")}</button>
           </div>
         </div>
       </div>
@@ -320,11 +320,11 @@
     const targetNames = Array.isArray(recordNames) ? recordNames.filter(Boolean) : [];
     const recordCount = targetNames.length;
     if (!recordCount) {
-      frappe.msgprint("当前列表没有可删除的对比记录。");
+      frappe.msgprint(ocTranslate("当前列表没有可删除的对比记录。"));
       return;
     }
     frappe.confirm(
-      `确认删除当前列表显示的 ${recordCount} 条完税凭证对比记录？删除后只移除对比记录，不会删除批次和物料明细。`,
+      ocTranslate("确认删除当前列表显示的 {0} 条完税凭证对比记录？删除后只移除对比记录，不会删除批次和物料明细。", [recordCount]),
       async () => {
         const result = await this.call(
           "overseas_costing.api.import_api.delete_tax_certificate_parse_records",
@@ -335,7 +335,7 @@
           frappe.msgprint((result && result.message) || "删除对比记录失败。");
           return;
         }
-        frappe.show_alert({ message: result.message || "对比记录已删除。", indicator: "green" });
+        frappe.show_alert({ message: result.message || ocTranslate("对比记录已删除。"), indicator: "green" });
         await this.loadTaxCertificateRecords(dialog);
         await this.refreshBatch(batchName).catch((error) => this.showError(error));
       }
@@ -354,7 +354,7 @@
     }
 
     const detailDialog = new frappe.ui.Dialog({
-      title: "完税凭证对比记录",
+      title: ocTranslate("完税凭证对比记录"),
       fields: [
         {
           fieldtype: "HTML",
@@ -362,7 +362,7 @@
           options: this.renderTaxCertificateRecordDetail(result),
         },
       ],
-      primary_action_label: "关闭",
+      primary_action_label: ocTranslate("关闭"),
       primary_action: () => detailDialog.hide(),
     });
     detailDialog.show();
@@ -413,33 +413,33 @@
       <div class="ocw-voucher-record-detail">
         <div class="ocw-voucher-validation-head ${this.escape(validationStatus)}">
           <div>
-            <span>解析校验</span>
-            <strong>${this.escape(validationText)}</strong>
+            <span>${ocTranslate("解析校验")}</span>
+            <strong>${this.escape(ocTranslate(validationText))}</strong>
           </div>
-          <p>这是已保存的解析快照，只用于复看和复核，不会重新解析文件或写入成本字段。</p>
+          <p>${ocTranslate("这是已保存的解析快照，只用于复看和复核，不会重新解析文件或写入成本字段。")}</p>
         </div>
         <div class="ocw-voucher-summary">
-          <div><span>报关单号</span><strong>${this.escape(record.customs_no || header.pedimento_no || "--")}</strong></div>
-          <div><span>凭证参考号</span><strong>${this.escape(header.pedimento_ref || header.pedimento_short_no || record.pedimento_ref || "--")}</strong></div>
-          <div><span>柜号</span><strong>${this.escape(record.container_no || header.container_no || "--")}</strong></div>
-          <div><span>匹配批次</span><strong>${this.escape(batchLabel)}</strong></div>
-          <div><span>文件名</span><strong title="${this.escape(record.file_name || parseResult.source_name || "")}">${this.escape(record.file_name || parseResult.source_name || "--")}</strong></div>
-          <div><span>支付日期</span><strong title="${this.escape(rawPaymentDate)}">${this.escape(paymentDateText)}</strong></div>
-          <div><span>凭证原始汇率</span><strong>${this.escape(this.formatValidationValue(header.exchange_rate))}</strong></div>
+          <div><span>${ocTranslate("报关单号")}</span><strong>${this.escape(record.customs_no || header.pedimento_no || "--")}</strong></div>
+          <div><span>${ocTranslate("凭证参考号")}</span><strong>${this.escape(header.pedimento_ref || header.pedimento_short_no || record.pedimento_ref || "--")}</strong></div>
+          <div><span>${ocTranslate("柜号")}</span><strong>${this.escape(record.container_no || header.container_no || "--")}</strong></div>
+          <div><span>${ocTranslate("匹配批次")}</span><strong>${this.escape(batchLabel)}</strong></div>
+          <div><span>${ocTranslate("文件名")}</span><strong title="${this.escape(record.file_name || parseResult.source_name || "")}">${this.escape(record.file_name || parseResult.source_name || "--")}</strong></div>
+          <div><span>${ocTranslate("支付日期")}</span><strong title="${this.escape(rawPaymentDate)}">${this.escape(paymentDateText)}</strong></div>
+          <div><span>${ocTranslate("凭证原始汇率")}</span><strong>${this.escape(this.formatValidationValue(header.exchange_rate))}</strong></div>
           <div class="ocw-voucher-summary-wide">
-            <span>${this.escape(systemFxInfo.heading || "系统采用汇率")}</span>
-            <div class="ocw-system-fx-lines" title="${this.escape(systemFxInfo.title)}">
+            <span>${this.escape(systemFxInfo.heading || ocTranslate("系统采用汇率"))}</span>
+            <div class="ocw-system-fx-lines" title="${this.escape(ocTranslate(systemFxInfo.title))}">
               ${systemFxInfo.lines.map((line) => `<strong>${this.escape(line)}</strong>`).join("")}
             </div>
           </div>
-          <div><span>毛重 KG</span><strong>${this.escape(this.formatValidationValue(header.gross_weight_kg))}</strong></div>
-          <div><span>支付总额 MXN</span><strong>${this.escape(this.formatMoney(summary.paid_total_mxn ?? record.paid_total_mxn) || "--")}</strong></div>
-          <div><span>税费合计 MXN</span><strong>${this.escape(this.formatMoney(summary.tax_total_sum_mxn ?? record.tax_total_sum_mxn) || "--")}</strong></div>
-          <div><span>保存时间</span><strong>${this.escape(this.formatValue(record.modified || record.creation || "--"))}</strong></div>
-          <div><span>商品分项</span><strong>${this.escape(itemCount)}</strong></div>
+          <div><span>${ocTranslate("毛重 KG")}</span><strong>${this.escape(this.formatValidationValue(header.gross_weight_kg))}</strong></div>
+          <div><span>${ocTranslate("支付总额 MXN")}</span><strong>${this.escape(this.formatMoney(summary.paid_total_mxn ?? record.paid_total_mxn) || "--")}</strong></div>
+          <div><span>${ocTranslate("税费合计 MXN")}</span><strong>${this.escape(this.formatMoney(summary.tax_total_sum_mxn ?? record.tax_total_sum_mxn) || "--")}</strong></div>
+          <div><span>${ocTranslate("保存时间")}</span><strong>${this.escape(this.formatValue(record.modified || record.creation || "--"))}</strong></div>
+          <div><span>${ocTranslate("商品分项")}</span><strong>${this.escape(itemCount)}</strong></div>
         </div>
         <div class="ocw-voucher-tax-chips">${this.renderVoucherTaxChips(taxes)}</div>
-        <div class="ocw-voucher-record-ai-action"><button class="ocw-primary-btn" type="button" data-action="ai-review-voucher" data-attachment-name="${this.escape(record.name || result.record_name || "")}" data-batch-name="${this.escape(batchName)}" data-version-name="${this.escape(versionName)}">AI 解析并分摊到 SKU</button><span>生成费用、税种和 SKU 对应关系草稿，确认前不会写入成本。</span></div>
+        <div class="ocw-voucher-record-ai-action"><button class="ocw-primary-btn" type="button" data-action="ai-review-voucher" data-attachment-name="${this.escape(record.name || result.record_name || "")}" data-batch-name="${this.escape(batchName)}" data-version-name="${this.escape(versionName)}">${ocTranslate("AI 解析并分摊到 SKU")}</button><span>${ocTranslate("生成费用、税种和 SKU 对应关系草稿，确认前不会写入成本。")}</span></div>
         ${this.renderVoucherReconciliation(mappedResult, { showSaveButton: false })}
         ${this.renderVoucherManualResolution(record, mappedResult)}
         ${this.renderVoucherValidation(validation)}
@@ -447,33 +447,33 @@
           <table class="ocw-voucher-table">
             <thead>
               <tr>
-                <th>序号</th>
-                <th>HS 编码</th>
-                <th>海关进口名称</th>
-                <th>数量</th>
-                <th>IGI 税率</th>
-                <th>IGI 税额</th>
-                <th>IVA 税率</th>
-                <th>IVA 税额</th>
+                <th>${ocTranslate("序号")}</th>
+                <th>${ocTranslate("HS 编码")}</th>
+                <th>${ocTranslate("海关进口名称")}</th>
+                <th>${ocTranslate("数量")}</th>
+                <th>${ocTranslate("IGI 税率")}</th>
+                <th>${ocTranslate("IGI 税额")}</th>
+                <th>${ocTranslate("IVA 税率")}</th>
+                <th>${ocTranslate("IVA 税额")}</th>
               </tr>
             </thead>
-            <tbody>${rows || `<tr><td colspan="8">未识别到商品分项</td></tr>`}</tbody>
+            <tbody>${rows || `<tr><td colspan="8">${ocTranslate("未识别到商品分项")}</td></tr>`}</tbody>
           </table>
         </div>
-        <div class="ocw-voucher-more">共 ${this.escape(String(items.length || 0))} 条分项。</div>
+        <div class="ocw-voucher-more">${ocTranslate("共 {0} 条分项。", [this.escape(String(items.length || 0))])}</div>
       </div>
     `;
   }
 
   async openVoucherFeeEvidenceReview({ batchName = "", versionName = "", attachment = "" } = {}) {
     const targetBatch = String(batchName || this.detailState.batchName || "");
-    if (!targetBatch || !attachment) throw new Error("未找到完税凭证对应的批次或附件记录。");
+    if (!targetBatch || !attachment) throw new Error(ocTranslate("未找到完税凭证对应的批次或附件记录。"));
     if (String(this.detailState.batchName || "") !== targetBatch) {
       await this.openBatchDetail(targetBatch, "vouchers");
     }
     const batch = this.getDetailBatch() || this.getSelectableBatch(targetBatch, this.getSelectableBatches()) || {};
     const targetVersion = String(versionName || this.detailState.versionName || batch.current_version || "");
-    if (!targetVersion) throw new Error("当前批次没有可编辑的成本版本。");
+    if (!targetVersion) throw new Error(ocTranslate("当前批次没有可编辑的成本版本。"));
     return Boolean(await this.openFeeEvidenceReviewDialog("import_tax", attachment, {
       batchName: targetBatch,
       versionName: targetVersion,
@@ -490,7 +490,7 @@
       versionName: String($button.attr("data-version-name") || ""),
       attachment: String($button.attr("data-attachment-name") || fallbackAttachment || ""),
     };
-    $button.prop("disabled", true).text("正在启动 AI…");
+    $button.prop("disabled", true).text(ocTranslate("正在启动 AI…"));
     try {
       return (await this.openVoucherFeeEvidenceReview(payload)) === true;
     } catch (error) {
@@ -528,20 +528,20 @@
       ["keep_system", "保留系统金额"],
       ["manual_adjust", "手工调整金额"],
     ]
-      .map(([value, label]) => `<option value="${this.escape(value)}" ${selected === value ? "selected" : ""}>${this.escape(label)}</option>`)
+      .map(([value, label]) => `<option value="${this.escape(value)}" ${selected === value ? "selected" : ""}>${this.escape(ocTranslate(label))}</option>`)
       .join("");
     const savedHtml = hasResolution
       ? `
         <div class="ocw-voucher-resolution-saved">
-          <div><span>当前处理</span><strong>${this.escape(resolution.status_label || resolution.action_label || "--")}</strong></div>
-          <div><span>采用金额 MXN</span><strong>${this.escape(this.formatMoney(resolution.final_tax_total_mxn) || "--")}</strong></div>
-          <div><span>采用依据</span><strong>${this.escape(resolution.final_source_label || "--")}</strong></div>
-          <div><span>处理人</span><strong>${this.escape(resolution.resolved_by || "--")}</strong></div>
-          <div><span>处理时间</span><strong>${this.escape(resolution.resolved_at || "--")}</strong></div>
+          <div><span>${ocTranslate("当前处理")}</span><strong>${this.escape(ocTranslate(resolution.status_label || resolution.action_label || "--"))}</strong></div>
+          <div><span>${ocTranslate("采用金额 MXN")}</span><strong>${this.escape(this.formatMoney(resolution.final_tax_total_mxn) || "--")}</strong></div>
+          <div><span>${ocTranslate("采用依据")}</span><strong>${this.escape(resolution.final_source_label || "--")}</strong></div>
+          <div><span>${ocTranslate("处理人")}</span><strong>${this.escape(resolution.resolved_by || "--")}</strong></div>
+          <div><span>${ocTranslate("处理时间")}</span><strong>${this.escape(resolution.resolved_at || "--")}</strong></div>
           <p>${this.escape(resolution.message || resolution.remark || "")}</p>
         </div>
       `
-      : `<div class="ocw-voucher-resolution-empty">当前差异尚未人工处理。</div>`;
+      : `<div class="ocw-voucher-resolution-empty">${ocTranslate("当前差异尚未人工处理。")}</div>`;
     const historyRows = history
       .slice()
       .reverse()
@@ -550,53 +550,53 @@
         const row = item || {};
         return `
           <div>
-            <strong>${this.escape(row.action_label || row.status_label || "--")}</strong>
+            <strong>${this.escape(ocTranslate(row.action_label || row.status_label || "--"))}</strong>
             <em>${this.escape(row.resolved_at || "--")} / ${this.escape(row.resolved_by || "--")}</em>
-            <small>${this.escape(row.message || row.remark || "未填写备注")}</small>
+            <small>${this.escape(row.message || row.remark || ocTranslate("未填写备注"))}</small>
           </div>
         `;
       })
       .join("");
     const historyHtml = `
       <div class="ocw-voucher-resolution-history">
-        <span>处理记录</span>
-        ${historyRows || `<p>暂无处理记录，提交后会显示在这里。</p>`}
+        <span>${ocTranslate("处理记录")}</span>
+        ${historyRows || `<p>${ocTranslate("暂无处理记录，提交后会显示在这里。")}</p>`}
       </div>
     `;
     return `
       <div class="ocw-voucher-resolution">
         <div class="ocw-voucher-resolution-head">
           <div>
-            <span>人工处理差异</span>
-            <strong>${this.escape(hasResolution ? "已处理，可重新调整" : "待处理")}</strong>
+            <span>${ocTranslate("人工处理差异")}</span>
+            <strong>${this.escape(hasResolution ? ocTranslate("已处理，可重新调整") : ocTranslate("待处理"))}</strong>
           </div>
-          <p>可选择凭证金额、系统金额或手工调整金额为准；这里只保存处理记录，不会自动改成本字段。</p>
+          <p>${ocTranslate("可选择凭证金额、系统金额或手工调整金额为准；这里只保存处理记录，不会自动改成本字段。")}</p>
         </div>
         <div class="ocw-voucher-resolution-grid">
-          <div><span>凭证税费 MXN</span><strong>${this.escape(this.formatMoney(voucher.paid_total_mxn) || "--")}</strong></div>
-          <div><span>系统税费 MXN</span><strong>${this.escape(this.formatMoney(system.system_import_tax_total_mxn) || "--")}</strong></div>
-          <div><span>原差额 MXN</span><strong>${this.escape(this.formatMoney(diff.tax_total_diff_mxn) || "--")}</strong></div>
-          <div><span>方向</span><strong>${this.escape(diff.direction_label || "--")}</strong></div>
+          <div><span>${ocTranslate("凭证税费 MXN")}</span><strong>${this.escape(this.formatMoney(voucher.paid_total_mxn) || "--")}</strong></div>
+          <div><span>${ocTranslate("系统税费 MXN")}</span><strong>${this.escape(this.formatMoney(system.system_import_tax_total_mxn) || "--")}</strong></div>
+          <div><span>${ocTranslate("原差额 MXN")}</span><strong>${this.escape(this.formatMoney(diff.tax_total_diff_mxn) || "--")}</strong></div>
+          <div><span>${ocTranslate("方向")}</span><strong>${this.escape(ocTranslate(diff.direction_label || "--"))}</strong></div>
         </div>
         <div class="ocw-voucher-resolution-form">
           <label>
-            <span>处理方式</span>
+            <span>${ocTranslate("处理方式")}</span>
             <select data-field="resolution_action">${options}</select>
           </label>
           <label>
-            <span>调整后税费 MXN</span>
-            <input type="number" step="0.01" data-field="adjusted_tax_total_mxn" value="${this.escape(adjustedValue ?? "")}" placeholder="选择手工调整时填写" />
+            <span>${ocTranslate("调整后税费 MXN")}</span>
+            <input type="number" step="0.01" data-field="adjusted_tax_total_mxn" value="${this.escape(adjustedValue ?? "")}" placeholder="${ocTranslate('选择手工调整时填写')}" />
           </label>
           <label class="ocw-voucher-resolution-remark">
-            <span>处理备注</span>
-            <input type="text" data-field="resolution_remark" value="${this.escape(resolution.remark || "")}" placeholder="例如：差额 303 为尾差，财务确认可接受" />
+            <span>${ocTranslate("处理备注")}</span>
+            <input type="text" data-field="resolution_remark" value="${this.escape(resolution.remark || "")}" placeholder="${ocTranslate('例如：差额 303 为尾差，财务确认可接受')}" />
           </label>
           <label class="ocw-voucher-resolution-confirm">
             <input type="checkbox" data-field="resolution_confirm" />
-            <span>我确认按当前处理方式保存本次差异处理记录</span>
+            <span>${ocTranslate("我确认按当前处理方式保存本次差异处理记录")}</span>
           </label>
           <div class="ocw-voucher-resolution-actions">
-            <button class="ocw-primary-btn ocw-mini-btn" type="button" data-action="resolve-voucher-record" disabled>提交处理结果</button>
+            <button class="ocw-primary-btn ocw-mini-btn" type="button" data-action="resolve-voucher-record" disabled>${ocTranslate("提交处理结果")}</button>
           </div>
         </div>
         ${savedHtml}
@@ -612,7 +612,7 @@
     const remark = String($wrapper.find("[data-field='resolution_remark']").val() || "").trim();
     const confirmed = $wrapper.find("[data-field='resolution_confirm']").is(":checked");
     if (!confirmed) {
-      frappe.msgprint("请先勾选确认后再提交处理结果。");
+      frappe.msgprint(ocTranslate("请先勾选确认后再提交处理结果。"));
       return;
     }
     const doSave = async () => {
@@ -635,9 +635,9 @@
       if (this.activeVoucherParseDialog && this.activeVoucherParseDialog.$wrapper && this.activeVoucherParseDialog.$wrapper.is(":visible")) {
         this.loadTaxCertificateRecords(this.activeVoucherParseDialog).catch((error) => this.showError(error));
       }
-      frappe.show_alert({ message: "处理结果已保存。", indicator: "green" });
+      frappe.show_alert({ message: ocTranslate("处理结果已保存。"), indicator: "green" });
     };
-    frappe.confirm("确认保存这次完税凭证差异处理结果？", doSave);
+    frappe.confirm(ocTranslate("确认保存这次完税凭证差异处理结果？"), doSave);
   }
 
   renderVoucherPreview(dialog, result, state = "empty") {
@@ -646,13 +646,13 @@
     $preview.removeClass("empty loading ready warn failed");
     this.updateVoucherPrimarySaveAction(dialog, false);
     if (state === "loading") {
-      $status.text("正在上传并解析 PDF...");
-      $preview.addClass("loading").text("解析中");
+      $status.text(ocTranslate("正在上传并解析 PDF..."));
+      $preview.addClass("loading").text(ocTranslate("解析中"));
       return;
     }
     if (!result) {
-      $status.text("选择文件后可先对比凭证字段。");
-      $preview.addClass("empty").text("尚未对比");
+      $status.text(ocTranslate("选择文件后可先对比凭证字段。"));
+      $preview.addClass("empty").text(ocTranslate("尚未对比"));
       return;
     }
 
@@ -666,55 +666,55 @@
     const statusClass = this.voucherValidationPreviewClass(validationStatus);
     const taxChips = this.renderVoucherTaxChips(taxes);
     const rows = items.slice(0, 30).map((row) => this.renderVoucherItemRow(row)).join("");
-    const moreText = items.length > 30 ? `<div class="ocw-voucher-more">仅展示前 30 条，共 ${this.escape(String(items.length))} 条。</div>` : "";
+    const moreText = items.length > 30 ? `<div class="ocw-voucher-more">${ocTranslate("仅展示前 30 条，共 {0} 条。", [this.escape(String(items.length))])}</div>` : "";
     const declaredCount = summary.declared_item_count ?? "--";
     const validationHtml = this.renderVoucherValidation(validation);
     const reconciliation = result.reconciliation || {};
     if (result.saved_attachment_name) reconciliation.saved_attachment_name = result.saved_attachment_name;
     const reconciliationHtml = this.renderVoucherReconciliation(reconciliation, { showSaveButton: false });
-    const reconciliationText = reconciliation.status_label ? `，对比${reconciliation.status_label}` : "";
+    const reconciliationText = reconciliation.status_label ? ocTranslate("，对比{0}", [ocTranslate(reconciliation.status_label)]) : "";
     const canSave = Boolean(reconciliation.batch && reconciliation.batch.name);
     const paymentDateText = this.formatVoucherPaymentDate(header.payment_date || "");
     this.updateVoucherPrimarySaveAction(dialog, canSave);
 
-    $status.text(`预览完成：校验${statusText}${reconciliationText}。`);
+    $status.text(ocTranslate("预览完成：校验{0}{1}。", [statusText, reconciliationText]));
     $preview.addClass(statusClass).html(`
       <div class="ocw-voucher-validation-head ${this.escape(validationStatus)}">
         <div>
-          <span>解析校验</span>
-          <strong>${this.escape(statusText)}</strong>
+          <span>${ocTranslate("解析校验")}</span>
+          <strong>${this.escape(ocTranslate(statusText))}</strong>
         </div>
         <p>${this.escape(this.voucherValidationMessage(validationStatus))}</p>
       </div>
       <div class="ocw-voucher-summary">
-        <div><span>报关单号</span><strong>${this.escape(header.pedimento_no || "--")}</strong></div>
-        <div><span>凭证参考号</span><strong>${this.escape(header.pedimento_ref || header.pedimento_short_no || "--")}</strong></div>
-        <div><span>柜号</span><strong>${this.escape(header.container_no || "--")}</strong></div>
-        <div><span>支付日期</span><strong title="${this.escape(header.payment_date || "")}">${this.escape(paymentDateText)}</strong></div>
-        <div><span>凭证原始汇率</span><strong>${this.escape(this.formatValue(header.exchange_rate || "--"))}</strong></div>
-        <div><span>毛重 KG</span><strong>${this.escape(this.formatValue(header.gross_weight_kg || "--"))}</strong></div>
-        <div><span>支付总额 MXN</span><strong>${this.escape(this.formatMoney(summary.paid_total_mxn || 0))}</strong></div>
-        <div><span>商品分项</span><strong>${this.escape(String(summary.item_count || items.length || 0))} / ${this.escape(String(declaredCount))}</strong></div>
+        <div><span>${ocTranslate("报关单号")}</span><strong>${this.escape(header.pedimento_no || "--")}</strong></div>
+        <div><span>${ocTranslate("凭证参考号")}</span><strong>${this.escape(header.pedimento_ref || header.pedimento_short_no || "--")}</strong></div>
+        <div><span>${ocTranslate("柜号")}</span><strong>${this.escape(header.container_no || "--")}</strong></div>
+        <div><span>${ocTranslate("支付日期")}</span><strong title="${this.escape(header.payment_date || "")}">${this.escape(paymentDateText)}</strong></div>
+        <div><span>${ocTranslate("凭证原始汇率")}</span><strong>${this.escape(this.formatValue(header.exchange_rate || "--"))}</strong></div>
+        <div><span>${ocTranslate("毛重 KG")}</span><strong>${this.escape(this.formatValue(header.gross_weight_kg || "--"))}</strong></div>
+        <div><span>${ocTranslate("支付总额 MXN")}</span><strong>${this.escape(this.formatMoney(summary.paid_total_mxn || 0))}</strong></div>
+        <div><span>${ocTranslate("商品分项")}</span><strong>${this.escape(String(summary.item_count || items.length || 0))} / ${this.escape(String(declaredCount))}</strong></div>
       </div>
       <div class="ocw-voucher-tax-chips">${taxChips}</div>
       ${reconciliationHtml}
       ${validationHtml}
-      <div class="ocw-voucher-note">当前只做字段摘取预览；确认规则后再用于生成实际核算和多退少补对比。</div>
+      <div class="ocw-voucher-note">${ocTranslate("当前只做字段摘取预览；确认规则后再用于生成实际核算和多退少补对比。")}</div>
       <div class="ocw-voucher-table-wrap">
         <table class="ocw-voucher-table">
           <thead>
             <tr>
-              <th>序号</th>
-              <th>HS 编码</th>
-              <th>海关进口名称</th>
-              <th>数量</th>
-              <th>IGI 税率</th>
-              <th>IGI 税额</th>
-              <th>IVA 税率</th>
-              <th>IVA 税额</th>
+              <th>${ocTranslate("序号")}</th>
+              <th>${ocTranslate("HS 编码")}</th>
+              <th>${ocTranslate("海关进口名称")}</th>
+              <th>${ocTranslate("数量")}</th>
+              <th>${ocTranslate("IGI 税率")}</th>
+              <th>${ocTranslate("IGI 税额")}</th>
+              <th>${ocTranslate("IVA 税率")}</th>
+              <th>${ocTranslate("IVA 税额")}</th>
             </tr>
           </thead>
-          <tbody>${rows || `<tr><td colspan="8">未识别到商品分项</td></tr>`}</tbody>
+          <tbody>${rows || `<tr><td colspan="8">${ocTranslate("未识别到商品分项")}</td></tr>`}</tbody>
         </table>
       </div>
       ${moreText}
@@ -741,10 +741,10 @@
     dialog.$wrapper.removeData("ocw-voucher-upload");
     dialog.$wrapper.removeData("ocw-voucher-preview");
     $dropzone.removeClass("has-file is-dragover");
-    dialog.$wrapper.find("[data-area='voucher-file-name']").text("拖放 PDF 到这里，或点击选择");
+    dialog.$wrapper.find("[data-area='voucher-file-name']").text(ocTranslate("拖放 PDF 到这里，或点击选择"));
     if ($input.length) $input.val("");
     this.renderVoucherPreview(dialog, null, "empty");
-    dialog.$wrapper.find("[data-area='voucher-preview-status']").text("保存完成，可继续上传下一份凭证。");
+    dialog.$wrapper.find("[data-area='voucher-preview-status']").text(ocTranslate("保存完成，可继续上传下一份凭证。"));
   }
 
   renderVoucherTaxChips(taxes = {}) {
@@ -756,13 +756,13 @@
       ["进口增值税（IVA）", taxes.iva_mxn],
     ];
     return `
-      <div class="ocw-voucher-tax-title">税费构成 MXN</div>
+      <div class="ocw-voucher-tax-title">${ocTranslate("税费构成 MXN")}</div>
       <div class="ocw-voucher-tax-grid">
         ${rows
           .map(
             ([label, value]) => `
               <div class="ocw-voucher-tax-item">
-                <span>${this.escape(label)}</span>
+                <span>${this.escape(ocTranslate(label))}</span>
                 <strong>${this.escape(this.formatMoney(value || 0))}</strong>
               </div>
             `
@@ -787,41 +787,41 @@
     const saveButton = !showSaveButton
       ? ""
       : batch.name
-        ? `<button class="ocw-primary-btn ocw-mini-btn" type="button" data-action="save-voucher-parse">${reconciliation.saved_attachment_name ? "已保存对比结果" : "保存对比结果"}</button>`
-        : `<button class="ocw-primary-btn ocw-mini-btn" type="button" data-action="save-voucher-parse" disabled>保存对比结果</button>`;
+        ? `<button class="ocw-primary-btn ocw-mini-btn" type="button" data-action="save-voucher-parse">${reconciliation.saved_attachment_name ? ocTranslate("已保存对比结果") : ocTranslate("保存对比结果")}</button>`
+        : `<button class="ocw-primary-btn ocw-mini-btn" type="button" data-action="save-voucher-parse" disabled>${ocTranslate("保存对比结果")}</button>`;
 
     return `
       <div class="ocw-voucher-reconciliation ${this.escape(status)}">
         <div class="ocw-voucher-reconciliation-head">
           <div>
-            <span>多退少补对比预览</span>
-            <strong>${this.escape(reconciliation.status_label || "--")}</strong>
+            <span>${ocTranslate("多退少补对比预览")}</span>
+            <strong>${this.escape(ocTranslate(reconciliation.status_label || "--"))}</strong>
           </div>
           <div class="ocw-voucher-reconciliation-action">
-            <p>${this.escape(reconciliation.message || "对比结果仅用于复核，不会自动写入成本。")}</p>
+            <p>${this.escape(reconciliation.message || ocTranslate("对比结果仅用于复核，不会自动写入成本。"))}</p>
             ${saveButton}
           </div>
         </div>
         <div class="ocw-voucher-reconciliation-grid">
-          <div><span>匹配批次</span><strong>${this.escape(batchLabel)}</strong></div>
-          <div><span>凭证税费 MXN</span><strong>${this.escape(this.formatMoney(voucher.paid_total_mxn) || "--")}</strong></div>
-          <div><span>系统税费 MXN</span><strong>${this.escape(this.formatMoney(system.system_import_tax_total_mxn) || "--")}</strong></div>
-          <div><span>差额 MXN</span><strong>${this.escape(this.formatMoney(diff.tax_total_diff_mxn) || "--")}</strong></div>
-          <div><span>差额方向</span><strong>${this.escape(diff.direction_label || "--")}</strong></div>
-          <div><span>行数对比</span><strong>${this.escape(String(system.item_count || 0))} / ${this.escape(String(declaredCount))}</strong></div>
-          <div><span>税费来源</span><strong>${this.escape(system.tax_source || "--")}</strong></div>
-          <div><span>有税费行</span><strong>${this.escape(String(system.rows_with_tax_count || 0))}</strong></div>
+          <div><span>${ocTranslate("匹配批次")}</span><strong>${this.escape(batchLabel)}</strong></div>
+          <div><span>${ocTranslate("凭证税费 MXN")}</span><strong>${this.escape(this.formatMoney(voucher.paid_total_mxn) || "--")}</strong></div>
+          <div><span>${ocTranslate("系统税费 MXN")}</span><strong>${this.escape(this.formatMoney(system.system_import_tax_total_mxn) || "--")}</strong></div>
+          <div><span>${ocTranslate("差额 MXN")}</span><strong>${this.escape(this.formatMoney(diff.tax_total_diff_mxn) || "--")}</strong></div>
+          <div><span>${ocTranslate("差额方向")}</span><strong>${this.escape(ocTranslate(diff.direction_label || "--"))}</strong></div>
+          <div><span>${ocTranslate("行数对比")}</span><strong>${this.escape(String(system.item_count || 0))} / ${this.escape(String(declaredCount))}</strong></div>
+          <div><span>${ocTranslate("税费来源")}</span><strong>${this.escape(system.tax_source || "--")}</strong></div>
+          <div><span>${ocTranslate("有税费行")}</span><strong>${this.escape(String(system.rows_with_tax_count || 0))}</strong></div>
         </div>
         ${
           checkRows
             ? `<table class="ocw-voucher-validation-table ocw-voucher-reconciliation-table">
                 <thead>
                   <tr>
-                    <th>项目</th>
-                    <th>状态</th>
-                    <th>说明</th>
-                    <th>期望值</th>
-                    <th>识别值</th>
+                    <th>${ocTranslate("项目")}</th>
+                    <th>${ocTranslate("状态")}</th>
+                    <th>${ocTranslate("说明")}</th>
+                    <th>${ocTranslate("期望值")}</th>
+                    <th>${ocTranslate("识别值")}</th>
                   </tr>
                 </thead>
                 <tbody>${checkRows}</tbody>
@@ -839,17 +839,17 @@
     return `
       <div class="ocw-voucher-validation-wrap">
         <div class="ocw-voucher-validation-title">
-          <strong>校验明细</strong>
-          <span>通过 ${this.escape(String(validation.passed_count || 0))} · 需复核 ${this.escape(String(validation.review_count || 0))} · 失败 ${this.escape(String(validation.failed_count || 0))}</span>
+          <strong>${ocTranslate("校验明细")}</strong>
+          <span>${ocTranslate("通过 {0} · 需复核 {1} · 失败 {2}", [this.escape(String(validation.passed_count || 0)), this.escape(String(validation.review_count || 0)), this.escape(String(validation.failed_count || 0))])}</span>
         </div>
         <table class="ocw-voucher-validation-table">
           <thead>
             <tr>
-              <th>项目</th>
-              <th>状态</th>
-              <th>说明</th>
-              <th>期望值</th>
-              <th>识别值</th>
+              <th>${ocTranslate("项目")}</th>
+              <th>${ocTranslate("状态")}</th>
+              <th>${ocTranslate("说明")}</th>
+              <th>${ocTranslate("期望值")}</th>
+              <th>${ocTranslate("识别值")}</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
@@ -862,9 +862,9 @@
     const status = check.status || "review";
     return `
       <tr class="${this.escape(status)}">
-        <td>${this.escape(check.label || "--")}</td>
-        <td><span class="ocw-voucher-check-status ${this.escape(status)}">${this.escape(check.status_label || "--")}</span></td>
-        <td>${this.escape(check.message || "--")}</td>
+        <td>${this.escape(ocTranslate(check.label || "--"))}</td>
+        <td><span class="ocw-voucher-check-status ${this.escape(status)}">${this.escape(ocTranslate(check.status_label || "--"))}</span></td>
+        <td>${this.escape(ocTranslate(check.message || "--"))}</td>
         <td>${this.escape(this.formatValidationValue(check.expected, check.code))}</td>
         <td>${this.escape(this.formatValidationValue(check.actual, check.code))}</td>
       </tr>
@@ -915,7 +915,7 @@
     const normalized = this.normalizeVoucherPaymentDate(preferredDate || raw);
     if (!normalized && !raw) return "--";
     if (!raw || raw === normalized) return normalized || raw;
-    return `${normalized || raw}（原始：${raw}）`;
+    return ocTranslate("{0}（原始：{1}）", [normalized || raw, raw]);
   }
 
   formatSystemPaymentFx(fxSync = {}, rawPaymentDate = "") {
@@ -940,7 +940,7 @@
     const parts = [`${sourceLabel}：${rateDate || "未识别"}`];
     if (isFallbackRate) {
       parts.push(fxSync.fallback_message || "汇率库缺少付款日汇率，当前成本暂用版本汇率");
-      parts.push(`汇率来源：${fxSync.fallback_rate_source_label || "当前版本汇率（暂用）"}`);
+      parts.push(ocTranslate("汇率来源：{0}", [fxSync.fallback_rate_source_label || "当前版本汇率（暂用）"]));
     } else if (fxSync.is_estimated_rate) {
       parts.push("后续拿到真实付款日后需重算确认");
     } else if (!fxSync.normalized_fx_rate_date && !fxSync.normalized_payment_date && !fxSync.rate_snapshots) {
@@ -948,7 +948,7 @@
     }
     parts.push(`1 USD = ${usdToRmb ? this.formatNumber(usdToRmb) : "--"} RMB`);
     if (mxnToRmb && rmbToMxn) {
-      parts.push(`1 MXN = ${this.formatNumber(mxnToRmb)} RMB（按 1 RMB = ${this.formatNumber(rmbToMxn)} MXN 换算）`);
+      parts.push(ocTranslate("1 MXN = {0} RMB（按 1 RMB = {1} MXN 换算）", [this.formatNumber(mxnToRmb), this.formatNumber(rmbToMxn)]));
     } else {
       parts.push(`1 MXN = ${mxnToRmb ? this.formatNumber(mxnToRmb) : "--"} RMB`);
     }

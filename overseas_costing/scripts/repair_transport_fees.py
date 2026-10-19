@@ -6,6 +6,13 @@ Each batch owns one transaction; no item, cost result, confirmation or ERP write
 """
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import gzip
 import hashlib
 import json
@@ -115,7 +122,7 @@ def run(*, apply=False, manifest=None, backup_path=None, repository=None):
     if isinstance(manifest, str):
         manifest = json.loads(manifest)
     if apply and (not isinstance(manifest, dict) or not manifest or not backup_path):
-        raise ValueError('执行前必须提供只读预检清单 manifest 和数据库备份路径 backup_path。')
+        raise ValueError(_('执行前必须提供只读预检清单 manifest 和数据库备份路径 backup_path。'))
     backup = repo.validate_backup(backup_path) if apply else None
     results, output_manifest = [], {}
     names = sorted(manifest) if apply else repo.candidates()
@@ -154,7 +161,7 @@ class FrappeRepairRepository:
 
     def assert_operator(self):
         if self.frappe.session.user == 'Guest' or 'System Manager' not in self.frappe.get_roles():
-            raise PermissionError('此修复仅允许 System Manager 在管理终端执行。')
+            raise PermissionError(_('此修复仅允许 System Manager 在管理终端执行。'))
 
     def candidates(self):
         rows = self.frappe.db.sql('''SELECT DISTINCT b.name
@@ -179,7 +186,7 @@ class FrappeRepairRepository:
         else:
             batch = f.db.get_value('Overseas Cost Batch', name, fields, as_dict=True)
         if not batch or not batch.get('current_version'):
-            raise ValueError('批次不存在或没有当前版本。')
+            raise ValueError(_('批次不存在或没有当前版本。'))
         version = batch['current_version']
         if lock:
             versions = f.db.sql('SELECT * FROM `tabOverseas Cost Version` WHERE name=%s AND batch=%s FOR UPDATE',
@@ -200,15 +207,15 @@ class FrappeRepairRepository:
         resolved = Path(path).resolve()
         backup_dir = Path(self.frappe.get_site_path('private','backups')).resolve()
         if resolved.parent != backup_dir or not resolved.name.endswith('-database.sql.gz') or not resolved.is_file():
-            raise ValueError('必须使用当前站点 private/backups 内的数据库备份。')
+            raise ValueError(_('必须使用当前站点 private/backups 内的数据库备份。'))
         if resolved.stat().st_size < 100:
-            raise ValueError('数据库备份为空。')
+            raise ValueError(_('数据库备份为空。'))
         with gzip.open(resolved, 'rb') as stream:
             total = 0
             for block in iter(lambda: stream.read(1024*1024), b''):
                 total += len(block)
             if not total:
-                raise ValueError('数据库备份不可读。')
+                raise ValueError(_('数据库备份不可读。'))
         digest = hashlib.sha256()
         with resolved.open('rb') as stream:
             for block in iter(lambda: stream.read(1024*1024), b''):

@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 from dataclasses import asdict, dataclass
 import copy
 import json
@@ -16,7 +23,7 @@ MAX_GRID_CELLS = 250_000
 
 def _check_grid_size(rows: int, columns: int) -> None:
     if rows > MAX_GRID_ROWS or columns > MAX_GRID_COLUMNS or rows * columns > MAX_GRID_CELLS:
-        raise ValueError("来源范围超出预览限制（10000 行、256 列、250000 个单元格），请缩小工作表范围。")
+        raise ValueError(_("来源范围超出预览限制（10000 行、256 列、250000 个单元格），请缩小工作表范围。"))
 
 
 class PackingSheetNotFound(ValueError):
@@ -80,7 +87,7 @@ def build_grid_from_dingtalk_snapshot(snapshot: dict[str, Any]) -> dict[str, Any
     """把阿里云缓存的 schema v1 JSON 转为统一网格，不猜测不存在的合并范围。"""
 
     if snapshot.get("schemaVersion", snapshot.get("schema_version")) != 1:
-        raise ValueError("仅支持 schema version 1 的钉钉表格快照。")
+        raise ValueError(_("仅支持 schema version 1 的钉钉表格快照。"))
 
     parts = [snapshot] if snapshot.get("values") or not snapshot.get("chunks") else snapshot["chunks"]
     values = _snapshot_matrix(parts, "values")
@@ -117,7 +124,7 @@ def build_grid_from_dingtalk_snapshot(snapshot: dict[str, Any]) -> dict[str, Any
     for region in normalized_merges:
         if not (1 <= region['start_row'] <= region['end_row'] <= row_count
                 and 1 <= region['start_column'] <= region['end_column'] <= column_count):
-            raise ValueError("来源合并范围超出实际快照，请刷新完整来源后重新预览。")
+            raise ValueError(_("来源合并范围超出实际快照，请刷新完整来源后重新预览。"))
     merge_ranges_available = bool(
         snapshot.get("mergeRangesAvailable", snapshot.get("merge_ranges_available", False))
     )
@@ -150,11 +157,11 @@ def _snapshot_matrix(parts: list[dict[str, Any]], key: str, alias: str | None = 
     for part in parts:
         matrix = part.get(key, part.get(alias) if alias else None) or []
         if not isinstance(matrix, list) or any(not isinstance(row, list) for row in matrix):
-            raise ValueError("来源范围必须是二维单元格数组。")
+            raise ValueError(_("来源范围必须是二维单元格数组。"))
         address = str(part.get("rangeAddress", part.get("range_address")) or "A1").rsplit("!", 1)[-1]
         match = re.fullmatch(r"\$?([A-Za-z]{1,3})\$?([1-9][0-9]{0,6})(?::\$?[A-Za-z]{1,3}\$?[1-9][0-9]{0,6})?", address)
         if not match:
-            raise ValueError("来源单元格范围缺少有效工作表坐标。")
+            raise ValueError(_("来源单元格范围缺少有效工作表坐标。"))
         column_number = 0
         for letter in match.group(1).upper():
             column_number = column_number * 26 + ord(letter) - ord("A") + 1
@@ -181,7 +188,7 @@ def _matrix_value(matrix: list[list[Any]], row: int, column: int) -> Any:
 
 def _normalize_merge_range(item: Any, default_evidence: str) -> dict[str, Any]:
     if not isinstance(item, dict):
-        raise ValueError("非法的合并单元格范围。")
+        raise ValueError(_("非法的合并单元格范围。"))
     return dataclass_dict(
         MergeRange(
             start_row=int(item.get("start_row", item.get("startRow"))),
@@ -228,18 +235,18 @@ def review_packing_grid(grid: dict[str, Any], source_hash: str, reviews: Any = N
         reviews = {"source_hash": source_hash, "ranges": []}
     if isinstance(reviews, str):
         if len(reviews.encode("utf-8")) > 100_000:
-            raise ValueError("合并复核内容过大。")
+            raise ValueError(_("合并复核内容过大。"))
         try:
             reviews = json.loads(reviews)
         except (TypeError, ValueError) as error:
-            raise ValueError("合并复核必须是有效 JSON 对象。") from error
+            raise ValueError(_("合并复核必须是有效 JSON 对象。")) from error
     if not isinstance(reviews, dict) or set(reviews) - {"source_hash", "ranges"}:
-        raise ValueError("合并复核必须是包含来源哈希和 ranges 的对象。")
+        raise ValueError(_("合并复核必须是包含来源哈希和 ranges 的对象。"))
     if str(reviews.get("source_hash") or "") != source_hash:
-        raise ValueError("来源已变化，合并复核的来源哈希不一致，请重新预览。")
+        raise ValueError(_("来源已变化，合并复核的来源哈希不一致，请重新预览。"))
     ranges = reviews.get("ranges")
     if not isinstance(ranges, list) or len(ranges) > 500:
-        raise ValueError("合并复核 ranges 必须是最多 500 项的数组。")
+        raise ValueError(_("合并复核 ranges 必须是最多 500 项的数组。"))
     parsed = parse_packing_grid(grid)
     columns = {item["column"]: item["field"] for item in parsed.get("columns") or []}
     rows = {int(row["source_row"]) for row in parsed.get("material_rows") or []}
@@ -249,38 +256,38 @@ def review_packing_grid(grid: dict[str, Any], source_hash: str, reviews: Any = N
     for item in ranges:
         if (not isinstance(item, dict) or set(item) != {*RANGE_KEYS, "action"}
                 or any(type(item.get(key)) is not int for key in RANGE_KEYS)):
-            raise ValueError("合并复核范围必须提供整数行列坐标和操作。")
+            raise ValueError(_("合并复核范围必须提供整数行列坐标和操作。"))
         coords = range_coordinates(item)
         start, end, left, right = (coords[key] for key in RANGE_KEYS)
         if (start < 1 or end <= start or end > len(cells) or left < 1 or right < left
                 or any(column not in columns for column in range(left, right + 1))
                 or any(row not in rows for row in range(start, end + 1))
                 or any(right > len(cells[row - 1]) for row in range(start, end + 1))):
-            raise ValueError("合并复核范围越界，或包含表头、空白分隔行及未识别字段。")
+            raise ValueError(_("合并复核范围越界，或包含表头、空白分隔行及未识别字段。"))
         if not isinstance(item["action"], str) or item["action"] not in {"confirm", "separate"}:
-            raise ValueError("合并复核操作只能是 confirm 或 separate。")
+            raise ValueError(_("合并复核操作只能是 confirm 或 separate。"))
         if any(ranges_overlap(coords, existing) for existing in source_merges):
-            raise ValueError("不能覆盖来源提供的真实合并范围。")
+            raise ValueError(_("不能覆盖来源提供的真实合并范围。"))
         if any(ranges_overlap(coords, existing) for existing in normalized):
-            raise ValueError("合并复核范围不能重叠。")
+            raise ValueError(_("合并复核范围不能重叠。"))
         # A rectangular selection is evidence for each semantic column, never a
         # horizontal merge that could make an identity value become a weight.
         for column in range(left, right + 1):
             if item["action"] == "confirm":
                 anchor = cells[start - 1][column - 1]
                 if anchor.get("raw_value") in (None, ""):
-                    raise ValueError("确认合并范围的首行必须有来源原值，不能猜算空白或公式。")
+                    raise ValueError(_("确认合并范围的首行必须有来源原值，不能猜算空白或公式。"))
                 for row in range(start, end + 1):
                     cell = cells[row - 1][column - 1]
                     raw = cell.get("raw_value")
                     if cell.get("formula") and raw is None:
-                        raise ValueError("确认合并范围包含没有缓存结果的公式。")
+                        raise ValueError(_("确认合并范围包含没有缓存结果的公式。"))
                     numeric = columns[column] in {*PHYSICAL_FIELDS, "quantity", "chargeable_weight_kg"}
                     if raw not in (None, "") and not _same_anchor(anchor["raw_value"], raw, numeric=numeric):
-                        raise ValueError("确认合并范围包含相互冲突的非空原值。")
+                        raise ValueError(_("确认合并范围包含相互冲突的非空原值。"))
             normalized.append({**coords, "start_column": column, "end_column": column, "action": item["action"]})
     if len(normalized) > 500:
-        raise ValueError("按字段展开的合并复核范围不能超过 500 项。")
+        raise ValueError(_("按字段展开的合并复核范围不能超过 500 项。"))
     normalized.sort(key=lambda item: (item["start_row"], item["start_column"], item["end_row"]))
     result = copy.deepcopy(grid)
     result["merge_reviews"] = {"source_hash": source_hash, "ranges": normalized}

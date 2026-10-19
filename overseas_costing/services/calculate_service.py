@@ -12,6 +12,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 from overseas_costing.services import (
     allocation_service,
     audit_service,
@@ -354,12 +361,12 @@ def _coerce_edit_value(fieldname: str, value, *, supplier_catalog=None):
         try:
             amount = Decimal(str(value))
         except (InvalidOperation, TypeError, ValueError):
-            raise ValueError("本次发货货值必须是有限非负数字。") from None
+            raise ValueError(_("本次发货货值必须是有限非负数字。")) from None
         if not amount.is_finite() or amount < 0:
-            raise ValueError("本次发货货值必须是有限非负数字。")
+            raise ValueError(_("本次发货货值必须是有限非负数字。"))
         storage_value = float(amount)
         if not Decimal(str(storage_value)).is_finite():
-            raise ValueError("本次发货货值必须是有限非负数字。")
+            raise ValueError(_("本次发货货值必须是有限非负数字。"))
         return storage_value
     if fieldname in NUMERIC_ITEM_FIELDS:
         return _to_float(value)
@@ -369,7 +376,7 @@ def _coerce_edit_value(fieldname: str, value, *, supplier_catalog=None):
         text = str(value or "").strip()
         text = SELECT_ITEM_ALIASES.get(fieldname, {}).get(text, text.upper())
         if text and text not in SELECT_ITEM_OPTIONS[fieldname]:
-            raise ValueError(f"字段 {fieldname} 的值 {text} 不在允许范围内。")
+            raise ValueError(_("字段 {0} 的值 {1} 不在允许范围内。").format(fieldname, text))
         return text
     if fieldname == "supplier":
         return validate_canonical_supplier(value, suppliers=supplier_catalog)
@@ -400,7 +407,7 @@ def assert_server_metadata_unchanged(previous, proposed, *, fields=SERVER_ITEM_M
     before = _json.dumps(_server_metadata_fields(previous, fields), sort_keys=True, default=str)
     after = _json.dumps(_server_metadata_fields(proposed, fields), sort_keys=True, default=str)
     if before != after:
-        raise ValueError("服务器来源元数据不能通过普通编辑修改，请重新分析资料并确认。")
+        raise ValueError(_("服务器来源元数据不能通过普通编辑修改，请重新分析资料并确认。"))
 
 
 def _validate_edit_field(fieldname: str, remark: str = "") -> tuple[bool, str, str]:
@@ -435,7 +442,7 @@ def _load_updates_payload(updates) -> list[dict]:
         return [loaded_updates]
     if isinstance(loaded_updates, list):
         return loaded_updates
-    raise ValueError("批量更新参数必须是 JSON 对象或对象数组。")
+    raise ValueError(_("批量更新参数必须是 JSON 对象或对象数组。"))
 
 
 def _preview_update_result(update: dict, default_remark: str = "") -> dict:
@@ -493,7 +500,7 @@ def _load_payload(payload) -> dict:
     else:
         loaded = payload
     if not isinstance(loaded, dict):
-        raise ValueError("参数必须是 JSON 对象。")
+        raise ValueError(_("参数必须是 JSON 对象。"))
     return loaded
 
 
@@ -550,16 +557,16 @@ def _decimal(value, label: str = "金额") -> Decimal:
     try:
         result = Decimal(str(value))
     except (InvalidOperation, TypeError, ValueError):
-        raise CalculationValidationError(f"{label}缺失或无效，不能计算。") from None
+        raise CalculationValidationError(_("{0}缺失或无效，不能计算。").format(label)) from None
     if not result.is_finite():
-        raise CalculationValidationError(f"{label}必须是有限数值，不能计算。")
+        raise CalculationValidationError(_("{0}必须是有限数值，不能计算。").format(label))
     return result
 
 
 def _positive_fx(value, label: str) -> Decimal:
     result = _decimal(value, f"{label}汇率")
     if result <= 0:
-        raise CalculationValidationError(f"{label}汇率必须大于 0，不能计算。")
+        raise CalculationValidationError(_("{0}汇率必须大于 0，不能计算。").format(label))
     return result
 
 
@@ -591,7 +598,7 @@ def _amount_to_rmb(amount, currency: str | None, fx_rmb_to_mxn, fx_usd_to_rmb) -
         return amount * _positive_fx(fx_usd_to_rmb, "USD/RMB")
     if currency_code == "RMB":
         return amount
-    raise CalculationValidationError(f"费用币种缺失或不支持：{currency or '未提供'}。")
+    raise CalculationValidationError(_("费用币种缺失或不支持：{0}。").format(currency or '未提供'))
 
 
 def _rule_scopes(rule: dict) -> set[str]:
@@ -615,16 +622,16 @@ def _select_calculation_rules(items: list[dict], rules: list[dict]) -> tuple[lis
     scope_sources = {}
     for rule in final_rules:
         if not _is_rule_enabled(rule):
-            raise CalculationValidationError("最终结算规则已停用或来源失效，不能恢复旧估值；请核对结算来源。")
+            raise CalculationValidationError(_("最终结算规则已停用或来源失效，不能恢复旧估值；请核对结算来源。"))
         scopes = _rule_scopes(rule)
         if not rule.get("covered_scopes") or not scopes or scopes - FINAL_SCOPES:
-            raise CalculationValidationError("最终结算费用覆盖范围缺失或无效。")
+            raise CalculationValidationError(_("最终结算费用覆盖范围缺失或无效。"))
         source = (str(rule.get("source_binding_id") or "").strip(), str(rule.get("source_snapshot") or "").strip())
         if not all(source):
-            raise CalculationValidationError("最终结算来源绑定或来源快照缺失。")
+            raise CalculationValidationError(_("最终结算来源绑定或来源快照缺失。"))
         for scope in scopes:
             if scope in scope_sources and scope_sources[scope] != source:
-                raise CalculationValidationError("同一费用范围存在多个最终结算来源或快照，不能重复计费。")
+                raise CalculationValidationError(_("同一费用范围存在多个最终结算来源或快照，不能重复计费。"))
             scope_sources[scope] = source
         _decimal(rule.get("amount"))
         covered.update(scopes)
@@ -636,7 +643,7 @@ def _select_calculation_rules(items: list[dict], rules: list[dict]) -> tuple[lis
         scopes = _rule_scopes(rule)
         if scopes & covered:
             if scopes - covered:
-                raise CalculationValidationError("旧费用池与最终结算覆盖范围部分交叉，无法拆分整笔费用。")
+                raise CalculationValidationError(_("旧费用池与最终结算覆盖范围部分交叉，无法拆分整笔费用。"))
             continue
         selected.append(rule)
     if final_rules or not selected:
@@ -658,7 +665,7 @@ def _allocate_pool(amount: Decimal, weights: list[Decimal], rows: list[dict]) ->
     if total <= 0:
         return [Decimal(0)] * len(rows)
     if any(weight < 0 for weight in weights):
-        raise CalculationValidationError("分摊依据不能为负数。")
+        raise CalculationValidationError(_("分摊依据不能为负数。"))
     exact = [abs(amount) * weight / total for weight in weights]
     allocated = [value.quantize(MONEY_QUANTUM, rounding=ROUND_DOWN) for value in exact]
     remainder_units = int((abs(amount) - sum(allocated, Decimal(0))) / MONEY_QUANTUM)
@@ -881,7 +888,7 @@ def _direct_customs_amounts(
         customs_rmb = _decimal(row.get("mexico_customs_rmb") or 0)
         customs_usd = _decimal(row.get("mexico_customs_usd") or 0)
         if covered and any((customs_mxn, customs_rmb, customs_usd)):
-            raise CalculationValidationError("清关总额与最终结算覆盖范围部分交叉，需明确税费与服务费拆分。")
+            raise CalculationValidationError(_("清关总额与最终结算覆盖范围部分交叉，需明确税费与服务费拆分。"))
         if not customs_mxn and not customs_rmb and customs_usd:
             customs_rmb = _amount_to_rmb(customs_usd, "USD", fx_rmb_to_mxn, fx_usd_to_rmb)
             source = "墨西哥清关费用 USD"
@@ -923,7 +930,7 @@ def _basis_decimal(item: dict, basis: str) -> Decimal:
                                _decimal(item.get("volume_weight_kg") or 0, "体积重"))
     fields = {"goods_value": "goods_value", "gross_weight": "gross_weight_kg", "volume": "volume_m3"}
     if basis not in fields:
-        raise CalculationValidationError(f"不支持的分摊依据：{basis}。")
+        raise CalculationValidationError(_("不支持的分摊依据：{0}。").format(basis))
     return _decimal(item.get(fields[basis]) or 0, "分摊依据")
 
 
@@ -1370,7 +1377,7 @@ def _item_version_context(batch_name, item_version, requested_version=None):
     """锁定并返回「批次 + 版本」的写入上下文，供下面两档门槛共用（只查一次库）。"""
 
     if requested_version and requested_version != item_version:
-        raise ValueError('物料不属于所选版本，请刷新当前调整草稿。')
+        raise ValueError(_('物料不属于所选版本，请刷新当前调整草稿。'))
     rows = _frappe.db.sql(
         "SELECT b.current_version, b.confirm_status, b.writeback_status, v.status AS version_status "
         "FROM `tabOverseas Cost Batch` b JOIN `tabOverseas Cost Version` v ON v.batch=b.name "
@@ -1405,10 +1412,10 @@ def _assert_current_item_version(batch_name, item_version, requested_version=Non
     if reference_fields:
         if (context.get('current_version') != item_version
                 or str(context.get('version_status') or '') in {'', 'Archived'}):
-            raise ValueError('只能维护当前版本的供应商与项目归属，历史或归档版本请创建调整草稿。')
+            raise ValueError(_('只能维护当前版本的供应商与项目归属，历史或归档版本请创建调整草稿。'))
         return context
     if not _version_allows_cost_edits(context, item_version):
-        raise ValueError('只能编辑当前未确认的活动版本，历史版本请创建调整草稿。')
+        raise ValueError(_('只能编辑当前未确认的活动版本，历史版本请创建调整草稿。'))
     return context
 
 
@@ -2497,7 +2504,7 @@ def update_allocation_rule(batch_name: str, version_name: str, rule_payload: str
         return {"ok": False, "message": f"未找到批次：{batch_name}"}
     version_batch = _frappe.db.get_value("Overseas Cost Version", version_name, "batch")
     if version_batch != batch_doc_name:
-        raise ValueError("分摊规则的版本不存在或不属于当前批次。")
+        raise ValueError(_("分摊规则的版本不存在或不属于当前批次。"))
 
     payload = _json.loads(rule_payload or "{}")
     rule_name = payload.get("rule_id") or payload.get("name")
@@ -2530,9 +2537,9 @@ def update_allocation_rule(batch_name: str, version_name: str, rule_payload: str
         ["batch", "version", "scope_value_json", "scope_type", "allocation_basis", "basis_field"], as_dict=True,
     ) or {}) if rule_name else {}
     if rule_name and not previous:
-        raise ValueError("分摊规则不存在，请刷新后重试。")
+        raise ValueError(_("分摊规则不存在，请刷新后重试。"))
     if rule_name and (previous.get("batch") != batch_doc_name or previous.get("version") != version_name):
-        raise ValueError("分摊规则不属于当前批次和版本，不能迁移已有规则。")
+        raise ValueError(_("分摊规则不属于当前批次和版本，不能迁移已有规则。"))
     previous_scope = previous.get("scope_value_json")
     assert_server_metadata_unchanged(
         previous_scope, payload.get("scope_value_json", previous_scope), fields=("project_allocation",)
@@ -2542,7 +2549,7 @@ def update_allocation_rule(batch_name: str, version_name: str, rule_payload: str
         for field, expected in (("scope_type", "ALL_ITEMS"), ("allocation_basis", "gross_weight"),
                                 ("basis_field", "gross_weight"))
     ):
-        raise ValueError("已确认的项目毛重规则不能变更为其他范围或依据。")
+        raise ValueError(_("已确认的项目毛重规则不能变更为其他范围或依据。"))
 
     from overseas_costing.services import fee_service
     from overseas_costing.services.logistics_settlement.fee_policy import assert_fee_edit_allowed

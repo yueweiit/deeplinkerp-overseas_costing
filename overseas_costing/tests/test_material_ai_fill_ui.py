@@ -52,8 +52,8 @@ def test_material_toolbar_groups_view_and_data_actions_with_ai_as_only_primary()
     ) < render.index("${this.renderMaterialAIClarification()}")
     assert 'class="ocw-mf-material-toolgroup is-view"' in toolbar
     assert 'class="ocw-mf-material-toolgroup is-data"' in toolbar
-    assert 'class="ocw-mf-material-tool-label">视图' in toolbar
-    assert 'class="ocw-mf-material-tool-label">资料' in toolbar
+    assert 'class="ocw-mf-material-tool-label">${ocTranslate("视图")}' in toolbar
+    assert 'class="ocw-mf-material-tool-label">${ocTranslate("资料")}' in toolbar
     assert "获取装箱资料" in render
     assert 'class="ocw-outline-btn" type="button" data-action="mf-import-wiki"' in toolbar
     assert 'class="ocw-primary-btn" type="button" data-action="mf-ai-fill"' in toolbar
@@ -383,8 +383,8 @@ def test_ai_progress_dialog_becomes_wide_confirmation_with_fixed_actions() -> No
     assert "系统直读" in source
     assert "AI 识别" in source
     assert "materialAIPhysicalSummary" in source
-    assert "净重 ${this.escape(physical.netWeight)} kg" in source
-    assert "毛重 ${this.escape(physical.grossWeight)} kg" in source
+    assert 'ocTranslate("净重 {0} kg", [this.escape(physical.netWeight)])' in source
+    assert 'ocTranslate("毛重 {0} kg", [this.escape(physical.grossWeight)])' in source
     assert "资料来源" in source
     assert "material_proposal_count" in source
     assert "packing_proposal_count" in source

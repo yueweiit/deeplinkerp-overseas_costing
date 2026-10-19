@@ -2,46 +2,46 @@
   openOaLogisticsPullDialog() {
     const defaults = this.getDefaultPullDateRange();
     const dialog = new frappe.ui.Dialog({
-      title: "拉取钉钉国际物流审批",
+      title: ocTranslate("拉取钉钉国际物流审批"),
       fields: [
         {
           fieldtype: "HTML",
           fieldname: "settlement_history",
-          options: `<div class="ocw-pull-note"><strong>物流类采购支出结算</strong><span>匹配全部已归档历史采购支出，不受下方日期、运输方式和条数限制。</span><div class="ocw-settlement-toolbar"><button type="button" class="ocw-outline-btn" data-action="settlement-history">一键匹配历史采购支出</button><button type="button" class="ocw-outline-btn" data-action="settlement-history-status">查看匹配进度与结果</button></div></div>`,
+          options: `<div class="ocw-pull-note"><strong>${ocTranslate("物流类采购支出结算")}</strong><span>${ocTranslate("匹配全部已归档历史采购支出，不受下方日期、运输方式和条数限制。")}</span><div class="ocw-settlement-toolbar"><button type="button" class="ocw-outline-btn" data-action="settlement-history">${ocTranslate("一键匹配历史采购支出")}</button><button type="button" class="ocw-outline-btn" data-action="settlement-history-status">${ocTranslate("查看匹配进度与结果")}</button></div></div>`,
         },
         {
           fieldtype: "HTML",
           fieldname: "pull_note",
           options: `
             <div class="ocw-pull-note">
-              <strong>只补拉钉钉国际物流审批单</strong>
-              <span>新单会创建批次，已有单据只更新追溯、附件、采购字段和明确费用，不会清空或删除已有批次。</span>
+              <strong>${ocTranslate("只补拉钉钉国际物流审批单")}</strong>
+              <span>${ocTranslate("新单会创建批次，已有单据只更新追溯、附件、采购字段和明确费用，不会清空或删除已有批次。")}</span>
             </div>
           `,
         },
-        { fieldtype: "Date", fieldname: "start", label: "开始日期", default: defaults.start_date, reqd: 1 },
-        { fieldtype: "Date", fieldname: "end", label: "结束日期", default: defaults.end_date, reqd: 1 },
+        { fieldtype: "Date", fieldname: "start", label: ocTranslate("开始日期"), default: defaults.start_date, reqd: 1 },
+        { fieldtype: "Date", fieldname: "end", label: ocTranslate("结束日期"), default: defaults.end_date, reqd: 1 },
         {
           fieldtype: "Select",
           fieldname: "transport_modes",
-          label: "运输方式",
+          label: ocTranslate("运输方式"),
           options: "全部\n海运\n空运\n快递",
           default: "全部",
         },
         {
           fieldtype: "Int",
           fieldname: "limit",
-          label: "最多读取审批单数",
+          label: ocTranslate("最多读取审批单数"),
           default: 80,
-          description: "默认读取近一个月内最多 80 条审批详情，避免一次拉取过多导致等待太久。",
+          description: ocTranslate("默认读取近一个月内最多 80 条审批详情，避免一次拉取过多导致等待太久。"),
         },
         {
           fieldtype: "HTML",
           fieldname: "pull_result",
-          options: `<div class="ocw-pull-result empty" data-area="oa-pull-result">尚未开始拉取</div>`,
+          options: `<div class="ocw-pull-result empty" data-area="oa-pull-result">${ocTranslate("尚未开始拉取")}</div>`,
         },
       ],
-      primary_action_label: "开始拉取",
+      primary_action_label: ocTranslate("开始拉取"),
       primary_action: async (values) => {
         await this.pullOaLogisticsApprovals(dialog, values || {});
       },
@@ -56,7 +56,7 @@
 
   async pullOaLogisticsApprovals(dialog, values) {
     if (dialog.$wrapper.data("ocw-pull-completed") && !values.force) {
-      frappe.confirm("刚刚已经完成一次拉取，确认要按当前日期范围重新拉取吗？", () => {
+      frappe.confirm(ocTranslate("刚刚已经完成一次拉取，确认要按当前日期范围重新拉取吗？"), () => {
         this.pullOaLogisticsApprovals(dialog, { ...values, force: true }).catch((error) => this.showError(error));
       });
       return;
@@ -64,7 +64,7 @@
     const start = String(values.start || "").trim();
     const end = String(values.end || "").trim();
     if (!start || !end) {
-      frappe.msgprint("请先选择开始日期和结束日期。");
+      frappe.msgprint(ocTranslate("请先选择开始日期和结束日期。"));
       return;
     }
     dialog.$wrapper.data("ocw-pull-completed", false);
@@ -84,17 +84,17 @@
       this.renderOaPullResult(dialog, result, result.skipped || !result?.ok ? "warn" : "ready");
       if (result.skipped) {
         this.setOaPullPrimaryState(dialog, "ready");
-        frappe.show_alert({ message: result.reason || "钉钉拉取已跳过", indicator: "orange" });
+        frappe.show_alert({ message: result.reason || ocTranslate("钉钉拉取已跳过"), indicator: "orange" });
         return;
       }
       if (!result?.ok) {
         const failedCount = Number(result.save?.failed_count || 0);
         throw new Error(
-          result.save?.message || `钉钉审批已读取，但有 ${failedCount || "部分"} 个批次保存失败，请查看失败明细。`
+          result.save?.message || ocTranslate("钉钉审批已读取，但有 {0} 个批次保存失败，请查看失败明细。", [failedCount || "部分"])
         );
       }
       const save = result.save || {};
-      const message = `钉钉拉取完成：新增 ${save.created_count || 0}，更新 ${save.updated_count || 0}，已存在 ${save.unchanged_count || 0}，跳过 ${save.skipped_count || 0}`;
+      const message = ocTranslate("钉钉拉取完成：新增 {0}，更新 {1}，已存在 {2}，跳过 {3}", [save.created_count || 0, save.updated_count || 0, save.unchanged_count || 0, save.skipped_count || 0]);
       this.recordUsage("DINGTALK_PULL", {
         remark: message,
         extra: { start, end, transport_modes: values.transport_modes || "ALL", limit: Number(values.limit || 80) || 80, save },
@@ -121,7 +121,7 @@
     const batch = this.findBatch(batchName || this.drawerBatchName || this.activeBatchName);
     if (!batch) return;
     const confirmed = await new Promise((resolve) => {
-      frappe.confirm("确认重新拉取这票货的钉钉原单并刷新页面数据？", () => resolve(true), () => resolve(false));
+      frappe.confirm(ocTranslate("确认重新拉取这票货的钉钉原单并刷新页面数据？"), () => resolve(true), () => resolve(false));
     });
     if (!confirmed) return;
     try {
@@ -142,7 +142,7 @@
         await this.loadBatches();
         this.renderTable();
       }
-      frappe.show_alert({ message: result.message || "钉钉原单已重新拉取", indicator: "green" });
+      frappe.show_alert({ message: result.message || ocTranslate("钉钉原单已重新拉取"), indicator: "green" });
     } catch (error) {
       this.showError(error);
     }
@@ -232,25 +232,25 @@
     const $button = dialog.get_primary_btn ? dialog.get_primary_btn() : dialog.$wrapper.find(".modal-footer .btn-primary");
     if (!$button || !$button.length) return;
     if (state === "running") {
-      $button.prop("disabled", true).text("拉取中...");
+      $button.prop("disabled", true).text(ocTranslate("拉取中..."));
       return;
     }
-    $button.prop("disabled", false).text(state === "completed" ? "重新拉取" : "开始拉取");
+    $button.prop("disabled", false).text(state === "completed" ? ocTranslate("重新拉取") : ocTranslate("开始拉取"));
   }
 
   renderOaPullResult(dialog, result, state = "empty") {
     const $target = dialog.$wrapper.find("[data-area='oa-pull-result']");
     $target.removeClass("empty loading ready warn");
     if (state === "loading") {
-      $target.addClass("loading").text("正在拉取钉钉审批单并写入成本批次...");
+      $target.addClass("loading").text(ocTranslate("正在拉取钉钉审批单并写入成本批次..."));
       return;
     }
     if (!result) {
-      $target.addClass("empty").text("尚未开始拉取");
+      $target.addClass("empty").text(ocTranslate("尚未开始拉取"));
       return;
     }
     if (result.skipped) {
-      $target.addClass("warn").html(`<strong>本次未执行拉取</strong><span>${this.escape(result.reason || "缺少钉钉配置")}</span>`);
+      $target.addClass("warn").html(`<strong>${ocTranslate("本次未执行拉取")}</strong><span>${this.escape(result.reason || ocTranslate("缺少钉钉配置"))}</span>`);
       return;
     }
     const pull = result.pull || {};
@@ -259,8 +259,8 @@
     if (!result.ok) {
       const failedCount = Number(save.failed_count || 0);
       $target.addClass("warn").html(
-        `<strong>拉取未完全成功</strong><span>${this.escape(
-          save.message || `有 ${failedCount || "部分"} 个批次保存失败，未标记为完成。`
+        `<strong>${ocTranslate("拉取未完全成功")}</strong><span>${this.escape(
+          save.message || ocTranslate("有 {0} 个批次保存失败，未标记为完成。", [failedCount || "部分"])
         )}</span>`
       );
       return;
@@ -272,23 +272,23 @@
       : "当前范围内审批单已在系统中，页面列表已刷新。";
     $target.addClass("ready").html(`
       <div class="ocw-pull-success-head">
-        <strong>拉取完成</strong>
-        <span>${this.escape(completionText)}需要再次执行时，请点击底部“重新拉取”。</span>
+        <strong>${ocTranslate("拉取完成")}</strong>
+        <span>${ocTranslate("{0}需要再次执行时，请点击底部“重新拉取”。", [this.escape(completionText)])}</span>
       </div>
       <div class="ocw-pull-result-grid">
-        <div><span>日期范围</span><strong>${this.escape(result.start || "--")} 至 ${this.escape(result.end || "--")}</strong></div>
-        <div><span>运输方式</span><strong>${this.escape(modeText)}</strong></div>
-        <div><span>读取详情</span><strong>${this.escape(String(pull.detail_count || 0))}</strong></div>
-        <div><span>命中国际物流</span><strong>${this.escape(String(pull.filtered_count || 0))}</strong></div>
-        <div><span>新增批次</span><strong>${this.escape(String(save.created_count || 0))}</strong></div>
-        <div><span>更新批次</span><strong>${this.escape(String(save.updated_count || 0))}</strong></div>
-        <div><span>已存在</span><strong>${this.escape(String(save.unchanged_count || 0))}</strong></div>
-        <div><span>跳过</span><strong>${this.escape(String(save.skipped_count || 0))}</strong></div>
+        <div><span>${ocTranslate("日期范围")}</span><strong>${ocTranslate("{0} 至 {1}", [this.escape(result.start || "--"), this.escape(result.end || "--")])}</strong></div>
+        <div><span>${ocTranslate("运输方式")}</span><strong>${this.escape(modeText)}</strong></div>
+        <div><span>${ocTranslate("读取详情")}</span><strong>${this.escape(String(pull.detail_count || 0))}</strong></div>
+        <div><span>${ocTranslate("命中国际物流")}</span><strong>${this.escape(String(pull.filtered_count || 0))}</strong></div>
+        <div><span>${ocTranslate("新增批次")}</span><strong>${this.escape(String(save.created_count || 0))}</strong></div>
+        <div><span>${ocTranslate("更新批次")}</span><strong>${this.escape(String(save.updated_count || 0))}</strong></div>
+        <div><span>${ocTranslate("已存在")}</span><strong>${this.escape(String(save.unchanged_count || 0))}</strong></div>
+        <div><span>${ocTranslate("跳过")}</span><strong>${this.escape(String(save.skipped_count || 0))}</strong></div>
       </div>
       <div class="ocw-pull-mode-counts">
-        <span>海运 ${this.escape(String(counts.SEA || 0))}</span>
-        <span>空运 ${this.escape(String(counts.AIR || 0))}</span>
-        <span>快递 ${this.escape(String(counts.EXPRESS || 0))}</span>
+        <span>${ocTranslate("海运 {0}", [this.escape(String(counts.SEA || 0))])}</span>
+        <span>${ocTranslate("空运 {0}", [this.escape(String(counts.AIR || 0))])}</span>
+        <span>${ocTranslate("快递 {0}", [this.escape(String(counts.EXPRESS || 0))])}</span>
       </div>
     `);
   }
@@ -303,45 +303,45 @@
 
   openImportDialog() {
     const dialog = new frappe.ui.Dialog({
-      title: "批量 Excel 导入/解析",
+      title: ocTranslate("批量 Excel 导入/解析"),
       fields: [
         {
           fieldtype: "HTML",
           fieldname: "file_picker",
           options: `
             <div class="ocw-import-file-box">
-              <label class="ocw-import-file-label">上传 Excel 文件</label>
+              <label class="ocw-import-file-label">${ocTranslate("上传 Excel 文件")}</label>
               <div class="ocw-import-dropzone" data-import-dropzone="1" tabindex="0">
                 <input class="ocw-import-file-input" type="file" accept=".xlsx,.xlsm" />
                 <div class="ocw-import-drop-icon">XLSX</div>
                 <div>
-                  <strong data-area="import-file-name">拖放文件到这里，或点击选择</strong>
-                  <span>支持 .xlsx / .xlsm</span>
+                  <strong data-area="import-file-name">${ocTranslate("拖放文件到这里，或点击选择")}</strong>
+                  <span>${ocTranslate("支持 .xlsx / .xlsm")}</span>
                 </div>
               </div>
               <div class="ocw-import-preview-actions">
-                <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="preview-import">解析预览</button>
-                <span data-area="import-preview-status">选择文件后可先预览，不会写入数据。</span>
+                <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="preview-import">${ocTranslate("解析预览")}</button>
+                <span data-area="import-preview-status">${ocTranslate("选择文件后可先预览，不会写入数据。")}</span>
               </div>
-              <div class="ocw-import-preview empty" data-area="import-preview">尚未解析</div>
+              <div class="ocw-import-preview empty" data-area="import-preview">${ocTranslate("尚未解析")}</div>
             </div>
           `,
         },
         {
           fieldtype: "Data",
           fieldname: "source_sheet",
-          label: "工作表名称",
+          label: ocTranslate("工作表名称"),
           default: "",
-          description: "可留空自动识别。只有需要指定某个工作表时再填写 Excel 底部标签名。",
+          description: ocTranslate("可留空自动识别。只有需要指定某个工作表时再填写 Excel 底部标签名。"),
         },
         {
           fieldtype: "Check",
           fieldname: "include_double_clear",
-          label: "包含双清/包税数据",
+          label: ocTranslate("包含双清/包税数据"),
           default: 1,
         },
       ],
-      primary_action_label: "导入",
+      primary_action_label: ocTranslate("导入"),
       primary_action: async (values) => {
         const file = this.getImportDialogFile(dialog);
         if (!this.validateImportFile(file)) return;
@@ -368,33 +368,33 @@
     }
     const batchLabel = batch.batch_no || batch.source_approval_no || batch.customs_no || batch.name;
     const dialog = new frappe.ui.Dialog({
-      title: `单批次 Excel 补充 · ${batchLabel}`,
+      title: ocTranslate("单批次 Excel 补充 · {0}", [batchLabel]),
       fields: [
         {
           fieldtype: "HTML",
           fieldname: "batch_supplement_file",
           options: `
             <div class="ocw-import-file-box ocw-batch-supplement-box">
-              <div class="ocw-scope-warning"><strong>仅写入当前批次</strong><span>${this.escape(batchLabel)}</span><small>文件中只要出现其他批次，整次操作就会被拒绝。</small></div>
-              <label class="ocw-import-file-label">选择补充文件</label>
+              <div class="ocw-scope-warning"><strong>${ocTranslate("仅写入当前批次")}</strong><span>${this.escape(batchLabel)}</span><small>${ocTranslate("文件中只要出现其他批次，整次操作就会被拒绝。")}</small></div>
+              <label class="ocw-import-file-label">${ocTranslate("选择补充文件")}</label>
               <div class="ocw-import-dropzone" data-batch-supplement-dropzone="1" tabindex="0">
                 <input class="ocw-import-file-input" type="file" accept=".xlsx,.xlsm" />
                 <div class="ocw-import-drop-icon">XLSX</div>
-                <div><strong data-area="import-file-name">拖放文件到这里，或点击选择</strong><span>上传后必须先预览作用范围</span></div>
+                <div><strong data-area="import-file-name">${ocTranslate("拖放文件到这里，或点击选择")}</strong><span>${ocTranslate("上传后必须先预览作用范围")}</span></div>
               </div>
-              <div class="ocw-import-preview-actions"><button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="preview-batch-supplement">预览作用范围</button><span data-area="import-preview-status">尚未预览，不会写入数据。</span></div>
-              <div class="ocw-import-preview empty" data-area="import-preview">尚未预览</div>
+              <div class="ocw-import-preview-actions"><button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="preview-batch-supplement">${ocTranslate("预览作用范围")}</button><span data-area="import-preview-status">${ocTranslate("尚未预览，不会写入数据。")}</span></div>
+              <div class="ocw-import-preview empty" data-area="import-preview">${ocTranslate("尚未预览")}</div>
             </div>
           `,
         },
-        { fieldtype: "Data", fieldname: "source_sheet", label: "工作表名称", description: "可留空自动识别。" },
+        { fieldtype: "Data", fieldname: "source_sheet", label: ocTranslate("工作表名称"), description: ocTranslate("可留空自动识别。") },
       ],
-      primary_action_label: `补充当前批次 ${batchLabel}`,
+      primary_action_label: ocTranslate("补充当前批次 {0}", [batchLabel]),
       primary_action: async (values) => {
         const preview = dialog.$wrapper.data("ocw-batch-supplement-preview");
         const uploaded = dialog.$wrapper.data("ocw-import-upload") || {};
         if (!preview || !preview.ok || !uploaded.file_url) {
-          frappe.msgprint("请先预览并确认文件只属于当前批次。");
+          frappe.msgprint(ocTranslate("请先预览并确认文件只属于当前批次。"));
           return;
         }
         if (!(await this.ensureEditSession())) return;
@@ -410,12 +410,12 @@
           true
         );
         if (!result || !result.ok) {
-          this.renderBatchSupplementPreview(dialog, result || { ok: false, message: "补充失败。" });
+          this.renderBatchSupplementPreview(dialog, result || { ok: false, message: ocTranslate("补充失败。") });
           return;
         }
         this.acceptBatchWriteRevision?.(result.batch_modified);
         dialog.hide();
-        frappe.show_alert({ message: result.message || "当前批次已补充", indicator: "green" });
+        frappe.show_alert({ message: result.message || ocTranslate("当前批次已补充"), indicator: "green" });
         await this.openBatchDetail(batch.name, "items", { updateUrl: false });
       },
     });
@@ -469,32 +469,32 @@
     const $status = dialog.$wrapper.find("[data-area='import-preview-status']");
     $preview.removeClass("empty loading ready warn");
     if (!result) {
-      $status.text("尚未预览，不会写入数据。");
-      $preview.addClass("empty").text("尚未预览");
+      $status.text(ocTranslate("尚未预览，不会写入数据。"));
+      $preview.addClass("empty").text(ocTranslate("尚未预览"));
       return;
     }
     if (result.loading) {
-      $status.text("正在上传并校验批次范围…");
-      $preview.addClass("loading").text("校验中");
+      $status.text(ocTranslate("正在上传并校验批次范围…"));
+      $preview.addClass("loading").text(ocTranslate("校验中"));
       return;
     }
     if (!result.ok) {
       const foreign = (result.foreign_batches || []).map((value) => `<span>${this.escape(value)}</span>`).join("");
-      $status.text("文件未通过作用范围校验。");
-      $preview.addClass("warn").html(`<strong>文件包含其他批次，未写入任何数据</strong><p>${this.escape(result.message || "")}</p><div class="ocw-import-preview-batches">${foreign}</div>`);
+      $status.text(ocTranslate("文件未通过作用范围校验。"));
+      $preview.addClass("warn").html(`<strong>${ocTranslate("文件包含其他批次，未写入任何数据")}</strong><p>${this.escape(result.message || "")}</p><div class="ocw-import-preview-batches">${foreign}</div>`);
       return;
     }
     const fields = (result.changed_fields || []).slice(0, 12);
-    $status.text("作用范围校验通过，可补充当前批次。");
+    $status.text(ocTranslate("作用范围校验通过，可补充当前批次。"));
     $preview.addClass("ready").html(`
       <div class="ocw-import-preview-grid">
-        <div><span>目标批次</span><strong>${this.escape(result.batch_name || result.batch_doc_name || "--")}</strong></div>
-        <div><span>SKU 行数</span><strong>${Number(result.sku_count || 0)}</strong></div>
-        <div><span>将补充字段</span><strong>${Number((result.changed_fields || []).length)}</strong></div>
-        <div><span>冲突</span><strong>${Number((result.conflicts || []).length)}</strong></div>
-        <div><span>跳过</span><strong>${Number((result.skipped_items || []).length)}</strong></div>
+        <div><span>${ocTranslate("目标批次")}</span><strong>${this.escape(result.batch_name || result.batch_doc_name || "--")}</strong></div>
+        <div><span>${ocTranslate("SKU 行数")}</span><strong>${Number(result.sku_count || 0)}</strong></div>
+        <div><span>${ocTranslate("将补充字段")}</span><strong>${Number((result.changed_fields || []).length)}</strong></div>
+        <div><span>${ocTranslate("冲突")}</span><strong>${Number((result.conflicts || []).length)}</strong></div>
+        <div><span>${ocTranslate("跳过")}</span><strong>${Number((result.skipped_items || []).length)}</strong></div>
       </div>
-      <div class="ocw-import-preview-batches">${fields.map((field) => `<span>${this.escape(field)}</span>`).join("") || "<span>无可补充字段</span>"}</div>
+      <div class="ocw-import-preview-batches">${fields.map((field) => `<span>${this.escape(field)}</span>`).join("") || `<span>${ocTranslate("无可补充字段")}</span>`}</div>
     `);
   }
 
@@ -543,11 +543,11 @@
 
   validateImportFile(file) {
     if (!file) {
-      frappe.msgprint("请先上传 Excel 文件。");
+      frappe.msgprint(ocTranslate("请先上传 Excel 文件。"));
       return false;
     }
     if (!this.isExcelFileRef(file.name || "")) {
-      frappe.msgprint("请上传 .xlsx / .xlsm 格式的 Excel 文件。");
+      frappe.msgprint(ocTranslate("请上传 .xlsx / .xlsm 格式的 Excel 文件。"));
       return false;
     }
     return true;
@@ -601,13 +601,13 @@
     const $status = dialog.$wrapper.find("[data-area='import-preview-status']");
     $preview.removeClass("empty loading ready warn");
     if (state === "loading") {
-      $status.text("正在上传并解析文件...");
-      $preview.addClass("loading").text("解析中");
+      $status.text(ocTranslate("正在上传并解析文件..."));
+      $preview.addClass("loading").text(ocTranslate("解析中"));
       return;
     }
     if (!result) {
-      $status.text("选择文件后可先预览，不会写入数据。");
-      $preview.addClass("empty").text("尚未解析");
+      $status.text(ocTranslate("选择文件后可先预览，不会写入数据。"));
+      $preview.addClass("empty").text(ocTranslate("尚未解析"));
       return;
     }
 
@@ -617,24 +617,24 @@
     const batchIds = selected.batch_ids || [];
     const isEmpty = !Number(selected.block_count || 0);
     const visibleBatches = batchIds.slice(0, 5).map((batchId) => `<span>${this.escape(batchId)}</span>`).join("");
-    const moreText = batchIds.length > 5 ? `<em>等 ${this.escape(String(batchIds.length))} 个</em>` : "";
-    $status.text(isEmpty ? "已解析，但当前筛选未命中可导入批次。" : "预览完成，确认无误后点击导入。");
+    const moreText = batchIds.length > 5 ? `<em>${ocTranslate("等 {0} 个", [this.escape(String(batchIds.length))])}</em>` : "";
+    $status.text(isEmpty ? ocTranslate("已解析，但当前筛选未命中可导入批次。") : ocTranslate("预览完成，确认无误后点击导入。"));
     $preview.addClass(isEmpty ? "warn" : "ready").html(`
       <div class="ocw-import-preview-grid">
-        <div><span>工作表</span><strong>${this.escape(parser.sourceSheet || "--")}</strong></div>
-        <div><span>解析器</span><strong>${this.escape(this.parserLabel(parser.parser))}</strong></div>
-        <div><span>识别批次</span><strong>${this.escape(String(source.block_count || 0))}</strong></div>
-        <div><span>命中批次</span><strong>${this.escape(String(selected.block_count || 0))}</strong></div>
-        <div><span>SKU 行数</span><strong>${this.escape(String(selected.item_count || 0))}</strong></div>
+        <div><span>${ocTranslate("工作表")}</span><strong>${this.escape(parser.sourceSheet || "--")}</strong></div>
+        <div><span>${ocTranslate("解析器")}</span><strong>${this.escape(this.parserLabel(parser.parser))}</strong></div>
+        <div><span>${ocTranslate("识别批次")}</span><strong>${this.escape(String(source.block_count || 0))}</strong></div>
+        <div><span>${ocTranslate("命中批次")}</span><strong>${this.escape(String(selected.block_count || 0))}</strong></div>
+        <div><span>${ocTranslate("SKU 行数")}</span><strong>${this.escape(String(selected.item_count || 0))}</strong></div>
       </div>
-      <div class="ocw-import-preview-batches">${visibleBatches || "<span>无命中批次</span>"}${moreText}</div>
+      <div class="ocw-import-preview-batches">${visibleBatches || `<span>${ocTranslate("无命中批次")}</span>`}${moreText}</div>
     `);
   }
 
   parserLabel(parserName) {
     const labels = {
-      oa_attachment_detail: "国际物流附件",
-      yuewei_cost_workbook: "成本总表",
+      oa_attachment_detail: ocTranslate("国际物流附件"),
+      yuewei_cost_workbook: ocTranslate("成本总表"),
     };
     return labels[parserName] || parserName || "--";
   }
@@ -664,9 +664,9 @@
       const selected = result.selected_summary || {};
       const importStats = this.summarizeImportResult(result);
       const parser = result.parser_meta || {};
-      const parserHint = parser.sourceSheet ? `，工作表：${parser.sourceSheet}` : "";
+      const parserHint = parser.sourceSheet ? ocTranslate("，工作表：{0}", [parser.sourceSheet]) : "";
       frappe.show_alert({
-        message: `导入完成：${selected.block_count || 0} 个批次，${selected.item_count || 0} 行${parserHint}；${importStats}`,
+        message: ocTranslate("导入完成：{0} 个批次，{1} 行{2}；{3}", [selected.block_count || 0, selected.item_count || 0, parserHint, importStats]),
         indicator: "green",
       });
       this.lastImportResult = result;
@@ -688,7 +688,7 @@
 
     const message = await this.uploadFileRequest(formData);
     if (!message.file_url) {
-      throw new Error("Excel 文件已上传，但没有返回文件地址。");
+      throw new Error(ocTranslate("Excel 文件已上传，但没有返回文件地址。"));
     }
     return message;
   }
@@ -744,7 +744,7 @@
     const itemCreated = batches.reduce((total, row) => total + Number(row.created_item_count || 0), 0);
     const itemUpdated = batches.reduce((total, row) => total + Number(row.updated_item_count || 0), 0);
     const itemUnchanged = batches.reduce((total, row) => total + Number(row.unchanged_item_count || 0), 0);
-    return `批次新增 ${batchCreated} / 更新 ${batchUpdated}，明细新增 ${itemCreated} / 更新 ${itemUpdated} / 未变 ${itemUnchanged}`;
+    return ocTranslate("批次新增 {0} / 更新 {1}，明细新增 {2} / 更新 {3} / 未变 {4}", [batchCreated, batchUpdated, itemCreated, itemUpdated, itemUnchanged]);
   }
 
   importedBatchNames(result) {
@@ -783,9 +783,9 @@
   renderImportResult(result, statsText = "") {
     const labels = this.importedBatchLabels(result);
     const visibleLabels = labels.slice(0, 3).join("、");
-    const suffix = labels.length > 3 ? `等 ${labels.length} 个批次` : "";
+    const suffix = labels.length > 3 ? ocTranslate("等 {0} 个批次", [labels.length]) : "";
     const selected = result.selected_summary || {};
-    const message = `本次导入：${selected.block_count || labels.length || 0} 个批次，${selected.item_count || 0} 行 SKU；${statsText || this.summarizeImportResult(result)}。已在完整列表中展开 ${visibleLabels}${suffix}`;
+    const message = ocTranslate("本次导入：{0} 个批次，{1} 行 SKU；{2}。已在完整列表中展开 {3}{4}", [selected.block_count || labels.length || 0, selected.item_count || 0, statsText || this.summarizeImportResult(result), visibleLabels, suffix]);
     this.$root.find("[data-area='search-result']").removeClass("empty").addClass("active imported").text(message);
   }
 
@@ -794,22 +794,22 @@
     const label = batch ? batch.waybill_no || batch.batch_no || batch.name : batchName;
     const ai = summary.ai_allocation || {};
     const aiText = ai.ok
-      ? `AI基础分摊：已填入（${ai.model || "DeepSeek"}）`
-      : `AI基础分摊：${ai.message || "未生成，已使用系统基础规则"}`;
+      ? ocTranslate("AI基础分摊：已填入（{0}）", [ai.model || "DeepSeek"])
+      : ocTranslate("AI基础分摊：{0}", [ai.message || "未生成，已使用系统基础规则"]);
     const parts = [
-      `批次 ${label || "--"}`,
-      `SKU ${this.formatValue(summary.item_count || 0)} 行`,
-      `总货值 ${this.formatMoney(summary.total_goods_value || 0)} RMB`,
-      `毛重 ${this.formatNumber(summary.total_gross_weight_kg || 0)} KG`,
-      `综合成本 ${this.formatMoney(summary.total_cost_rmb || 0)} RMB`,
-      `规则 ${this.formatValue(summary.rule_count || 0)} 条`,
+      ocTranslate("批次 {0}", [label || "--"]),
+      ocTranslate("SKU {0} 行", [this.formatValue(summary.item_count || 0)]),
+      ocTranslate("总货值 {0} RMB", [this.formatMoney(summary.total_goods_value || 0)]),
+      ocTranslate("毛重 {0} KG", [this.formatNumber(summary.total_gross_weight_kg || 0)]),
+      ocTranslate("综合成本 {0} RMB", [this.formatMoney(summary.total_cost_rmb || 0)]),
+      ocTranslate("规则 {0} 条", [this.formatValue(summary.rule_count || 0)]),
       aiText,
     ];
     this.$root
       .find("[data-area='search-result']")
       .removeClass("empty imported")
       .addClass("active calculated")
-      .text(`试算完成：${parts.join("；")}`);
+      .text(ocTranslate("试算完成：{0}", [parts.join("；")]));
   }
 
   async openCategoryPreviewDialog(batchName = "") {
@@ -826,7 +826,7 @@
     const batchSelectDisabled = pinnedBatch || !selectableBatches.length ? " disabled" : "";
 
     const dialog = new frappe.ui.Dialog({
-      title: "AI 商品业务归类预览",
+      title: ocTranslate("AI 商品业务归类预览"),
       fields: [
         {
           fieldtype: "HTML",
@@ -834,18 +834,18 @@
           options: `
             <div class="ocw-category-toolbar">
               <label>
-                <span>当前批次</span>
-                <select class="form-control ocw-batch-select" data-role="category-batch-select" aria-label="选择商品归类批次"${batchSelectDisabled}>${batchOptions}</select>
+                <span>${ocTranslate("当前批次")}</span>
+                <select class="form-control ocw-batch-select" data-role="category-batch-select" aria-label="${ocTranslate('选择商品归类批次')}"${batchSelectDisabled}>${batchOptions}</select>
               </label>
               <em>${this.escape(this.scopedBatchHint())}</em>
             </div>
             <div class="ocw-category-preview" data-area="category-preview">
-              <div class="ocw-category-loading">正在检查当前批次是否存在可建议的业务大类...</div>
+              <div class="ocw-category-loading">${ocTranslate("正在检查当前批次是否存在可建议的业务大类...")}</div>
             </div>
           `,
         },
       ],
-      primary_action_label: "关闭",
+      primary_action_label: ocTranslate("关闭"),
       primary_action: () => dialog.hide(),
     });
     dialog.show();
@@ -869,7 +869,7 @@
 
   async loadCategoryPreview(dialog, batch) {
     dialog.$wrapper.find("[data-area='category-preview']").html(`
-      <div class="ocw-category-loading">正在检查当前批次是否存在可建议的业务大类...</div>
+      <div class="ocw-category-loading">${ocTranslate("正在检查当前批次是否存在可建议的业务大类...")}</div>
     `);
     const result = await this.call(
       "overseas_costing.api.category.preview_batch_categories",
@@ -888,8 +888,8 @@
     if (!result || !result.ok) {
       $target.html(`
         <div class="ocw-category-empty">
-          <strong>暂时无法生成商品归类预览</strong>
-          <span>${this.escape((result && result.message) || "请确认当前批次已有物料明细。")}</span>
+          <strong>${ocTranslate("暂时无法生成商品归类预览")}</strong>
+          <span>${this.escape((result && result.message) || ocTranslate("请确认当前批次已有物料明细。"))}</span>
         </div>
       `);
       return;
@@ -906,31 +906,31 @@
 
     $target.html(`
       <div class="ocw-category-summary">
-        <div><span>当前批次</span><strong>${this.escape(batchLabel || "--")}</strong></div>
-        <div><span>物料行数</span><strong>${this.escape(String(summary.item_count || items.length || 0))}</strong></div>
-        <div><span>归类候选</span><strong>${this.escape(String(summary.business_category_candidate_count || summary.normalization_candidate_count || 0))}</strong></div>
-        <div><span>AI命中</span><strong>${this.escape(String(summary.ai_business_category_count || summary.ai_normalization_count || 0))}</strong></div>
-        <div><span>无需处理</span><strong>${this.escape(String(summary.no_action_count || 0))}</strong></div>
-        <div><span>影响税费</span><strong>不影响</strong></div>
+        <div><span>${ocTranslate("当前批次")}</span><strong>${this.escape(batchLabel || "--")}</strong></div>
+        <div><span>${ocTranslate("物料行数")}</span><strong>${this.escape(String(summary.item_count || items.length || 0))}</strong></div>
+        <div><span>${ocTranslate("归类候选")}</span><strong>${this.escape(String(summary.business_category_candidate_count || summary.normalization_candidate_count || 0))}</strong></div>
+        <div><span>${ocTranslate("AI命中")}</span><strong>${this.escape(String(summary.ai_business_category_count || summary.ai_normalization_count || 0))}</strong></div>
+        <div><span>${ocTranslate("无需处理")}</span><strong>${this.escape(String(summary.no_action_count || 0))}</strong></div>
+        <div><span>${ocTranslate("影响税费")}</span><strong>${ocTranslate("不影响")}</strong></div>
       </div>
       <div class="ocw-category-note">
-        AI 用于把不同语言、不同写法的商品归到统一业务大类，辅助查询、汇总和分摊参考；不会修改海关进口名称、HS 编码、税率和完税金额。
+        ${ocTranslate("AI 用于把不同语言、不同写法的商品归到统一业务大类，辅助查询、汇总和分摊参考；不会修改海关进口名称、HS 编码、税率和完税金额。")}
       </div>
-      <div class="ocw-category-counts">${countChips || "<span>当前批次没有明确的归类候选</span>"}</div>
+      <div class="ocw-category-counts">${countChips || `<span>${ocTranslate("当前批次没有明确的归类候选")}</span>`}</div>
       <div class="ocw-category-table-wrap">
         <table class="ocw-category-table">
           <thead>
             <tr>
-              <th>物料编码</th>
-              <th>中文品名</th>
-              <th>海关进口名称</th>
-              <th>规格型号<br>Especificación / Modelo</th>
-              <th>建议业务大类</th>
-              <th>状态</th>
-              <th>原因</th>
+              <th>${ocTranslate("物料编码")}</th>
+              <th>${ocTranslate("中文品名")}</th>
+              <th>${ocTranslate("海关进口名称")}</th>
+              <th>${ocTranslate("规格型号")}<br>Especificación / Modelo</th>
+              <th>${ocTranslate("建议业务大类")}</th>
+              <th>${ocTranslate("状态")}</th>
+              <th>${ocTranslate("原因")}</th>
             </tr>
           </thead>
-          <tbody>${rows || `<tr><td colspan="7">当前批次暂无物料明细</td></tr>`}</tbody>
+          <tbody>${rows || `<tr><td colspan="7">${ocTranslate("当前批次暂无物料明细")}</td></tr>`}</tbody>
         </table>
       </div>
     `);
@@ -945,7 +945,7 @@
         <td title="${this.escape(row.import_name || "")}">${this.escape(row.import_name || "--")}</td>
         <td title="${this.escape(row.spec_model || "")}">${this.escape(row.spec_model || "--")}</td>
         <td><strong>${this.escape(row.suggested_business_category || row.suggested_name || "--")}</strong></td>
-        <td><span class="ocw-category-status ${this.escape(status.className)}">${this.escape(status.label)}</span></td>
+        <td><span class="ocw-category-status ${this.escape(status.className)}">${this.escape(ocTranslate(status.label))}</span></td>
         <td title="${this.escape(row.reason || "")}">${this.escape(row.reason || "--")}</td>
       </tr>
     `;
@@ -954,11 +954,11 @@
   categoryStatusInfo(row) {
     if (row.needs_review) {
       if (row.ai_ready || row.match_type === "ai_business_category" || row.match_type === "ai_name_normalization") {
-        return { label: "AI候选", className: "ai", rowClass: "needs-ai" };
+        return { label: ocTranslate("AI候选"), className: "ai", rowClass: "needs-ai" };
       }
-      return { label: "待确认", className: "review", rowClass: "needs-review" };
+      return { label: ocTranslate("待确认"), className: "review", rowClass: "needs-review" };
     }
-    return { label: "无需归类", className: "noop", rowClass: "" };
+    return { label: ocTranslate("无需归类"), className: "noop", rowClass: "" };
   }
 
   formatConfidence(value) {

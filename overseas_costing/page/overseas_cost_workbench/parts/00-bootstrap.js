@@ -1,3 +1,8 @@
+function ocTranslate(text, args = []) {
+  if (typeof globalThis.__ === "function") return globalThis.__(text, args);
+  return String(text).replace(/\{(\d+)\}/g, (_, index) => args[index] ?? "");
+}
+
 frappe.pages["overseas-cost-workbench"] = frappe.pages["overseas-cost-workbench"] || {};
 
 function hideDeskChromeWhenReady(workbench) {

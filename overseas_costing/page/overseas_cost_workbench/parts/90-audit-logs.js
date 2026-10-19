@@ -35,7 +35,7 @@
     $result.removeClass("imported calculated");
     if (!this.hasActiveFilters()) {
       const role = this.workRoleInfo();
-      $result.removeClass("active empty").text(`${role.label}视图：${role.description}；查询后会锁定当前结果，回到全部批次请点击“重置”`);
+      $result.removeClass("active empty").text(ocTranslate("{0}视图：{1}；查询后会锁定当前结果，回到全部批次请点击“重置”", [role.label, role.description]));
       return;
     }
     const modeLabel = this.filters.transport_mode ? `${this.transportLabel(this.filters.transport_mode)} · ` : "";
@@ -43,9 +43,9 @@
       $result
         .removeClass("empty")
         .addClass("active")
-        .text(`${modeLabel}筛出 ${this.visibleBatches.length} 个报关/运单块 · 共 ${this.countVisibleItems()} 行 SKU（已自动展开）；当前结果已锁定，回到全部批次请点击“重置”`);
+        .text(ocTranslate("{0}筛出 {1} 个报关/运单块 · 共 {2} 行 SKU（已自动展开）；当前结果已锁定，回到全部批次请点击“重置”", [modeLabel, this.visibleBatches.length, this.countVisibleItems()]));
     } else {
-      $result.removeClass("active").addClass("empty").text(`${modeLabel}未找到匹配的报关/运单块；回到全部批次请点击“重置”`);
+      $result.removeClass("active").addClass("empty").text(ocTranslate("{0}未找到匹配的报关/运单块；回到全部批次请点击“重置”", [modeLabel]));
     }
   }
 
@@ -61,7 +61,7 @@
       };
     }
     const batches = this.visibleBatches.length ? this.visibleBatches : this.getSelectableBatches();
-    const label = batches.length === 1 ? this.batchReferenceLabel(batches[0]) : this.hasActiveFilters() ? `${modeLabel}筛选结果` : modeLabel;
+    const label = batches.length === 1 ? this.batchReferenceLabel(batches[0]) : this.hasActiveFilters() ? ocTranslate("{0}筛选结果", [modeLabel]) : modeLabel;
     return { batches, label };
   }
 
@@ -75,7 +75,7 @@
       const batchName = $button.attr("data-batch-name");
       const batch = batchName ? this.findBatch(batchName) : this.getVisibleActiveBatch();
 
-      $button.removeClass("needs-recalculate is-calculated").text("重新试算").attr("title", "");
+      $button.removeClass("needs-recalculate is-calculated").text(ocTranslate("重新试算")).attr("title", "");
       if (!batch) {
         $button.prop("disabled", true).attr("title", "暂无可试算批次");
         return;
@@ -108,7 +108,7 @@
       const statusText = this.erpQueueStatus === "all" ? "全部状态" : this.erpQueueStatusLabel(this.erpQueueStatus);
       this.$root
         .find("[data-area='hierarchy-summary']")
-        .text(`ERP 队列 · ${statusText} ${this.getErpQueueBatches().length} 个批次 · 待推送 ${stats.pending || 0} 个`);
+        .text(ocTranslate("ERP 队列 · {0} {1} 个批次 · 待推送 {2} 个", [statusText, this.getErpQueueBatches().length, stats.pending || 0]));
       return;
     }
     const displayBatches = this.getDisplayedBatches();
@@ -116,8 +116,8 @@
     const role = this.workRoleInfo();
     const modeLabel = this.filters.transport_mode ? `${this.transportLabel(this.filters.transport_mode)} · ` : "";
     const label = this.hasActiveFilters()
-      ? `${role.label} · ${modeLabel}筛出 ${batchCount} 个报关/运单块 · 点击 + 展开 SKU 明细`
-      : `${role.label} · ${batchCount} 个报关/运单块 · 点击 + 展开 SKU 明细`;
+      ? ocTranslate("{0} · {1}筛出 {2} 个报关/运单块 · 点击 + 展开 SKU 明细", [role.label, modeLabel, batchCount])
+      : ocTranslate("{0} · {1} 个报关/运单块 · 点击 + 展开 SKU 明细", [role.label, batchCount]);
     this.$root.find("[data-area='hierarchy-summary']").text(label);
   }
 
@@ -137,20 +137,20 @@
 
   erpQueueStatusLabel(status = "all") {
     const labels = {
-      all: "全部",
-      not_started: "未开始",
-      pending: "待推送",
-      success: "成功",
-      failed: "失败",
+      all: ocTranslate("全部"),
+      not_started: ocTranslate("未开始"),
+      pending: ocTranslate("待推送"),
+      success: ocTranslate("成功"),
+      failed: ocTranslate("失败"),
     };
-    return labels[status] || status || "全部";
+    return labels[status] || status || ocTranslate("全部");
   }
 
   renderAuditList() {
     if (!this.auditEvents.length) {
       this.$root.find("[data-area='audit-list']").html(`
         <li class="ocw-audit-empty">
-          <span class="ocw-audit-text">当前批次暂无修改记录</span>
+          <span class="ocw-audit-text">${ocTranslate("当前批次暂无修改记录")}</span>
         </li>
       `);
       return;
@@ -206,12 +206,12 @@
     const remark = event.remark || "";
     const attachmentMatch = remark.match(/附件[:：]\s*([^；;，,\s]+)/);
     const fileMatch = remark.match(/(?:文件|资料)[:：]\s*([^；;，,\s]+)/);
-    if (/采购支出/.test(remark)) return "采购支出 OA";
-    if (/国际物流|钉钉|审批/.test(remark)) return "钉钉审批单";
-    if (/补传资料|手动上传|人工上传/.test(remark)) return "补传资料";
+    if (/采购支出/.test(remark)) return ocTranslate("采购支出 OA");
+    if (/国际物流|钉钉|审批/.test(remark)) return ocTranslate("钉钉审批单");
+    if (/补传资料|手动上传|人工上传/.test(remark)) return ocTranslate("补传资料");
     if (fileMatch && fileMatch[1]) return fileMatch[1];
-    if (attachmentMatch && attachmentMatch[1]) return `附件 ${attachmentMatch[1]}`;
-    return event.batchLabel || "当前表单";
+    if (attachmentMatch && attachmentMatch[1]) return ocTranslate("附件 {0}", [attachmentMatch[1]]);
+    return event.batchLabel || ocTranslate("当前表单");
   }
 
   normalizeAuditRemark(remark = "") {
@@ -247,10 +247,10 @@
 
   finalizeAuditSummaryEvent(group) {
     const pieces = [];
-    if (group.added) pieces.push(`新增 ${group.added} 条物料`);
-    if (group.deleted) pieces.push(`删除 ${group.deleted} 条物料`);
-    if (group.modified) pieces.push(`修改 ${group.modified} 项字段`);
-    if (group.uploaded) pieces.push(`上传 ${group.uploaded} 个附件`);
+    if (group.added) pieces.push(ocTranslate("新增 {0} 条物料", [group.added]));
+    if (group.deleted) pieces.push(ocTranslate("删除 {0} 条物料", [group.deleted]));
+    if (group.modified) pieces.push(ocTranslate("修改 {0} 项字段", [group.modified]));
+    if (group.uploaded) pieces.push(ocTranslate("上传 {0} 个附件", [group.uploaded]));
     if (!pieces.length && group.actions.size) pieces.push(Array.from(group.actions).join("，"));
     return {
       summary: true,
@@ -258,7 +258,7 @@
       actor: group.actor,
       type: group.type,
       sourceLabel: group.sourceLabel,
-      text: pieces.length ? `${group.sourceLabel}：${pieces.join("，")}` : `${group.sourceLabel}：已处理`,
+      text: pieces.length ? `${group.sourceLabel}：${pieces.join("，")}` : ocTranslate("{0}：已处理", [group.sourceLabel]),
     };
   }
 
@@ -270,7 +270,7 @@
     const action = this.auditActionLabel(row.action_type, fieldName, oldValue, newValue);
     const field = this.auditFieldLabel(fieldName);
     const targetParts = [];
-    if (row.row_no) targetParts.push(`第 ${row.row_no} 行`);
+    if (row.row_no) targetParts.push(ocTranslate("第 {0} 行", [row.row_no]));
     if (batch && (batch.batch_no || batch.waybill_no)) targetParts.push(batch.batch_no || batch.waybill_no);
     const remark = row.action_remark || "";
     return {
@@ -300,34 +300,34 @@
 
   auditActionLabel(actionType, fieldName, oldValue, newValue) {
     if (fieldName === "item") {
-      if (oldValue && !newValue) return "删除";
-      if (!oldValue && newValue) return "新增";
+      if (oldValue && !newValue) return ocTranslate("删除");
+      if (!oldValue && newValue) return ocTranslate("新增");
     }
-    if (fieldName === "erp_payload") return "生成待推送报文";
-    if (fieldName === "confirm_status") return "校验通过";
+    if (fieldName === "erp_payload") return ocTranslate("生成待推送报文");
+    if (fieldName === "confirm_status") return ocTranslate("校验通过");
     const labels = {
-      IMPORT: "导入",
-      EDIT: "修改",
-      BATCH_EDIT: "修改",
-      RECALCULATE: "重算",
-      CREATE_VERSION: "创建版本",
-      SWITCH_VERSION: "切换版本",
-      UPLOAD_ATTACHMENT: "上传附件",
-      WRITEBACK: "回写",
-      REVIEW_RETURN: "退回整改",
-      REVIEW_REPLY: "整改回复",
-      REVIEW_RESUBMIT: "提交财务复核",
-      REVIEW_RESOLVE: "确认整改",
+      IMPORT: ocTranslate("导入"),
+      EDIT: ocTranslate("修改"),
+      BATCH_EDIT: ocTranslate("修改"),
+      RECALCULATE: ocTranslate("重算"),
+      CREATE_VERSION: ocTranslate("创建版本"),
+      SWITCH_VERSION: ocTranslate("切换版本"),
+      UPLOAD_ATTACHMENT: ocTranslate("上传附件"),
+      WRITEBACK: ocTranslate("回写"),
+      REVIEW_RETURN: ocTranslate("退回整改"),
+      REVIEW_REPLY: ocTranslate("整改回复"),
+      REVIEW_RESUBMIT: ocTranslate("提交财务复核"),
+      REVIEW_RESOLVE: ocTranslate("确认整改"),
     };
-    return labels[actionType] || actionType || "操作";
+    return labels[actionType] || actionType || ocTranslate("操作");
   }
 
   auditFieldLabel(fieldName) {
     if (!fieldName) return "";
-    if (fieldName === "item") return "物料";
-    if (fieldName === "allocation_rule") return "费用分摊规则";
-    if (fieldName === "confirm_status") return "校验状态";
-    if (fieldName === "erp_payload") return "ERP 报文";
+    if (fieldName === "item") return ocTranslate("物料");
+    if (fieldName === "allocation_rule") return ocTranslate("费用分摊规则");
+    if (fieldName === "confirm_status") return ocTranslate("校验状态");
+    if (fieldName === "erp_payload") return ocTranslate("ERP 报文");
     const column = (this.batchColumns || []).find((item) => item.fieldname === fieldName);
     return column ? column.label : fieldName;
   }
@@ -342,8 +342,8 @@
     if (!parsed || typeof parsed !== "object") return value;
     const code = parsed.material_code || parsed.name || "";
     const name = parsed.product_name || "";
-    const quantity = parsed.quantity !== undefined && parsed.quantity !== "" ? `，数量 ${parsed.quantity}` : "";
-    const goodsValue = parsed.goods_value !== undefined && parsed.goods_value !== "" ? `，货值 ${this.formatMoney(parsed.goods_value)}` : "";
+    const quantity = parsed.quantity !== undefined && parsed.quantity !== "" ? ocTranslate("，数量 {0}", [parsed.quantity]) : "";
+    const goodsValue = parsed.goods_value !== undefined && parsed.goods_value !== "" ? ocTranslate("，货值 {0}", [this.formatMoney(parsed.goods_value)]) : "";
     const label = [code, name].filter(Boolean).join(" / ");
     return `${label || "未命名物料"}${quantity}${goodsValue}`;
   }
@@ -357,8 +357,8 @@
     const source = parsed.source || "";
     const remark = parsed.remark || "";
     const pieces = [`${category}：${amount}${currency ? ` ${currency}` : ""}`];
-    if (basis) pieces.push(`按${basis}分摊`);
-    if (source) pieces.push(`来源 ${source}`);
+    if (basis) pieces.push(ocTranslate("按{0}分摊", [basis]));
+    if (source) pieces.push(ocTranslate("来源 {0}", [source]));
     if (remark) pieces.push(remark);
     return pieces.join("，");
   }
@@ -367,15 +367,15 @@
     if (!parsed || typeof parsed !== "object") return fallback;
     const status = String(parsed.confirm_status || parsed.status || "").toLowerCase();
     const label = status.includes("confirmed") ? "已人工校验通过" : parsed.confirm_status || parsed.status || "已更新";
-    return parsed.remark ? `${label}，备注：${parsed.remark}` : label;
+    return parsed.remark ? ocTranslate("{0}，备注：{1}", [label, parsed.remark]) : label;
   }
 
   formatAuditErpPayload(parsed, fallback) {
     if (!parsed || typeof parsed !== "object") return fallback;
     const target = parsed.target_system || "DeepLinkERP";
-    const itemCount = parsed.item_count !== undefined ? `${parsed.item_count} 条物料` : "";
-    const subsidiary = parsed.subsidiary_code ? `业务主体 ${parsed.subsidiary_code}` : "";
-    return [`目标 ${target}`, subsidiary, itemCount].filter(Boolean).join("，");
+    const itemCount = parsed.item_count !== undefined ? ocTranslate("{0} 条物料", [parsed.item_count]) : "";
+    const subsidiary = parsed.subsidiary_code ? ocTranslate("业务主体 {0}", [parsed.subsidiary_code]) : "";
+    return [ocTranslate("目标 {0}", [target]), subsidiary, itemCount].filter(Boolean).join("，");
   }
 
   formatAuditJsonValue(parsed, fallback) {
@@ -389,15 +389,15 @@
 
   allocationBasisLabel(value) {
     const labels = {
-      quantity: "数量",
-      qty: "数量",
-      gross_weight: "毛重",
-      gross_weight_kg: "毛重",
-      volume: "体积",
-      volume_m3: "体积",
-      goods_value: "货值",
-      amount: "金额",
-      equal: "平均",
+      quantity: ocTranslate("数量"),
+      qty: ocTranslate("数量"),
+      gross_weight: ocTranslate("毛重"),
+      gross_weight_kg: ocTranslate("毛重"),
+      volume: ocTranslate("体积"),
+      volume_m3: ocTranslate("体积"),
+      goods_value: ocTranslate("货值"),
+      amount: ocTranslate("金额"),
+      equal: ocTranslate("平均"),
     };
     return labels[value] || value || "";
   }
@@ -423,21 +423,21 @@
 
   usageActionLabel(actionType) {
     const labels = {
-      PAGE_VIEW: "进入工作台",
-      BATCH_VIEW: "查看批次",
-      DINGTALK_PULL: "钉钉拉取",
-      EXCEL_IMPORT: "Excel 导入",
-      FILE_PARSE: "凭证对比",
-      RECALCULATE: "重新试算",
-      CONFIRM_RESULT: "校验结果",
-      PREVIEW_ERP: "预览 ERP",
-      PUSH_ERP: "推送 ERP",
-      EXPORT: "导出",
-      DATA_CHECK: "数据检查",
-      ATTACHMENT_VIEW: "查看附件",
-      OTHER: "其他操作",
+      PAGE_VIEW: ocTranslate("进入工作台"),
+      BATCH_VIEW: ocTranslate("查看批次"),
+      DINGTALK_PULL: ocTranslate("钉钉拉取"),
+      EXCEL_IMPORT: ocTranslate("Excel 导入"),
+      FILE_PARSE: ocTranslate("凭证对比"),
+      RECALCULATE: ocTranslate("重新试算"),
+      CONFIRM_RESULT: ocTranslate("校验结果"),
+      PREVIEW_ERP: ocTranslate("预览 ERP"),
+      PUSH_ERP: ocTranslate("推送 ERP"),
+      EXPORT: ocTranslate("导出"),
+      DATA_CHECK: ocTranslate("数据检查"),
+      ATTACHMENT_VIEW: ocTranslate("查看附件"),
+      OTHER: ocTranslate("其他操作"),
     };
-    return labels[actionType] || actionType || "操作";
+    return labels[actionType] || actionType || ocTranslate("操作");
   }
 
   renderUsageDrawer(batch = {}) {
@@ -451,13 +451,13 @@
           .map(
             (row) => `
               <div class="ocw-usage-chip">
-                <strong>${this.escape(row.operator_full_name || row.operator_name || "未知用户")}</strong>
-                <span>${this.escape(String(row.action_count || 0))} 次 · ${this.escape(row.last_seen || "--")}</span>
+                <strong>${this.escape(row.operator_full_name || row.operator_name || ocTranslate("未知用户"))}</strong>
+                <span>${ocTranslate("{0} 次 · {1}", [this.escape(String(row.action_count || 0)), this.escape(row.last_seen || "--")])}</span>
               </div>
             `
           )
           .join("")
-      : `<div class="ocw-usage-empty">近 30 天暂无使用汇总</div>`;
+      : `<div class="ocw-usage-empty">${ocTranslate("近 30 天暂无使用汇总")}</div>`;
     const actionRows = actions.length
       ? actions
           .slice(0, 6)
@@ -465,31 +465,31 @@
             (row) => `
               <div class="ocw-usage-chip">
                 <strong>${this.escape(this.usageActionLabel(row.action_type))}</strong>
-                <span>${this.escape(String(row.action_count || 0))} 次</span>
+                <span>${ocTranslate("{0} 次", [this.escape(String(row.action_count || 0))])}</span>
               </div>
             `
           )
           .join("")
-      : `<div class="ocw-usage-empty">暂无动作统计</div>`;
+      : `<div class="ocw-usage-empty">${ocTranslate("暂无动作统计")}</div>`;
     const events = this.usageEvents.length
       ? this.usageEvents.map((event) => this.renderAuditEvent(event)).join("")
-      : `<li class="ocw-audit-empty"><span class="ocw-audit-text">当前批次暂无使用记录</span></li>`;
+      : `<li class="ocw-audit-empty"><span class="ocw-audit-text">${ocTranslate("当前批次暂无使用记录")}</span></li>`;
     return `
       <div class="ocw-usage-panel">
         <div class="ocw-usage-status ${this.escape(writebackInfo.state)}">
           <div>
-            <span>当前回写状态</span>
-            <strong>${this.escape(writebackInfo.label)}</strong>
+            <span>${ocTranslate("当前回写状态")}</span>
+            <strong>${this.escape(ocTranslate(writebackInfo.label))}</strong>
           </div>
           <p>${this.escape(writebackInfo.note)}</p>
         </div>
         <div class="ocw-usage-summary">
           <div>
-            <h4>近 30 天活跃用户</h4>
+            <h4>${ocTranslate("近 30 天活跃用户")}</h4>
             <div class="ocw-usage-chip-grid">${userRows}</div>
           </div>
           <div>
-            <h4>近 30 天操作分布</h4>
+            <h4>${ocTranslate("近 30 天操作分布")}</h4>
             <div class="ocw-usage-chip-grid">${actionRows}</div>
           </div>
         </div>
@@ -543,9 +543,9 @@
         <span class="ocw-audit-time">${this.escape(event.time)}</span>
         ${actor}
         <div class="ocw-audit-change">
-          <strong>${this.escape(title)}</strong>
+          <strong>${this.escape(ocTranslate(title))}</strong>
           <div class="ocw-audit-values">
-            <span>“${oldValue}”改成“${newValue}”</span>
+            <span>${ocTranslate("“{0}”改成“{1}”", [oldValue, newValue])}</span>
           </div>
         </div>
       </li>
@@ -558,8 +558,8 @@
     if (!batch) {
       this.$root.find("[data-area='diff-panel']").html(`
         <div class="ocw-diff-table">
-          <div class="ocw-diff-head"><span>复核项</span><span>当前状态</span><span>说明</span></div>
-          <div><span>当前批次</span><b class="ocw-check-warn">未选择</b><strong>先选择一条批次查看 AI 分摊状态</strong></div>
+          <div class="ocw-diff-head"><span>${ocTranslate("复核项")}</span><span>${ocTranslate("当前状态")}</span><span>${ocTranslate("说明")}</span></div>
+          <div><span>${ocTranslate("当前批次")}</span><b class="ocw-check-warn">${ocTranslate("未选择")}</b><strong>${ocTranslate("先选择一条批次查看 AI 分摊状态")}</strong></div>
         </div>
       `);
       return;
@@ -571,16 +571,16 @@
     const batchLabel = batch.waybill_no || batch.customs_no || batch.batch_no || batch.name;
     const sourceNo = sourceStatus.source_no || batch.source_approval_no || batch.source_instance_id || "";
     const targetLabel =
-      sourceNo && sourceNo !== batchLabel ? `${batchLabel || batch.name} / 来源 ${sourceNo}` : batchLabel || batch.name;
+      sourceNo && sourceNo !== batchLabel ? ocTranslate("{0} / 来源 {1}", [batchLabel || batch.name, sourceNo]) : batchLabel || batch.name;
     const displayRows = [
       {
-        label: "检查对象",
+        label: ocTranslate("检查对象"),
         status: "当前批次",
         statusClass: "ocw-check-info",
         suggestion: targetLabel,
       },
       {
-        label: "取数优先级",
+        label: ocTranslate("取数优先级"),
         status: "已确认",
         statusClass: "ocw-check-ok",
         suggestion: this.getSourcePrioritySummary(batch),
@@ -589,12 +589,12 @@
     ];
     this.$root.find("[data-area='diff-panel']").html(`
       <div class="ocw-diff-table">
-        <div class="ocw-diff-head"><span>复核项</span><span>当前状态</span><span>说明</span></div>
+        <div class="ocw-diff-head"><span>${ocTranslate("复核项")}</span><span>${ocTranslate("当前状态")}</span><span>${ocTranslate("说明")}</span></div>
         ${displayRows
           .map(
             (row) => `
               <div>
-                <span>${this.escape(row.label)}</span>
+                <span>${this.escape(ocTranslate(row.label))}</span>
                 <b class="${this.escape(row.statusClass)}">${this.escape(row.status)}</b>
                 <strong>${this.escape(row.suggestion)}</strong>
               </div>
@@ -644,10 +644,10 @@
       ? overviewRows.slice(0, 2).map((row) => `${row.amountTitle}：${row.basis}，${row.result}`).join("；")
       : "暂无分摊结果，请先确认费用池并点击重新试算";
     const reviewIssues = [];
-    if (missingPrice) reviewIssues.push(`单价缺 ${missingPrice} 行`);
-    if (missingGoods) reviewIssues.push(`货值缺 ${missingGoods} 行`);
-    if (missingWeight) reviewIssues.push(`毛重缺 ${missingWeight} 行`);
-    if (missingCost) reviewIssues.push(`综合单价缺 ${missingCost} 行`);
+    if (missingPrice) reviewIssues.push(ocTranslate("单价缺 {0} 行", [missingPrice]));
+    if (missingGoods) reviewIssues.push(ocTranslate("货值缺 {0} 行", [missingGoods]));
+    if (missingWeight) reviewIssues.push(ocTranslate("毛重缺 {0} 行", [missingWeight]));
+    if (missingCost) reviewIssues.push(ocTranslate("综合单价缺 {0} 行", [missingCost]));
     const calculationReview = summary.calculation_review || batch.calculation_review || {};
     const reviewReasons = Array.isArray(calculationReview.reasons)
       ? calculationReview.reasons.filter((reason) => this.hasText(reason))
@@ -668,55 +668,55 @@
       (reviewLabel === "可先采用"
         ? "核心采购金额、费用池和分摊结果已生成，可作为当前试算结果"
         : reviewIssues.length
-        ? `${reviewIssues.join("，")}；请在明细区点击可编辑字段补齐后重新试算`
+        ? ocTranslate("{0}；请在明细区点击可编辑字段补齐后重新试算", [reviewIssues.join("，")])
         : "先补齐物料、采购价格和费用池，再重新试算");
 
     return [
       {
-        label: "核算结论",
+        label: ocTranslate("核算结论"),
         status: reviewLabel,
         statusClass: reviewStatusClass,
         suggestion: reviewSuggestion,
       },
       {
-        label: "分摊填入",
+        label: ocTranslate("分摊填入"),
         status: hasAi ? "AI已填" : positiveRules.length ? "系统已填" : "待费用",
         statusClass: hasAi ? "ocw-check-ok" : positiveRules.length ? "ocw-check-info" : "ocw-check-warn",
         suggestion: hasAi
-          ? `AI 已选择基础分摊口径，系统已把分摊金额写入每行明细；模型 ${ai.model || "deepseek-v4-flash"}`
+          ? ocTranslate("AI 已选择基础分摊口径，系统已把分摊金额写入每行明细；模型 {0}", [ai.model || "deepseek-v4-flash"])
           : positiveRules.length
-          ? ai.message || "当前使用系统基础规则，已按规则填入每行分摊金额"
-          : "没有物流费、税费或杂费费用池时，AI 不会凭空生成费用分摊金额",
+          ? ai.message || ocTranslate("当前使用系统基础规则，已按规则填入每行分摊金额")
+          : ocTranslate("没有物流费、税费或杂费费用池时，AI 不会凭空生成费用分摊金额"),
       },
       {
-        label: "费用池",
-        status: positiveRules.length ? `${positiveRules.length} 个` : feeHints.length ? `${feeHints.length} 类` : "0 个",
+        label: ocTranslate("费用池"),
+        status: positiveRules.length ? ocTranslate("{0} 个", [positiveRules.length]) : feeHints.length ? ocTranslate("{0} 类", [feeHints.length]) : "0 个",
         statusClass: positiveRules.length || feeHints.length ? "ocw-check-ok" : "ocw-check-warn",
         suggestion: positiveRules.length
           ? this.summarizeAllocationRuleAmounts(positiveRules)
           : feeHints.length
-          ? `已检测到${feeHints.join("、")}，点击重新试算后形成规则快照`
-          : "先确认物流费、清关费、税费或杂费；否则只能填入货值/重量比例，费用分摊金额为 0",
+          ? ocTranslate("已检测到{0}，点击重新试算后形成规则快照", [feeHints.join("、")])
+          : ocTranslate("先确认物流费、清关费、税费或杂费；否则只能填入货值/重量比例，费用分摊金额为 0"),
       },
       {
-        label: "分摊依据",
+        label: ocTranslate("分摊依据"),
         status: ruleBasisText ? "已确定" : "待确定",
         statusClass: ruleBasisText ? "ocw-check-ok" : "ocw-check-warn",
-        suggestion: ruleBasisText || "默认先按毛重分摊；抛货或特殊费用可人工改为体积/计费重后重新试算",
+        suggestion: ruleBasisText || ocTranslate("默认先按毛重分摊；抛货或特殊费用可人工改为体积/计费重后重新试算"),
       },
       {
-        label: "分摊结果",
-        status: overviewRows.length ? `${overviewRows.length} 项` : itemCount ? "待重算" : "待物料",
+        label: ocTranslate("分摊结果"),
+        status: overviewRows.length ? ocTranslate("{0} 项", [overviewRows.length]) : itemCount ? "待重算" : "待物料",
         statusClass: overviewRows.length ? "ocw-check-ok" : "ocw-check-warn",
         suggestion: resultText,
       },
       {
-        label: "人工调整",
+        label: ocTranslate("人工调整"),
         status: reviewIssues.length ? "需核对" : "可复核",
         statusClass: reviewIssues.length ? "ocw-check-warn" : "ocw-check-info",
         suggestion: reviewIssues.length
-          ? `${reviewIssues.join("，")}；请在明细区点击可编辑字段补齐后重新试算`
-          : "基础分摊金额已填入明细；如需人工调整，请在明细区点击可编辑字段，税费最终以完税凭证对账为准",
+          ? ocTranslate("{0}；请在明细区点击可编辑字段补齐后重新试算", [reviewIssues.join("，")])
+          : ocTranslate("基础分摊金额已填入明细；如需人工调整，请在明细区点击可编辑字段，税费最终以完税凭证对账为准"),
       },
     ];
   }
@@ -815,102 +815,102 @@
 
     return [
       {
-        label: "核算状态",
+        label: ocTranslate("核算状态"),
         status: batchStatus.label,
         statusClass: batchStatus.statusClass,
         suggestion: batchStatus.suggestion,
       },
       {
-        label: "国际物流 OA",
+        label: ocTranslate("国际物流 OA"),
         status: hasOaSource ? "已关联" : "未关联",
         statusClass: hasOaSource ? "ocw-check-ok" : "ocw-check-warn",
-        suggestion: hasOaSource ? `${sourceStatusNo || "--"}，可跳转原审批单` : "先从钉钉国际物流流程拉取或补审批链接",
+        suggestion: hasOaSource ? ocTranslate("{0}，可跳转原审批单", [sourceStatusNo || "--"]) : ocTranslate("先从钉钉国际物流流程拉取或补审批链接"),
       },
       {
-        label: "物料明细",
-        status: !itemCount ? "待生成" : !hasLoadedItems ? "待展开" : missingCode || missingName || badQuantity ? "需核对" : `${itemCount} 行`,
+        label: ocTranslate("物料明细"),
+        status: !itemCount ? "待生成" : !hasLoadedItems ? "待展开" : missingCode || missingName || badQuantity ? "需核对" : ocTranslate("{0} 行", [itemCount]),
         statusClass: !itemCount || missingCode || missingName || badQuantity ? "ocw-check-warn" : "ocw-check-ok",
         suggestion: !itemCount
-          ? "国际物流 OA 或附件解析后生成物料行"
+          ? ocTranslate("国际物流 OA 或附件解析后生成物料行")
           : !hasLoadedItems
-          ? "展开批次后检查行级字段"
+          ? ocTranslate("展开批次后检查行级字段")
           : missingCode || missingName || badQuantity
-          ? `编码缺 ${missingCode} 行，名称缺 ${missingName} 行，数量异常 ${badQuantity} 行；${missingMaterialDetail}`
+          ? ocTranslate("编码缺 {0} 行，名称缺 {1} 行，数量异常 {2} 行；{3}", [missingCode, missingName, badQuantity, missingMaterialDetail])
           : `${customsNo || sourceNo || "--"} / ${waybillNo || "--"}`,
       },
       {
-        label: "采购价格",
+        label: ocTranslate("采购价格"),
         status: !itemCount ? "待物料" : !hasLoadedItems ? "待展开" : badPrice || badCurrency || badGoods ? "待同步" : this.formatMoney(goodsValue),
         statusClass: !itemCount || badPrice || badCurrency || badGoods ? "ocw-check-warn" : "ocw-check-ok",
         suggestion: !itemCount
-          ? "先有物料行，再从采购支出 OA 补价格"
+          ? ocTranslate("先有物料行，再从采购支出 OA 补价格")
           : !hasLoadedItems
-          ? "展开批次后检查采购单价和币种"
+          ? ocTranslate("展开批次后检查采购单价和币种")
           : badPrice || badCurrency || badGoods
-          ? `单价缺 ${badPrice} 行，币种缺 ${badCurrency} 行，货值缺 ${badGoods} 行；${missingPurchaseDetail}`
-          : "已具备单价、币种和总货值",
+          ? ocTranslate("单价缺 {0} 行，币种缺 {1} 行，货值缺 {2} 行；{3}", [badPrice, badCurrency, badGoods, missingPurchaseDetail])
+          : ocTranslate("已具备单价、币种和总货值"),
       },
       {
-        label: "物流费用",
+        label: ocTranslate("物流费用"),
         status: this.isPositive(confirmedQuote.amount)
           ? `${this.formatMoney(confirmedQuote.amount)} ${confirmedQuote.currency || "RMB"}`
           : quoteCandidateCount
-          ? `${quoteCandidateCount} 份待确认`
+          ? ocTranslate("{0} 份待确认", [quoteCandidateCount])
           : "待费用",
         statusClass: this.isPositive(confirmedQuote.amount) ? "ocw-check-ok" : "ocw-check-warn",
         suggestion: this.isPositive(confirmedQuote.amount)
-          ? `${confirmedQuote.carrier || "已确认报价"}已参与整票物流费用分摊`
+          ? ocTranslate("{0}已参与整票物流费用分摊", [confirmedQuote.carrier || "已确认报价"])
           : quoteCandidateCount
-          ? "在相关资料中确认最终物流报价后再参与试算"
+          ? ocTranslate("在相关资料中确认最终物流报价后再参与试算")
           : transportCopy.missingFreightSuggestion,
       },
       {
-        label: "审批正文识别",
+        label: ocTranslate("审批正文识别"),
         status: logisticsTextBrief ? "已识别" : "待识别",
         statusClass: logisticsTextBrief ? "ocw-check-ok" : "ocw-check-warn",
-        suggestion: logisticsTextBrief || "可从钉钉正文识别物流方式、报价、重量、预计发货日期和目的地",
+        suggestion: logisticsTextBrief || ocTranslate("可从钉钉正文识别物流方式、报价、重量、预计发货日期和目的地"),
       },
       {
-        label: "钉钉审批附件",
-        status: attachmentCount ? `${attachmentCount} 个` : "待拉取",
+        label: ocTranslate("钉钉审批附件"),
+        status: attachmentCount ? ocTranslate("{0} 个", [attachmentCount]) : "待拉取",
         statusClass: attachmentCount ? "ocw-check-ok" : "ocw-check-warn",
-        suggestion: attachmentCount ? `资料里可查看${transportCopy.attachmentExamples}` : "从国际物流 OA 读取表单和评论附件",
+        suggestion: attachmentCount ? ocTranslate("资料里可查看{0}", [transportCopy.attachmentExamples]) : ocTranslate("从国际物流 OA 读取表单和评论附件"),
       },
       {
         label: transportCopy.packingLabel,
         status: !itemCount ? "待物料" : !hasLoadedItems ? "待展开" : badActualQty || badWeight ? "待补齐" : `${this.formatNumber(grossWeight)} KG`,
         statusClass: !itemCount || badActualQty || badWeight ? "ocw-check-warn" : "ocw-check-ok",
         suggestion: !itemCount
-          ? "先生成物料行"
+          ? ocTranslate("先生成物料行")
           : !hasLoadedItems
-          ? "展开批次后检查实际数量和毛重"
+          ? ocTranslate("展开批次后检查实际数量和毛重")
           : packingListCount && (badActualQty || badWeight)
-          ? `已登记装箱单 ${packingListCount} 个；实际数量缺 ${badActualQty} 行，毛重缺 ${badWeight} 行；${missingPackingDetail}`
+          ? ocTranslate("已登记装箱单 {0} 个；实际数量缺 {1} 行，毛重缺 {2} 行；{3}", [packingListCount, badActualQty, badWeight, missingPackingDetail])
           : badActualQty || badWeight
-          ? `实际数量缺 ${badActualQty} 行，毛重缺 ${badWeight} 行；${missingPackingDetail}`
+          ? ocTranslate("实际数量缺 {0} 行，毛重缺 {1} 行；{2}", [badActualQty, badWeight, missingPackingDetail])
           : transportCopy.packingReadySuggestion,
       },
       {
-        label: "税费凭证",
-        status: taxCertificateCount ? `${taxCertificateCount} 份` : rowsWithTax ? `${rowsWithTax} 行` : "待凭证",
+        label: ocTranslate("税费凭证"),
+        status: taxCertificateCount ? ocTranslate("{0} 份", [taxCertificateCount]) : rowsWithTax ? ocTranslate("{0} 行", [rowsWithTax]) : "待凭证",
         statusClass: taxCertificateCount || rowsWithTax ? "ocw-check-ok" : "ocw-check-warn",
         suggestion: taxCertificateCount
-          ? `已登记 ${taxCertificateCount} 份凭证${parsedTaxCertificateCount ? `，其中 ${parsedTaxCertificateCount} 份已有记录` : ""}，用于最终多退少补对账`
+          ? ocTranslate("已登记 {0} 份凭证{1}，用于最终多退少补对账", [taxCertificateCount, parsedTaxCertificateCount ? ocTranslate("，其中 {0} 份已有记录", [parsedTaxCertificateCount]) : ""])
           : rowsWithTax
-          ? `系统已有税费 ${this.formatMoney(taxTotal)} MXN，后续仍需凭证对账`
-          : "完税凭证或清关资料补齐后再做最终对账",
+          ? ocTranslate("系统已有税费 {0} MXN，后续仍需凭证对账", [this.formatMoney(taxTotal)])
+          : ocTranslate("完税凭证或清关资料补齐后再做最终对账"),
       },
       {
-        label: "试算结果",
+        label: ocTranslate("试算结果"),
         status: !itemCount ? "待物料" : needsRecalculate || !this.isPositive(totalCost) ? "待重算" : this.formatMoney(totalCost),
         statusClass: !itemCount || needsRecalculate || !this.isPositive(totalCost) ? "ocw-check-warn" : "ocw-check-ok",
         suggestion: !itemCount
-          ? "先形成批次物料明细"
+          ? ocTranslate("先形成批次物料明细")
           : batchStatus.needsRecalculate
-          ? "明细已修改，请点击重新试算"
+          ? ocTranslate("明细已修改，请点击重新试算")
           : badUnitCost
-          ? `综合单价缺 ${badUnitCost} 行：${missingCostDetail}；点击重新试算`
-          : `已生成综合成本，国际运费分摊 ${this.formatMoney(freightAlloc)} RMB`,
+          ? ocTranslate("综合单价缺 {0} 行：{1}；点击重新试算", [badUnitCost, missingCostDetail])
+          : ocTranslate("已生成综合成本，国际运费分摊 {0} RMB", [this.formatMoney(freightAlloc)]),
       },
     ];
   }

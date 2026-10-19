@@ -1,6 +1,13 @@
 """Safe payment-document suggestions and transactional fee-evidence materialization."""
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 from decimal import Decimal
 import json
 from pathlib import PurePosixPath
@@ -200,7 +207,7 @@ def _documents(source):
         if not document_id:
             continue
         if document_id in result:
-            raise ValueError("付款来源附件标识重复，请刷新来源归档")
+            raise ValueError(_("付款来源附件标识重复，请刷新来源归档"))
         result[document_id] = document
         manifest = document.get("manifest") or {}
         if document.get("file_id") or manifest.get("file_id"):
@@ -274,7 +281,7 @@ def plan_attachment_selections(source, lines, selected_rows, attachment_selectio
             document = documents.get(document_id)
             expected_hash = str(evidence.get("document_hash") or "")
             if document and expected_hash and expected_hash != content_fingerprint(document):
-                raise ValueError("付款明细与来源附件指纹不一致，请刷新来源归档")
+                raise ValueError(_("付款明细与来源附件指纹不一致，请刷新来源归档"))
 
     summaries = {}
     for document_id, document in documents.items():
@@ -289,33 +296,33 @@ def plan_attachment_selections(source, lines, selected_rows, attachment_selectio
                    for row in summaries.values()]
     else:
         if not isinstance(attachment_selections, list) or len(attachment_selections) > 100:
-            raise ValueError("附件选择格式错误")
+            raise ValueError(_("附件选择格式错误"))
         choices = attachment_selections
 
     selected = {}
     seen = set()
     for choice in choices:
         if not isinstance(choice, dict) or set(choice) - CHOICE_FIELDS:
-            raise ValueError("附件选择包含不允许的来源凭据字段")
+            raise ValueError(_("附件选择包含不允许的来源凭据字段"))
         document_id = str(choice.get("document_id") or "")
         if document_id not in summaries:
-            raise ValueError("附件不属于当前付款来源")
+            raise ValueError(_("附件不属于当前付款来源"))
         if document_id in seen:
-            raise ValueError("同一附件不能重复选择")
+            raise ValueError(_("同一附件不能重复选择"))
         seen.add(document_id)
         if choice.get("selected") not in (None, True, False, 0, 1, "0", "1"):
-            raise ValueError("附件选择状态格式错误")
+            raise ValueError(_("附件选择状态格式错误"))
         enabled = choice.get("selected", True) in (True, 1, "1")
         keys = choice.get("logical_fee_keys")
         if keys is None:
             keys = summaries[document_id]["suggested_logical_fee_keys"] or sorted(selected_keys)
         if not isinstance(keys, list) or any(not isinstance(key, str) for key in keys):
-            raise ValueError("附件费用分类格式错误")
+            raise ValueError(_("附件费用分类格式错误"))
         keys = sorted(set(keys))
         if set(keys) - selected_keys:
-            raise ValueError("附件费用分类不属于本次付款选择")
+            raise ValueError(_("附件费用分类不属于本次付款选择"))
         if enabled and not keys:
-            raise ValueError("已选附件至少关联一个本次费用分类")
+            raise ValueError(_("已选附件至少关联一个本次费用分类"))
         if enabled:
             selected[document_id] = keys
 
@@ -354,7 +361,7 @@ def validate_attachment_dependencies(source, plan):
     current = sorted((document_id, document_fingerprint(document))
                      for document_id, document in _documents(source).items())
     if current != [tuple(row) for row in plan.get("dependency") or []]:
-        raise ValueError("付款来源附件或归档状态已变化，请重新预览")
+        raise ValueError(_("付款来源附件或归档状态已变化，请重新预览"))
     if plan.get("blockers"):
         raise ValueError(plan["blockers"][0])
 
@@ -395,7 +402,7 @@ def _active_payment_rule(ledger, batch_name, version_name, logical_key):
             and row.get("is_active") not in (0, False, "0")
             and row.get("is_enabled") not in (0, False, "0")]
     if len(rows) != 1:
-        raise ValueError("付款费用规则与凭证关联状态异常，请重新预览")
+        raise ValueError(_("付款费用规则与凭证关联状态异常，请重新预览"))
     return rows[0]
 
 
@@ -408,7 +415,7 @@ def _record_pending(store, batch, version_name, source, document, choice, select
     for key in choice["logical_fee_keys"]:
         binding = (pending_context.get("bindings") or {}).get(key) or {}
         if not binding:
-            raise ValueError("付款附件缺少可验证的费用规则绑定")
+            raise ValueError(_("付款附件缺少可验证的费用规则绑定"))
         pending_id = _pending_id(batch["name"], version_name, source["id"], document["id"], key)
         selection_amount, selection_currency = _selection_summary(selected_rows, key)
         row = {
@@ -478,7 +485,7 @@ def validate_pending_evidence_retry(store, source, batch, version_name, preview,
         return {"selected": [], "blockers": []}
     if (application.get("preview_id") != preview.get("id") or application.get("batch") != batch.get("name")
             or application.get("version") != version_name or application.get("status") != "applied"):
-        raise ValueError("付款附件待重试记录与已采用结果不一致")
+        raise ValueError(_("付款附件待重试记录与已采用结果不一致"))
     documents = _documents(source)
     retry_choices = {}
     for row in rows:
@@ -488,27 +495,27 @@ def validate_pending_evidence_retry(store, source, batch, version_name, preview,
         binding = bindings.get(key) or {}
         if (row.get("preview_id") != preview.get("id") or row.get("application_id") != application.get("id")
                 or not choice):
-            raise ValueError("付款附件待重试选择已变化")
+            raise ValueError(_("付款附件待重试选择已变化"))
         if (not document or row.get("source_id") != source.get("id")
                 or row.get("source_corp") != source.get("corp")
                 or row.get("source_instance") != source.get("instance")
                 or row.get("source_business_fingerprint") != _source_business_fingerprint(source)):
-            raise ValueError("付款附件待重试来源已变化")
+            raise ValueError(_("付款附件待重试来源已变化"))
         expected_content = row.get("document_content_fingerprint") or ""
         if not expected_content or _retry_content_fingerprint(document) != expected_content:
-            raise ValueError("付款附件内容指纹已变化，不能重试归档")
+            raise ValueError(_("付款附件内容指纹已变化，不能重试归档"))
         if (_retry_document_identity(document) != row.get("document_identity_fingerprint")
                 or _retry_source_relation(document) != row.get("source_relation_fingerprint")):
-            raise ValueError("付款附件身份或来源关系已变化，不能重试归档")
+            raise ValueError(_("付款附件身份或来源关系已变化，不能重试归档"))
         if row.get("source_evidence_fingerprint") != _source_evidence_fingerprint(source):
-            raise ValueError("付款附件待重试来源资料已变化")
+            raise ValueError(_("付款附件待重试来源资料已变化"))
         if _selection_fingerprint(selected_rows, key) != row.get("selection_fingerprint"):
-            raise ValueError("付款金额或费用选择已变化，不能重试附件")
+            raise ValueError(_("付款金额或费用选择已变化，不能重试附件"))
         if (binding.get("claim_fingerprint") != row.get("claim_fingerprint")
                 or binding.get("rule_fingerprint") != row.get("rule_fingerprint")
                 or binding.get("rule_name") != row.get("rule_name")
                 or binding.get("rule_binding_id") != row.get("rule_binding_id")):
-            raise ValueError("付款认领或费用规则已变化，不能重试附件")
+            raise ValueError(_("付款认领或费用规则已变化，不能重试附件"))
         retry = retry_choices.setdefault(row["document_id"], {
             "document_id": row["document_id"], "logical_fee_keys": [],
             "required": False, "role": row.get("role") or "other",
@@ -649,11 +656,11 @@ def materialize_payment_evidence(store, ledger, source, batch, version_name, att
     for choice in attachment_plan.get("selected") or []:
         document = documents.get(choice["document_id"])
         if not document:
-            raise ValueError("付款来源附件已缺失，请重新预览")
+            raise ValueError(_("付款来源附件已缺失，请重新预览"))
         availability, _blocker = _availability(document)
         if availability != "available":
             if choice.get("required"):
-                raise ValueError("付款金额依赖的来源附件尚不可归档")
+                raise ValueError(_("付款金额依赖的来源附件尚不可归档"))
             _record_pending(store, batch, version_name, source, document, choice, selected_rows, pending_context)
             materialized.append({"document_id": choice["document_id"], "status": availability,
                                  "logical_fee_keys": choice["logical_fee_keys"]})
@@ -665,14 +672,14 @@ def materialize_payment_evidence(store, ledger, source, batch, version_name, att
                 if attachment:
                     if (mapping.get("document_id") != document["id"] or mapping.get("version") != version_name
                             or attachment.get("batch") != batch["name"] or attachment.get("version") != version_name):
-                        raise ValueError("付款附件已被其他批次或版本占用")
+                        raise ValueError(_("付款附件已被其他批次或版本占用"))
                 else:
                     save_attachment(store, ledger, source, document, batch, version_name, [], register_file,
                                     values_factory=payment_attachment_values)
                     mapping = store.get("attachment_map", digest(document["id"], version_name))
                     attachment = ledger.get("attachment", mapping["attachment"]) if mapping else None
                 if not attachment:
-                    raise ValueError("付款附件未能归档到当前批次版本")
+                    raise ValueError(_("付款附件未能归档到当前批次版本"))
                 role, evidence_type, accounting_role = _evidence_role(document)
                 evidence_names = []
                 for key in choice["logical_fee_keys"]:

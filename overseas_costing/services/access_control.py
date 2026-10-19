@@ -3,6 +3,13 @@
 from __future__ import annotations
 
 try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
+try:
     import frappe
 except Exception:  # pragma: no cover - 纯函数测试时保持可导入
     frappe = None
@@ -35,7 +42,7 @@ def require_doctype_permission(doctype: str, ptype: str = "read", *, doc=None) -
     if frappe.has_permission(doctype, ptype=ptype, doc=permission_doc):
         return
     label = PERMISSION_LABELS.get(ptype, ptype)
-    frappe.throw(f"当前账号没有{label}权限：{doctype}。", frappe.PermissionError)
+    frappe.throw(_("当前账号没有{0}权限：{1}。").format(label, doctype), frappe.PermissionError)
 
 
 def require_batch_permission(batch_reference: str, ptype: str = "read") -> str:
@@ -46,7 +53,7 @@ def require_batch_permission(batch_reference: str, ptype: str = "read") -> str:
 
     batch_name = batch_service._resolve_batch_name(str(batch_reference or "").strip())
     if not batch_name:
-        frappe.throw("未找到目标批次。", frappe.DoesNotExistError)
+        frappe.throw(_("未找到目标批次。"), frappe.DoesNotExistError)
     require_doctype_permission("Overseas Cost Batch", ptype, doc=batch_name)
     return batch_name
 
@@ -74,7 +81,7 @@ def require_packing_workflow_permission(batch_reference: str, operation: str) ->
     }
     normalized = str(operation or "").strip().lower()
     if normalized not in permissions:
-        raise ValueError("装箱工作流操作类型不合法。")
+        raise ValueError(_("装箱工作流操作类型不合法。"))
     return require_batch_permission(batch_reference, permissions[normalized])
 
 

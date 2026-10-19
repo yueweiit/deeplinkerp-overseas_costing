@@ -1,5 +1,12 @@
 """小型 SQL 存储层：生产使用 Frappe/MariaDB，SQLite 用于真实事务约束测试。"""
 from __future__ import annotations
+
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
 from contextlib import contextmanager
 import json
 import uuid
@@ -93,10 +100,10 @@ class Store:
     @staticmethod
     def validate_columns(table, keys):
         if table not in TABLES:
-            raise ValueError('未知数据表')
+            raise ValueError(_('未知数据表'))
         columns = set(re.findall(r'(\w+) (?:VARCHAR|INTEGER)', TABLES[table])) | {'id', 'data'}
         if set(keys) - columns:
-            raise ValueError('未知查询字段')
+            raise ValueError(_('未知查询字段'))
 
     def commit(self):
         self.db.commit()

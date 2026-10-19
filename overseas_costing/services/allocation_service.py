@@ -7,6 +7,13 @@ AI 只选择分摊依据和理由，不允许凭空新增金额；系统随后�
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 import json
 import os
 import re
@@ -419,7 +426,7 @@ def _extract_json_object(content: str) -> dict:
             raise
         loaded = json.loads(match.group(0))
     if not isinstance(loaded, dict):
-        raise ValueError("AI 返回结果不是 JSON 对象。")
+        raise ValueError(_("AI 返回结果不是 JSON 对象。"))
     return loaded
 
 

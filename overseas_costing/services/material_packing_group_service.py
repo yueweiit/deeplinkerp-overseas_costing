@@ -1,6 +1,13 @@
 """Server-owned material packing groups and count-once calculation projection."""
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 from collections import Counter
 from copy import deepcopy
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -77,29 +84,29 @@ def _assert_members(items, groups, member_keys, *, ignore_group_id=''):
     keys = [_key(row) for row in ordered]
     members = [str(value or '').strip() for value in member_keys or []]
     if len(members) < 2 or len(members) != len(set(members)) or any(not value for value in members):
-        raise ValueError('请至少选择两行不重复的物料。')
+        raise ValueError(_('请至少选择两行不重复的物料。'))
     if any(value not in keys or keys.count(value) != 1 for value in members):
-        raise ValueError('装箱组物料已变化，请刷新后重新选择。')
+        raise ValueError(_('装箱组物料已变化，请刷新后重新选择。'))
     positions = sorted(keys.index(value) for value in members)
     if positions != list(range(min(positions), max(positions) + 1)):
-        raise ValueError('只能合并当前表中连续的物料行。')
+        raise ValueError(_('只能合并当前表中连续的物料行。'))
     occupied = {key for group in groups or [] if group.get('group_id') != ignore_group_id
                 and group.get('status') != 'removed' for key in group.get('member_keys') or []}
     overlap = occupied.intersection(members)
     if overlap:
-        raise ValueError('所选物料已属于其他装箱组，请先解除原分组。')
+        raise ValueError(_('所选物料已属于其他装箱组，请先解除原分组。'))
     return [ordered[position] for position in positions]
 
 
 def build_group_preview(items, groups, member_keys, *, action, version, group_id='', values=None,
                         source_fingerprint='', reason='', creation_method='manual'):
     if action not in {'create', 'update', 'remove'}:
-        raise ValueError('装箱组操作不合法。')
+        raise ValueError(_('装箱组操作不合法。'))
     current = next((deepcopy(group) for group in groups or [] if group.get('group_id') == group_id), None)
     if action in {'update', 'remove'} and not current:
-        raise ValueError('装箱组不存在或已变化。')
+        raise ValueError(_('装箱组不存在或已变化。'))
     if action in {'update', 'remove'} and not str(reason or '').strip():
-        raise ValueError('修改或解除装箱组时请填写原因。')
+        raise ValueError(_('修改或解除装箱组时请填写原因。'))
     members = list((current or {}).get('member_keys') or member_keys or []) if action == 'remove' else list(member_keys or [])
     if action == 'remove':
         by_key = {_key(row):deepcopy(row) for row in items}
@@ -117,7 +124,7 @@ def build_group_preview(items, groups, member_keys, *, action, version, group_id
             raw = sum((_decimal(row.get(field)) or Decimal('0') for row in member_rows), Decimal('0'))
         parsed = _decimal(raw)
         if parsed is None:
-            raise ValueError(f'装箱组 {field} 必须是非负数。')
+            raise ValueError(_("装箱组 {0} 必须是非负数。").format(field))
         totals[field] = _text(parsed)
     types = list(dict.fromkeys(str(row.get('packaging_type') or '').strip() for row in member_rows
                                if str(row.get('packaging_type') or '').strip()))
@@ -151,14 +158,14 @@ def allocate_group_values(member_rows, group):
             bases, basis, basis_total = values, field, total
             break
     else:
-        raise ValueError('装箱组缺少有效货值和发货数量，无法分摊。')
+        raise ValueError(_('装箱组缺少有效货值和发货数量，无法分摊。'))
     result = [deepcopy(row) for row in rows]
     for field in MONEY_FIELDS:
         if field not in group:
             continue
         total = _decimal(group.get(field))
         if total is None:
-            raise ValueError(f'装箱组 {field} 无效。')
+            raise ValueError(_("装箱组 {0} 无效。").format(field))
         assigned = Decimal('0')
         precision = Decimal('0.000001')
         for index, base in enumerate(bases):
@@ -179,13 +186,13 @@ def project_packing_groups(items, groups, *, strict=True):
             continue
         if group.get('status') == 'needs_reconfirmation':
             if strict:
-                raise ValueError('装箱组成员已变化，请重新确认分组。')
+                raise ValueError(_('装箱组成员已变化，请重新确认分组。'))
             public_groups.append({**group, 'blocking':True})
             continue
         members = [by_key.get(str(key)) for key in group.get('member_keys') or []]
         if any(row is None for row in members) or seen.intersection(group.get('member_keys') or []):
             if strict:
-                raise ValueError('装箱组成员不完整或重复，请重新确认。')
+                raise ValueError(_('装箱组成员不完整或重复，请重新确认。'))
             public_groups.append({**group, 'blocking':True})
             continue
         try:
@@ -228,7 +235,7 @@ def prepare_group_preview(batch_name, version_name, member_keys, action, *, grou
     repo = repository or FrappeMaterialPackingGroupRepository()
     state = repo.load(batch_name, version_name, lock=False)
     if not state.get('editable'):
-        raise ValueError('历史、已确认或已回写版本不能修改装箱组。')
+        raise ValueError(_('历史、已确认或已回写版本不能修改装箱组。'))
     preview = build_group_preview(state['items'], state['groups'], member_keys, action=action,
                                   version=state['version'], group_id=group_id, values=values,
                                   source_fingerprint=source_fingerprint, reason=reason,
@@ -246,11 +253,11 @@ def confirm_group_preview(batch_name, preview_id, revision, edit_token, expected
     repo = repository or FrappeMaterialPackingGroupRepository()
     preview = repo.get_preview(preview_id)
     if not preview or preview.get('batch') != batch_name or preview.get('revision') != revision:
-        raise ValueError('装箱组预览已失效，请重新预览。')
+        raise ValueError(_('装箱组预览已失效，请重新预览。'))
     repo.assert_write(batch_name, edit_token, expected_modified)
     state = repo.load(batch_name, preview['version'], lock=True)
     if not state.get('editable') or _state_fingerprint(state) != preview.get('state_fingerprint'):
-        raise ValueError('物料、装箱组或版本已变化，请重新预览。')
+        raise ValueError(_('物料、装箱组或版本已变化，请重新预览。'))
     group = deepcopy(preview['group'])
     group.update(status='removed' if preview['action'] == 'remove' else 'confirmed',
                  confirmed_by=str(actor or ''), confirmed_at=datetime.now().isoformat(timespec='seconds'),
@@ -269,20 +276,20 @@ def prepare_group_batch_preview(batch_name, version_name, group_ids, *, reason='
     repo = repository or FrappeMaterialPackingGroupRepository()
     requested = [str(value or '').strip() for value in group_ids or []]
     if not requested or any(not value for value in requested):
-        raise ValueError('请选择至少一个装箱组。')
+        raise ValueError(_('请选择至少一个装箱组。'))
     if len(requested) != len(set(requested)):
-        raise ValueError('装箱组选择存在重复。')
+        raise ValueError(_('装箱组选择存在重复。'))
     if len(requested) > 100:
-        raise ValueError('一次最多解除 100 个装箱组。')
+        raise ValueError(_('一次最多解除 100 个装箱组。'))
     if not str(reason or '').strip():
-        raise ValueError('解除装箱组时请填写原因。')
+        raise ValueError(_('解除装箱组时请填写原因。'))
     state = repo.load(batch_name, version_name, lock=False)
     if not state.get('editable'):
-        raise ValueError('历史、已确认或已回写版本不能修改装箱组。')
+        raise ValueError(_('历史、已确认或已回写版本不能修改装箱组。'))
     active = {str(group.get('group_id') or ''):deepcopy(group)
               for group in state.get('groups') or [] if group.get('status') != 'removed'}
     if any(group_id not in active for group_id in requested):
-        raise ValueError('装箱组已变化，请刷新后重新选择。')
+        raise ValueError(_('装箱组已变化，请刷新后重新选择。'))
     all_keys = [_key(row) for row in state.get('items') or [] if _key(row)]
     key_counts = Counter(all_keys)
     available_keys = {key for key, count in key_counts.items() if count == 1}
@@ -291,10 +298,10 @@ def prepare_group_batch_preview(batch_name, version_name, group_ids, *, reason='
     for group in selected_groups:
         group_members = [str(key or '').strip() for key in group.get('member_keys') or []]
         if len(group_members) < 2 or any(not key or key not in available_keys for key in group_members):
-            raise ValueError('装箱组成员已变化，请刷新后重新选择。')
+            raise ValueError(_('装箱组成员已变化，请刷新后重新选择。'))
         members.extend(group_members)
     if len(members) != len(set(members)):
-        raise ValueError('装箱组成员重复，请先修复分组。')
+        raise ValueError(_('装箱组成员重复，请先修复分组。'))
     fingerprint = _state_fingerprint(state)
     preview = {
         'ok':True, 'action':'batch_remove', 'batch':state['batch'], 'version':state['version'],
@@ -315,11 +322,11 @@ def confirm_group_batch_preview(batch_name, preview_id, revision, edit_token, ex
     preview = repo.get_preview(preview_id)
     if (not preview or preview.get('action') != 'batch_remove' or preview.get('batch') != batch_name
             or preview.get('revision') != revision):
-        raise ValueError('装箱组预览已失效，请重新预览。')
+        raise ValueError(_('装箱组预览已失效，请重新预览。'))
     repo.assert_write(batch_name, edit_token, expected_modified)
     state = repo.load(batch_name, preview['version'], lock=True)
     if not state.get('editable') or _state_fingerprint(state) != preview.get('state_fingerprint'):
-        raise ValueError('物料、装箱组或版本已变化，请重新预览。')
+        raise ValueError(_('物料、装箱组或版本已变化，请重新预览。'))
     requested = set(preview.get('group_ids') or [])
     now = datetime.now().isoformat(timespec='seconds')
     removed = []
@@ -332,7 +339,7 @@ def confirm_group_batch_preview(batch_name, preview_id, revision, edit_token, ex
             removed.append(group.get('group_id'))
         groups.append(group)
     if set(removed) != requested:
-        raise ValueError('装箱组已变化，请重新预览。')
+        raise ValueError(_('装箱组已变化，请重新预览。'))
     modified = repo.save_groups(state, groups, preview, actor)
     return {
         'ok':True, 'status':'CONFIRMED', 'action':'batch_remove',
@@ -355,7 +362,7 @@ class FrappeMaterialPackingGroupRepository:
         frappe = self.frappe
         batch = batch_service._resolve_batch_name(str(batch_name or ''))
         if not batch:
-            raise ValueError('未找到当前批次。')
+            raise ValueError(_('未找到当前批次。'))
         current = frappe.db.get_value('Overseas Cost Batch', batch,
             ['name','current_version','modified','confirm_status','writeback_status','is_locked'], as_dict=True) or {}
         version = batch_service._resolve_version_name(batch, version_name)
@@ -365,7 +372,7 @@ class FrappeMaterialPackingGroupRepository:
         version_row = frappe.db.get_value('Overseas Cost Version', version,
             ['name','batch','modified','status','extra_json'], as_dict=True) or {}
         if version_row.get('batch') != batch:
-            raise ValueError('成本版本不属于当前批次。')
+            raise ValueError(_('成本版本不属于当前批次。'))
         items = frappe.get_all('Overseas Cost Item', filters={'batch':batch,'version':version},
                                fields=list(PACKING_REPOSITORY_ITEM_FIELDS),
                                order_by='row_no asc, name asc', limit_page_length=10000)

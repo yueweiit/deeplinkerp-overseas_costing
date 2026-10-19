@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+try:
+    from frappe import _
+except ImportError:
+    def _(message):
+        return message
+
+
 from copy import deepcopy
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -311,10 +318,10 @@ def build_reset_entry(
         identity_hints=identity_hints,
     )
     if not proposal or proposal.get("blocked"):
-        raise ValueError("国际物流物料表无法唯一确定。")
+        raise ValueError(_("国际物流物料表无法唯一确定。"))
     payload = proposal.get("payload") or {}
     if payload.get("scope_status") != "AUTHORITATIVE" or not payload.get("rows"):
-        raise ValueError("国际物流物料范围不完整。")
+        raise ValueError(_("国际物流物料范围不完整。"))
     plan = plan_authoritative_scope_membership(
         items, proposal, reset_all_existing=True)
     before_codes = sorted(
@@ -478,9 +485,9 @@ def _reload_reset_entry(runtime, target: dict) -> dict:
     if source is None:
         if status == "PARTIAL":
             raise MaterialScopeSourceError(
-                "找到多个国际物流正文，无法唯一定位。", scope_status="PARTIAL")
+                _("找到多个国际物流正文，无法唯一定位。"), scope_status="PARTIAL")
         raise MaterialScopeSourceError(
-            "未找到可用的国际物流正文。", scope_status="UNAVAILABLE")
+            _("未找到可用的国际物流正文。"), scope_status="UNAVAILABLE")
     fields = list(dict.fromkeys([
         *GRID_FIELDS, "manual_override_flag", "manual_override_reason",
         "is_excluded", "exclusion_reason",
@@ -587,7 +594,7 @@ def _apply_packing_group_changes(metadata: dict, changes: list[dict], run_id: st
         group = by_id.get(str(change.get("group_id") or ""))
         before = list(change.get("before_member_keys") or [])
         if not group or list(group.get("member_keys") or []) != before:
-            raise ValueError("装箱组已变化，请重新生成只读审计。")
+            raise ValueError(_("装箱组已变化，请重新生成只读审计。"))
         after = list(change.get("after_member_keys") or [])
         group["member_keys"] = after
         group["status"] = str(change.get("after_status") or "needs_reconfirmation")
@@ -665,7 +672,7 @@ def _refresh_reset_target(runtime, target: dict) -> dict:
     version = runtime.db.get_value(
         "Overseas Cost Version", target["version"], ["batch", "status"], as_dict=True) or {}
     if str(version.get("batch") or "") != str(target["batch"]):
-        raise ValueError("成本版本已不属于当前批次。")
+        raise ValueError(_("成本版本已不属于当前批次。"))
     current_version = str(batch.get("current_version") or "")
     return {
         **target,
@@ -688,7 +695,7 @@ def reset_all_material_scopes(
     if dry_run:
         return public
     if not expected_plan_hash or expected_plan_hash != audit.get("plan_hash"):
-        raise ValueError("只读审计结果已变化，请重新生成全量计划后再执行。")
+        raise ValueError(_("只读审计结果已变化，请重新生成全量计划后再执行。"))
     runtime = _frappe
     if runtime is None:
         raise RuntimeError("Frappe 运行时不可用。")
