@@ -27,10 +27,10 @@ def _fee_workspace_result(script: str) -> dict:
     workspace_file = PARTS / "78-material-fee-workspace.js"
     grid_file = PARTS / "79-material-import-grid.js"
     completed = subprocess.run(
-        [
-            "node",
-            "-e",
-            (
+        ["node", "-e", "eval(require('fs').readFileSync(0, 'utf8'))"],
+        # Linux caps a single argv entry at 128 KiB; translation catalogs exceed it.
+        # Preserve -e's existing global built-ins, but pass the real script on stdin.
+        input=(
                 "const fs=require('fs');"
                 f"const gridFile={json.dumps(str(grid_file))};"
                 f"const source=fs.readFileSync({json.dumps(str(workspace_file))},'utf8')+(fs.existsSync(gridFile)?fs.readFileSync(gridFile,'utf8'):'');"
@@ -38,8 +38,7 @@ def _fee_workspace_result(script: str) -> dict:
                 "global.frappe={show_alert:(value)=>global.alerts.push(value)};"
                 "global.alerts=[];"
                 f"(async()=>{{{script}}})().catch((error)=>{{console.error(error);process.exit(1)}});"
-            ),
-        ],
+        ),
         check=True,
         capture_output=True,
         text=True,
