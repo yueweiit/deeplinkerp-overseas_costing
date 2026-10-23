@@ -5907,3 +5907,29 @@ wiki_sheet,wiki_sheet
 暂无差额,Sin diferencia
 待分类,Pendiente de clasificar
 未配置,Sin configurar
+费用名称 / 原币金额,Concepto / importe original
+其他费用,Otros gastos
+＋ 添加其他费用,＋ Agregar otro gasto
+当前费用由来源管理或只读,Gastos gestionados por el origen o de solo lectura
+其他费用合计：{0},Total de otros gastos: {0}
+删除其他费用：{0},Quitar otro gasto: {0}
+删除此费用,Quitar este gasto
+选择或填写费用名称,Seleccionar o escribir el concepto
+其他费用名称,Concepto del otro gasto
+选择其他费用名称,Seleccionar el concepto del otro gasto
+港口杂费,Gastos varios del puerto
+码头费用,Gastos de terminal
+代理费,Honorarios de agencia
+海关查验费,Gastos de inspección aduanera
+费用最新状态读取失败，请重试。,No se pudieron consultar los gastos actuales. Inténtelo de nuevo.
+费用移除失败。,No se pudo quitar el gasto.
+最新费用状态读取失败，请刷新后重试。,No se pudieron consultar los gastos actuales. Actualice y vuelva a intentarlo.
+请先保存当前修改，再添加其他费用。,Guarde los cambios antes de agregar otro gasto.
+该费用需通过原有来源、停用或重复费用核对处理。,Revise este gasto desde su origen o mediante la revisión de gastos inactivos o duplicados.
+其他费用保存失败。,No se pudo guardar el otro gasto.
+请填写具体费用名称。,Escriba un concepto específico.
+费用名称不能超过 140 个字符。,El concepto no puede superar los 140 caracteres.
+费用名称,Concepto
+其他费用实例标识不合法。,Identificador de instancia de otro gasto no válido.
+其他费用名称不能为空，且不能超过 140 个字符。,El concepto es obligatorio y no puede superar los 140 caracteres.
+该费用已停用，请先核对历史记录，不能通过关联凭证恢复启用。,Este gasto está inactivo. Revise el historial; vincular comprobantes no puede reactivarlo.

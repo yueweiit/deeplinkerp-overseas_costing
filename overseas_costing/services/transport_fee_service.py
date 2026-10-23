@@ -10,6 +10,7 @@ except ImportError:
 
 
 from decimal import Decimal, InvalidOperation
+import re
 
 
 PRIMARY_FREIGHT = {
@@ -22,6 +23,19 @@ HISTORICAL_SURCHARGES = (
     ("air_forwarder_surcharge", "空运附加费", "chargeable_weight", "expense_invoice"),
     ("express_surcharge", "快递附加费", "chargeable_weight", "expense_invoice"),
 )
+OTHER_FEE_TYPES = (
+    ("other_port_misc", "港口杂费"),
+    ("other_terminal", "码头费用"),
+    ("other_agency", "代理费"),
+    ("other_inspection", "海关查验费"),
+    ("other_custom", "其他费用"),
+)
+
+
+def is_other_fee_key(value: object) -> bool:
+    """Recognize historical other-fee identities and independent manual rows."""
+    key = str(value or "").strip()
+    return key in dict(OTHER_FEE_TYPES) or bool(re.fullmatch(r"other_custom:[0-9a-f]{32}", key))
 
 
 def resolve_transport_mode(value: object) -> str:

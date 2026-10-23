@@ -10772,6 +10772,15 @@ class OverseasCostWorkbench {
     this.$root.on("click", "[data-action='mf-edit-fee']", (event) => {
       this.openMaterialFeeDialog($(event.currentTarget).attr("data-fee-key"));
     });
+    this.$root.on("click", "[data-action='mf-add-other-fee']", () => {
+      this.addOtherFeeRow().catch((error) => this.showError(error));
+    });
+    this.$root.on("click", "[data-action='mf-remove-other-fee']", (event) => {
+      this.removeOtherFeeRow($(event.currentTarget).attr("data-fee-key")).catch((error) => this.showError(error));
+    });
+    this.$root.on("change", "[data-mf-other-fee-preset]", (event) => {
+      this.applyOtherFeePreset($(event.currentTarget)).catch((error) => this.showError(error));
+    });
     this.$root.on("click", "[data-mf-freight-action]", (event) => {
       const $button = $(event.currentTarget);
       const action = $button.attr("data-mf-freight-action");
@@ -11569,13 +11578,212 @@ class OverseasCostWorkbench {
   }
 
   renderMaterialFeeTable(fees) {
-    if (!fees.length) return `<div class="ocw-detail-empty"><strong>${ocTranslate("暂无费用清单")}</strong></div>`;
+    fees = fees.filter(fee => !this.isOtherMaterialFee(fee.logical_fee_key)
+      || ![fee.is_active, fee.is_enabled].some(value => [0, false, "0"].includes(value)));
+    const controls = this.renderOtherFeeControls(fees);
+    if (!fees.length) return controls || `<div class="ocw-detail-empty"><strong>${ocTranslate("暂无费用清单")}</strong></div>`;
     return `
       <table class="ocw-mf-fee-table">
-        <thead><tr><th>${ocTranslate("费用项目")}</th><th>${ocTranslate("状态")}</th><th>${ocTranslate("原币金额")}</th><th>${ocTranslate("凭证")}</th><th>${ocTranslate("操作")}</th></tr></thead>
+        <thead><tr><th>${ocTranslate("费用项目")}</th><th>${ocTranslate("状态")}</th><th>${ocTranslate("费用名称 / 原币金额")}</th><th>${ocTranslate("凭证")}</th><th>${ocTranslate("操作")}</th></tr></thead>
         <tbody>${fees.map((fee) => this.renderMaterialFeeRow(fee)).join("")}</tbody>
-      </table>
+      </table>${controls}
     `;
+  }
+
+  isOtherMaterialFee(feeKey) {
+    const key = String(feeKey || "");
+    return key === "other_custom" || /^other_custom:[0-9a-f]{32}$/.test(key)
+      || (this.materialFeeState?.fees?.other_fee_options || []).some(row => row.logical_fee_key === key);
+  }
+
+  otherFeePickerLocked() {
+    const state = this.materialFeeState;
+    const source = state?.fees?.source_context || {};
+    return Boolean(this.detailState?.readOnly || state?.settlementData?.historical
+      || (source.root_kind === "expense" && !source.separate_adoption));
+  }
+
+  renderOtherFeeControls(fees) {
+    const state = this.materialFeeState;
+    if (!state?.fees?.other_fee_options?.length) return "";
+    const locked = this.otherFeePickerLocked();
+    const totals = new Map();
+    for (const fee of fees) {
+      const active = ![fee.is_active, fee.is_enabled].some(value => [0, false, "0"].includes(value));
+      const status = String(fee.amount_state || fee.amount_status || "");
+      if (this.isOtherMaterialFee(fee.logical_fee_key) && active
+        && ["ESTIMATED", "ACTUAL"].includes(status) && Number.isFinite(Number(fee.amount))) {
+        const currency = fee.currency || "MXN";
+        totals.set(currency, (totals.get(currency) || 0) + Number(fee.amount));
+      }
+    }
+    const total = [...totals].map(([currency, amount]) => `${this.escape(currency)} ${this.formatMoney(amount)}`).join(" · ");
+    return `<div class="ocw-mf-other-fees"><button type="button" data-action="mf-add-other-fee" ${locked || state.otherFeePending ? "disabled" : ""} ${locked ? `title="${this.escape(ocTranslate("当前费用由来源管理或只读"))}"` : ""}>${ocTranslate("＋ 添加其他费用")}</button>${total ? `<div class="ocw-mf-other-fee-total">${ocTranslate("其他费用合计：{0}", [total])}</div>` : ""}</div>`;
+  }
+
+  canRemoveOtherFee(fee) {
+    if (!fee || !this.isOtherMaterialFee(fee.logical_fee_key) || this.otherFeePickerLocked()
+      || fee.source_binding_id || fee.duplicate_rule_names?.length
+      || [fee.is_active, fee.is_enabled].some(value => [0, false, "0"].includes(value))) return false;
+    const fill = this.materialFeeState?.aiFill;
+    return !(fill?.draftVisible && this.isMaterialAIReadyStatus(fill.status)
+      && (fill.proposals || []).some(row => row.proposal_type === "fee_update"
+        && row.payload?.logical_fee_key === fee.logical_fee_key));
+  }
+
+  async refreshOtherFeesForWrite(state) {
+    if (!state.cacheDirty) return true;
+    const batchName = this.detailState.batchName, versionName = this.detailState.versionName;
+    const fresh = await this.call("overseas_costing.api.fees.get_fee_worklist", {
+      batch_name: batchName, version_name: versionName,
+    }, false);
+    if (this.materialFeeState !== state || this.detailState.batchName !== batchName
+      || this.detailState.versionName !== versionName || this.detailState.tab !== "documents") return false;
+    if (!fresh?.ok) throw new Error(fresh?.message || ocTranslate("费用最新状态读取失败，请重试。"));
+    state.fees = fresh;
+    return true;
+  }
+
+  async removeOtherFeeRow(feeKey) {
+    const state = this.ensureMaterialFeeState();
+    if (state.otherFeePending || !this.canRemoveOtherFee(this.findMaterialFee(feeKey))) return false;
+    const batchName = this.detailState.batchName, versionName = this.detailState.versionName;
+    const current = () => this.materialFeeState === state && this.detailState.batchName === batchName
+      && this.detailState.versionName === versionName && this.detailState.tab === "documents";
+    state.otherFeePending = true;
+    this.$root?.find("[data-action='mf-add-other-fee'], [data-action='mf-remove-other-fee']").prop("disabled", true);
+    this.$root?.find("[data-fee-key]").filter((_index, node) => $(node).attr("data-fee-key") === feeKey).prop("disabled", true);
+    try {
+      return await this.trackMaterialFeeWrite(async () => {
+        if (!current() || !(await this.ensureMaterialFeeEditSession()) || !current()) return false;
+        if (!(await this.refreshOtherFeesForWrite(state)) || !current()) return false;
+        const fee = this.findMaterialFee(feeKey);
+        if (!this.canRemoveOtherFee(fee)) return false;
+        const payload = this.materialFeeSavePayload({ ...fee, is_active: 0, is_enabled: 0 }, {
+          status_change_reason: "移除其他费用",
+        });
+        const result = await this.call("overseas_costing.api.fees.save_fee", {
+          batch_name: batchName, version_name: versionName, fee_payload: JSON.stringify(payload),
+          edit_token: this.detailState.editToken, expected_modified: this.detailState.expectedModified,
+        });
+        if (!result?.ok) throw new Error(result?.message || ocTranslate("费用移除失败。"));
+        if (!current()) return true;
+        const rows = (state.fees.fees || state.fees.items || []).map(row => row.logical_fee_key === feeKey
+          ? { ...row, ...result.fee, is_active: 0, is_enabled: 0 } : row);
+        state.fees = { ...state.fees, fees: rows, items: rows };
+        delete state.feeDrafts[feeKey];
+        this.updateMaterialFeeExpectedModified(result);
+        return true;
+      });
+    } catch (error) {
+      if (current() && this.materialFeeEditSessionInvalid(error)) this.clearMaterialFeeEditSession();
+      if (current()) {
+        try {
+          if (await this.recoverMaterialFeeReadonlyState(batchName) && current()) {
+            const fee = this.findMaterialFee(feeKey);
+            if (!fee || [fee.is_active, fee.is_enabled].some(value => [0, false, "0"].includes(value))) {
+              delete state.feeDrafts[feeKey];
+              return true;
+            }
+          }
+        } catch (_recoveryError) { /* A failed read cannot confirm removal; keep the row and its draft. */ }
+      }
+      throw error;
+    } finally {
+      state.otherFeePending = false;
+      if (current()) this.renderMaterialFeeWorkspacePreservingPosition();
+    }
+  }
+
+  async applyOtherFeePreset($select) {
+    const name = String($select.val() || "");
+    if (!name) return false;
+    const state = this.ensureMaterialFeeState();
+    const batchName = this.detailState.batchName;
+    const versionName = this.detailState.versionName;
+    const $input = $select.closest(".ocw-mf-fee-amount-cell").find("[data-mf-other-fee-name]");
+    $select.val("");
+    // Native selects may blur before change; do not let that no-op swallow this edit.
+    const previous = state.feeCellWrites.get(String($input.attr("data-fee-key") || ""));
+    if (previous) await previous.catch(() => false);
+    if (this.materialFeeState !== state || this.detailState.batchName !== batchName
+      || this.detailState.versionName !== versionName || this.detailState.tab !== "documents") return false;
+    $input.val(name);
+    this.updateMaterialFeeDraftFromInput($input);
+    return this.saveMaterialFeeInlineAmount($input);
+  }
+
+  async addOtherFeeRow() {
+    const state = this.ensureMaterialFeeState();
+    const option = (state.fees?.other_fee_options || []).find(row => row.logical_fee_key === "other_custom");
+    if (!option || this.otherFeePickerLocked() || state.otherFeePending) return false;
+    const batchName = this.detailState.batchName;
+    const versionName = this.detailState.versionName;
+    const current = () => this.materialFeeState === state && this.detailState.batchName === batchName
+      && this.detailState.versionName === versionName && this.detailState.tab === "documents";
+    const recoverAttempt = async () => {
+      if (!(await this.recoverMaterialFeeReadonlyState(batchName)) || !current()) {
+        throw new Error(ocTranslate("最新费用状态读取失败，请刷新后重试。"));
+      }
+      const confirmed = this.findMaterialFee(state.otherFeeAddKey);
+      if (confirmed) state.otherFeeAddKey = "";
+      return confirmed;
+    };
+    let attemptedWrite = false;
+    state.otherFeePending = true;
+    this.$root?.find("[data-action='mf-add-other-fee']").prop("disabled", true);
+    try {
+      return await this.trackMaterialFeeWrite(async () => {
+        if (!current() || this.otherFeePickerLocked()) return false;
+        if (Object.keys(state.feeDrafts).length || Object.keys(state.materialDrafts).length
+          || Object.keys(state.materialSaveErrors).length) throw new Error(ocTranslate("请先保存当前修改，再添加其他费用。"));
+        if (!(await this.ensureMaterialFeeEditSession()) || !current()) return false;
+        if (state.otherFeeAddKey) {
+          const confirmed = await recoverAttempt();
+          if (confirmed) return confirmed;
+        }
+        if (!(await this.refreshOtherFeesForWrite(state)) || !current() || this.otherFeePickerLocked()) return false;
+        // A lost response must retry the same identity, not add a second fee.
+        const feeKey = state.otherFeeAddKey || `other_custom:${globalThis.crypto.randomUUID().replace(/-/g, "")}`;
+        state.otherFeeAddKey = feeKey;
+        const rows = [...(state.fees.fees || state.fees.items || [])];
+        const prior = this.findMaterialFee(feeKey);
+        if (prior?.source_binding_id || prior?.duplicate_rule_names?.length
+          || (prior && [prior.is_active, prior.is_enabled].some(value => [0, false, "0"].includes(value)))) {
+          throw new Error(ocTranslate("该费用需通过原有来源、停用或重复费用核对处理。"));
+        }
+        const template = { ...option, logical_fee_key: feeKey, rule_code: feeKey,
+          priority_no: Math.max(100, ...rows.map(row => Number(row.priority_no) || 0)) + 1 };
+        const payload = this.materialFeeSavePayload(prior || template);
+        attemptedWrite = true;
+        const result = await this.call("overseas_costing.api.fees.save_fee", {
+          batch_name: batchName, version_name: versionName, fee_payload: JSON.stringify(payload),
+          edit_token: this.detailState.editToken, expected_modified: this.detailState.expectedModified,
+        });
+        if (!result?.ok) throw new Error(result?.message || ocTranslate("其他费用保存失败。"));
+        state.otherFeeAddKey = "";
+        const saved = { ...template, ...prior, ...result.fee, name: result.rule_name || result.fee?.name,
+          amount_state: result.fee?.amount_status || payload.amount_status, virtual: false, is_default_zero: false };
+        if (!current()) return saved;
+        const index = rows.findIndex(row => row.logical_fee_key === feeKey);
+        if (index < 0) rows.push(saved); else rows[index] = saved;
+        state.fees = { ...state.fees, fees: rows, items: rows };
+        this.updateMaterialFeeExpectedModified(result);
+        return saved;
+      });
+    } catch (error) {
+      if (current() && this.materialFeeEditSessionInvalid(error)) this.clearMaterialFeeEditSession();
+      if (current() && attemptedWrite && state.otherFeeAddKey) {
+        try {
+          const confirmed = await recoverAttempt();
+          if (confirmed) return confirmed;
+        } catch (_recoveryError) { /* Keep identity until a readonly retry can confirm the result. */ }
+      }
+      throw error;
+    } finally {
+      state.otherFeePending = false;
+      if (current()) this.renderMaterialFeeWorkspacePreservingPosition();
+    }
   }
 
   renderMaterialFeeRow(fee) {
@@ -11622,6 +11830,9 @@ class OverseasCostWorkbench {
     const inlineError = String(draft?.error || "");
     const errorId = this.materialFeeErrorId(feeKey);
     const feeLabel = ocTranslate(String(fee.expense_category || feeKey || "费用"));
+    const otherFee = this.isOtherMaterialFee(feeKey);
+    const nameOptions = (this.materialFeeState?.fees?.other_fee_options || []).filter(row => row.logical_fee_key !== "other_custom");
+    const customName = String(fee.expense_category || "") === "其他费用" ? "" : String(fee.expense_category || "");
     const evidence = fee.evidence || [];
     const evidenceAttachmentCount = new Set(evidence.map((row) => row.attachment).filter(Boolean)).size || evidence.length;
     const evidenceFinancials = fee.evidence_financials || {};
@@ -11645,11 +11856,14 @@ class OverseasCostWorkbench {
       ["MISSING", "待补"], ["ESTIMATED", "暂估"], ["ACTUAL", "实际"],
       ["NOT_INCURRED", "未发生"], ["INCLUDED", "已包含"],
     ];
+    const removeButton = this.canRemoveOtherFee(fee) ? `<button type="button" class="ocw-mf-remove-other-fee" data-action="mf-remove-other-fee" data-fee-key="${this.escape(feeKey)}" aria-label="${this.escape(ocTranslate("删除其他费用：{0}", [feeLabel]))}" title="${this.escape(ocTranslate("删除此费用"))}" ${this.materialFeeState?.otherFeePending ? "disabled" : ""}>×</button>` : "";
     return `
       <tr class="${[fee.legacy_unmapped || fee.requires_review ? "is-review" : "", aiFeeProposal ? "is-ai-draft" : ""].filter(Boolean).join(" ")}">
-        <td><strong>${this.escape(ocTranslate(fee.expense_category || fee.logical_fee_key || "--"))}</strong><small>${fee.virtual ? ocTranslate("默认项 · 未入库") : fee.legacy_unmapped ? ocTranslate("历史费用 · 请核对") : ocTranslate("已保存")}</small>${mexicoEntry ? `<small>${ocTranslate("由墨西哥同事补充")}</small>` : ""}</td>
-        <td><select data-mf-fee-status="1" data-fee-key="${this.escape(feeKey)}" data-original-value="${this.escape(amountStatus)}" aria-label="${this.escape(ocTranslate("{0}状态", [feeLabel]))}">${statusOptions.map(([value, label]) => `<option value="${value}" ${value === amountStatus ? "selected" : ""}>${ocTranslate(label)}</option>`).join("")}</select>${inclusionLabel ? `<small>${this.escape(ocTranslate(inclusionLabel))}</small>` : ""}</td>
+        <td><strong>${this.escape(ocTranslate(otherFee ? "其他费用" : fee.expense_category || fee.logical_fee_key || "--"))}</strong>${!otherFee || fee.legacy_unmapped ? `<small>${fee.virtual ? ocTranslate("默认项 · 未入库") : fee.legacy_unmapped ? ocTranslate("历史费用 · 请核对") : ocTranslate("已保存")}</small>` : ""}${mexicoEntry && !otherFee ? `<small>${ocTranslate("由墨西哥同事补充")}</small>` : ""}</td>
+        <td><select data-mf-fee-status="1" data-fee-key="${this.escape(feeKey)}" data-original-value="${this.escape(amountStatus)}" aria-label="${this.escape(ocTranslate("{0}状态", [feeLabel]))}">${statusOptions.map(([value, label]) => `<option value="${value}" ${value === amountStatus ? "selected" : ""}>${ocTranslate(label)}</option>`).join("")}</select>${inclusionLabel && (!otherFee || draft || aiFeeProposal || excludedFee) ? `<small>${this.escape(ocTranslate(inclusionLabel))}</small>` : ""}</td>
         <td class="ocw-mf-fee-amount-cell ${inlineError ? "is-save-error" : ""}" ${inlineError ? `title="${this.escape(inlineError)}"` : ""}>
+          <div class="ocw-mf-fee-entry ${otherFee && !aiFeeProposal ? "is-other" : ""}">
+          ${otherFee && !aiFeeProposal ? `<div class="ocw-mf-fee-name-control"><input data-mf-fee-input="expense_category" data-mf-other-fee-name="1" data-fee-key="${this.escape(feeKey)}" data-original-value="${this.escape(customName)}" value="${this.escape(draft?.expense_category ?? customName)}" maxlength="140" placeholder="${this.escape(ocTranslate("选择或填写费用名称"))}" aria-label="${this.escape(ocTranslate("其他费用名称"))}" aria-invalid="${inlineError ? "true" : "false"}" aria-describedby="${this.escape(errorId)}" /><select data-mf-fee-input="name_preset" data-mf-other-fee-preset="1" data-fee-key="${this.escape(feeKey)}" aria-label="${this.escape(ocTranslate("选择其他费用名称"))}"><option value=""></option>${nameOptions.map(row => `<option value="${this.escape(row.expense_category)}">${this.escape(ocTranslate(row.expense_category))}</option>`).join("")}</select></div>` : ""}
           <div class="ocw-mf-fee-inline-fields">
             ${aiFeeProposal
               ? `<select data-mf-ai-edit="1" data-proposal-id="${this.escape(aiFeeProposal.proposal_id || "")}" data-fieldname="currency" aria-label="${this.escape(ocTranslate("AI 草稿 {0}币种", [feeLabel]))}">${currencyOptions.map((option) => `<option value="${option.value}" ${option.value === currency ? "selected" : ""}>${option.label}</option>`).join("")}</select>
@@ -11657,11 +11871,12 @@ class OverseasCostWorkbench {
               : `<select data-mf-fee-input="currency" data-mf-fee-currency="1" data-fee-key="${this.escape(feeKey)}" data-original-value="${this.escape(this.normalizeMaterialFeeCurrency(fee.currency || "RMB"))}" aria-label="${this.escape(ocTranslate("{0}币种", [feeLabel]))}" aria-invalid="${inlineError ? "true" : "false"}" aria-describedby="${this.escape(errorId)}">${supportedCurrency ? "" : `<option value="" selected disabled>${ocTranslate("请选择币种（原 {0}）", [this.escape(currency || ocTranslate("未设置"))])}</option>`}${currencyOptions.map((option) => `<option value="${option.value}" ${option.value === currency ? "selected" : ""}>${option.label}</option>`).join("")}</select>
                  <input data-mf-fee-input="amount" data-mf-fee-amount="1" data-fee-key="${this.escape(feeKey)}" data-original-value="${this.escape(fee.amount ?? "")}" value="${this.escape(amount)}" ${forceActual ? 'data-mf-force-actual="1"' : ""} inputmode="decimal" aria-label="${this.escape(ocTranslate("{0}原币金额", [feeLabel]))}" aria-invalid="${inlineError ? "true" : "false"}" aria-describedby="${this.escape(errorId)}" />`}
           </div>
-          <small data-mf-fee-amount-hint="1">${aiFeeProposal ? ocTranslate("AI 草稿 · 确认所选草稿后才会保存") : defaultZero ? ocTranslate("默认暂估 0，待墨西哥确认") : missingSavedAmount ? ocTranslate("首次金额默认暂估") : ocTranslate("Enter 或失焦自动保存；状态可单独调整")}</small>
+          </div>
+          ${aiFeeProposal || defaultZero || missingSavedAmount ? `<small data-mf-fee-amount-hint="1">${aiFeeProposal ? ocTranslate("AI 草稿 · 确认所选草稿后才会保存") : defaultZero ? ocTranslate("默认暂估 0，待墨西哥确认") : ocTranslate("首次金额默认暂估")}</small>` : ""}
           <small id="${this.escape(errorId)}" class="ocw-mf-fee-inline-error-text ${inlineError ? "is-visible" : ""}" data-mf-fee-error="1">${this.escape(inlineError)}</small>
         </td>
-        <td><span class="ocw-mf-badge is-${evidenceInfo.tone}">${this.escape(ocTranslate(evidenceInfo.label))}</span><small>${evidenceAttachmentCount ? ocTranslate("{0} 份已关联", [evidenceAttachmentCount]) : ocTranslate("可上传或关联已有资料")}</small></td>
-        <td><div class="ocw-mf-row-actions"><button type="button" data-action="mf-edit-fee" data-fee-key="${this.escape(fee.logical_fee_key || "")}">${ocTranslate("更多设置")}</button><button type="button" data-action="mf-link-evidence" data-fee-key="${this.escape(fee.logical_fee_key || "")}">${ocTranslate("关联并解析凭证")}</button>${this.renderReviewFeedbackButton?.({ target_tab: "documents", target_field: feeKey }) || ""}${this.renderMaterialFeeEvidencePreview(feeKey)}</div>
+        <td><span class="ocw-mf-badge is-${evidenceInfo.tone}">${this.escape(ocTranslate(evidenceInfo.label))}</span>${evidenceAttachmentCount || !otherFee ? `<small>${evidenceAttachmentCount ? ocTranslate("{0} 份已关联", [evidenceAttachmentCount]) : ocTranslate("可上传或关联已有资料")}</small>` : ""}</td>
+        <td><div class="ocw-mf-row-actions"><button type="button" data-action="mf-edit-fee" data-fee-key="${this.escape(fee.logical_fee_key || "")}">${ocTranslate("更多设置")}</button><button type="button" data-action="mf-link-evidence" data-fee-key="${this.escape(fee.logical_fee_key || "")}">${ocTranslate("关联并解析凭证")}</button>${this.renderReviewFeedbackButton?.({ target_tab: "documents", target_field: feeKey }) || ""}${this.renderMaterialFeeEvidencePreview(feeKey)}${removeButton}</div>
           <details class="ocw-mf-row-details"><summary>${ocTranslate("范围与凭证详情")}</summary><div><span>${ocTranslate("适用：{0}", [this.escape(scopeLabel)])}</span>${finalRows.length ? `<span>${ocTranslate("最终账单：{0}", [this.escape(finalRows.join("；"))])}</span>` : ""}${settlementRows.length ? `<span>${ocTranslate("已付款净额：{0}（不与账单重复计费）", [this.escape(settlementRows.join("；"))])}</span>` : ""}${evidence.length ? evidence.map((row) => `<span>${ocTranslate("{0} · {1} · {2} {3}{4} · 终核状态：{5}", [this.escape(row.evidence_role || ocTranslate("凭证")), this.escape(row.evidence_type || ocTranslate("待分类")), this.escape(row.currency || ""), this.escape(row.original_amount ?? ocTranslate("待补金额")), row.related_evidence ? ocTranslate(" · 原付款 {0}", [this.escape(row.related_evidence)]) : "", this.escape(this.materialFeeEvidenceFinalLabel(row.validation_status))])} <button type="button" data-action="mf-evidence-status" data-evidence-name="${this.escape(row.name || "")}" data-status="VALID">${ocTranslate("确认有效")}</button><button type="button" data-action="mf-evidence-status" data-evidence-name="${this.escape(row.name || "")}" data-status="INVALID">${ocTranslate("标记无效")}</button></span>`).join("") : `<span>${ocTranslate("暂无关联凭证")}</span>`}</div></details>
         </td>
       </tr>
@@ -15538,7 +15753,12 @@ class OverseasCostWorkbench {
 
   materialFeeEditSessionInvalid(error) {
     const message = String(this.normalizeErrorMessage ? this.normalizeErrorMessage(error) : error?.message || error || "");
-    return /(?:编辑权|编辑会话|租约|token).*(?:失效|过期|无效|不存在)|(?:失效|过期|无效).*(?:编辑权|编辑会话|租约|token)|当前批次正在被.*编辑/i.test(message);
+    const ownerMarker = "__OCW_EDIT_OWNER__";
+    const lockedPattern = ocTranslate("当前批次正在被{0}编辑。", [ownerMarker]).split(ownerMarker)
+      .map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".+");
+    return message.includes(ocTranslate("编辑会话已过期，请重新进入编辑。"))
+      || new RegExp(lockedPattern).test(message)
+      || /(?:编辑权|编辑会话|租约|token).*(?:失效|过期|无效|不存在)|(?:失效|过期|无效).*(?:编辑权|编辑会话|租约|token)|当前批次正在被.*编辑/i.test(message);
   }
 
   updateMaterialFeeDraftFromInput($input) {
@@ -15560,8 +15780,12 @@ class OverseasCostWorkbench {
       forceActual: previous.forceActual || $amount.attr("data-mf-force-actual") === "1",
       touched: true,
     };
+    if (this.isOtherMaterialFee(feeKey)) {
+      const $name = $cell.find("[data-mf-other-fee-name]");
+      if ($name.length) draft.expense_category = String($name.val() ?? "");
+    }
     state.feeDrafts[feeKey] = draft;
-    if (previous.amount !== draft.amount || previous.currency !== draft.currency) state.inputRevision += 1;
+    if (previous.amount !== draft.amount || previous.currency !== draft.currency || previous.expense_category !== draft.expense_category) state.inputRevision += 1;
     if (draft.error) {
       const validationError = this.validateMaterialFeeInlineDraft(draft);
       this.setMaterialFeeInlineError($cell, feeKey, validationError);
@@ -15570,6 +15794,11 @@ class OverseasCostWorkbench {
   }
 
   validateMaterialFeeInlineDraft(draft) {
+    if (draft?.expense_category !== undefined) {
+      const name = String(draft.expense_category).trim();
+      if (!name) return ocTranslate("请填写具体费用名称。");
+      if (name.length > 140) return ocTranslate("费用名称不能超过 140 个字符。");
+    }
     const amountText = String(draft?.amount ?? "").trim();
     if (!amountText) return "费用金额不能为空。";
     const amount = Number(amountText);
@@ -15601,7 +15830,7 @@ class OverseasCostWorkbench {
     return {
       logical_fee_key: feeKey,
       rule_code: fee.rule_code || feeKey,
-      expense_category: fee.expense_category,
+      expense_category: overrides.expense_category !== undefined ? overrides.expense_category : fee.expense_category,
       amount_status: overrides.amount_status || fee.amount_state || fee.amount_status || "MISSING",
       amount: overrides.amount !== undefined ? overrides.amount : fee.amount,
       currency: overrides.currency || fee.currency || "RMB",
@@ -15707,8 +15936,11 @@ class OverseasCostWorkbench {
     const currency = String(draft?.currency ?? "");
     const originalAmount = String($amount.attr("data-original-value") ?? "").trim();
     const originalCurrency = String($currency.attr("data-original-value") ?? "").trim().toUpperCase();
+    const $name = this.isOtherMaterialFee(feeKey) ? $cell.find("[data-mf-other-fee-name]") : null;
+    const customName = draft?.expense_category === undefined ? undefined : String(draft.expense_category).trim();
+    const nameChanged = $name?.length && customName !== String($name.attr("data-original-value") ?? "").trim();
     const forceActual = Boolean(draft?.forceActual);
-    if (!forceActual && amount === originalAmount && currency === originalCurrency) {
+    if (!forceActual && !nameChanged && amount === originalAmount && currency === originalCurrency) {
       this.setMaterialFeeInlineError($cell, feeKey, "");
       delete this.ensureMaterialFeeState().feeDrafts?.[feeKey];
       return;
@@ -15744,6 +15976,7 @@ class OverseasCostWorkbench {
         amount_status: amountStatus === "MISSING" ? "ESTIMATED" : amountStatus,
         amount,
         currency,
+        expense_category: customName,
       });
       const result = await this.call("overseas_costing.api.fees.save_fee", {
         batch_name: batchName,
@@ -15761,6 +15994,7 @@ class OverseasCostWorkbench {
       if (saveState.requestId === fullRequestId && !saveState.loading) {
         $amount.attr("data-original-value", amount).attr("data-mf-force-actual", "0");
         $currency.val(currency).attr("data-original-value", currency);
+        if ($name?.length) $name.val(customName).attr("data-original-value", customName);
         $cell.data("saving", false).removeClass("is-saving");
         $inputs.prop("disabled", false);
       }
@@ -15825,6 +16059,7 @@ class OverseasCostWorkbench {
     });
     if (
       this.detailState.batchName !== expectedBatchName
+      || String(this.detailState.versionName || "") !== String(versionName || "")
       || this.materialFeeState !== state
       || requestId !== state.feeRequestId
       || fullRequestId !== state.requestId
@@ -15883,6 +16118,7 @@ class OverseasCostWorkbench {
     const dialog = new frappe.ui.Dialog({
       title: ocTranslate("编辑费用：{0}", [fee.expense_category || fee.logical_fee_key]),
       fields: [
+        ...(this.isOtherMaterialFee(fee.logical_fee_key) ? [{ fieldtype: "Data", fieldname: "expense_category", label: ocTranslate("费用名称"), reqd: 1, default: fee.expense_category || "其他费用" }] : []),
         ...(candidate ? [{ fieldtype: "HTML", fieldname: "candidate_note", options: `<div class="ocw-mf-dialog-note">${ocTranslate("已带入凭证识别候选 {0} {1}。请仍由你确认金额状态；系统不会自动认定为实际费用。", [this.escape(candidate.currency || ""), this.escape(candidate.amount || "")])}</div>` }] : []),
         { fieldtype: "Select", fieldname: "amount_status", label: ocTranslate("金额状态"), reqd: 1, options: "MISSING\nESTIMATED\nACTUAL\nNOT_INCURRED\nINCLUDED", default: fee.amount_state || fee.amount_status || "MISSING" },
         { fieldtype: "Data", fieldname: "amount", label: ocTranslate("原币金额"), default: candidate?.amount ?? fee.amount ?? "" },
@@ -15906,7 +16142,7 @@ class OverseasCostWorkbench {
     const payload = {
       logical_fee_key: fee.logical_fee_key,
       rule_code: fee.rule_code || fee.logical_fee_key,
-      expense_category: fee.expense_category,
+      expense_category: this.isOtherMaterialFee(fee.logical_fee_key) ? values.expense_category : fee.expense_category,
       amount_status: values.amount_status,
       amount: values.amount,
       currency: values.currency,

@@ -27,9 +27,11 @@ from overseas_costing.services import (
 )
 from overseas_costing.services.transport_fee_service import (
     HISTORICAL_SURCHARGES,
+    OTHER_FEE_TYPES,
     PRIMARY_FREIGHT,
     assert_no_duplicate_fees,
     fee_is_active,
+    is_other_fee_key,
     legacy_oa_freight_updates,
     mark_duplicate_fees,
     primary_freight_definition,
@@ -126,6 +128,18 @@ def build_default_fee_templates(transport_mode: str) -> list[dict]:
         if key == "destination_delivery":
             row["expense_category"] = "当地快递费" if mode == "EXPRESS" else "当地配送费"
     return templates
+
+
+def build_other_fee_templates() -> list[dict]:
+    """Optional menu entries share local-delivery defaults in every transport mode."""
+
+    delivery = next(row for row in build_default_fee_templates("")
+                    if row["logical_fee_key"] == "destination_delivery")
+    return [
+        {**delivery, "logical_fee_key": key, "rule_code": key,
+         "expense_category": label, "priority_no": 100 + index}
+        for index, (key, label) in enumerate(OTHER_FEE_TYPES)
+    ]
 
 
 def map_historical_fee_key(fee: dict, transport_mode: str) -> str:
@@ -747,6 +761,19 @@ def normalize_fee_payload(payload, *, trusted_project_policy=False) -> dict:
     fee_key = str(raw.get("logical_fee_key") or "").strip()
     if not fee_key:
         raise ValueError(_i18n("逻辑费用标识不能为空。"))
+    if fee_key.startswith("other_custom:") and not is_other_fee_key(fee_key):
+        raise ValueError(_i18n("其他费用实例标识不合法。"))
+    if is_other_fee_key(fee_key):
+        template_key = "other_custom" if fee_key.startswith("other_custom:") else fee_key
+        template = next(row for row in build_other_fee_templates() if row["logical_fee_key"] == template_key)
+        template.update(logical_fee_key=fee_key, rule_code=fee_key)
+        if "allocation_basis" not in raw and raw.get("basis_field"):
+            template["allocation_basis"] = raw["basis_field"]
+        raw = {**template, **raw}
+        label = str(raw.get("expense_category") or "").strip()
+        if not label or len(label) > 140:
+            raise ValueError(_i18n("其他费用名称不能为空，且不能超过 140 个字符。"))
+        raw["expense_category"] = label
 
     status = default_status_for_amount_entry(raw.get("amount_status"), raw.get("amount"))
     if status not in AMOUNT_STATUSES:
@@ -1011,8 +1038,11 @@ def materialize_fee_rule(batch_name: str, version_name: str, logical_fee_key: st
     )
     if active:
         return active
+    if any(row.get("logical_fee_key") == logical_fee_key for row in existing):
+        raise ValueError(_i18n("该费用已停用，请先核对历史记录，不能通过关联凭证恢复启用。"))
     template = next(
-        (row for row in build_default_fee_templates(mode) if row["logical_fee_key"] == logical_fee_key),
+        (row for row in [*build_default_fee_templates(mode), *build_other_fee_templates()]
+         if row["logical_fee_key"] == logical_fee_key),
         None,
     )
     if not template:
@@ -1292,6 +1322,7 @@ def get_fee_worklist(batch_name: str, version_name: str | None = None) -> dict:
             "batch_name": batch_name,
             "version_name": version_name,
             "transport_mode": "SEA",
+            "other_fee_options": build_other_fee_templates(),
             "fees": statuses,
             "items": statuses,
             "summary": fee_status_service.summarize_fee_statuses(statuses),
@@ -1451,6 +1482,7 @@ def get_fee_worklist(batch_name: str, version_name: str | None = None) -> dict:
         "batch_name": batch_name,
         "version_name": version,
         "transport_mode": transport_mode,
+        "other_fee_options": build_other_fee_templates(),
         "fees": statuses,
         "items": statuses,
         "summary": summary,

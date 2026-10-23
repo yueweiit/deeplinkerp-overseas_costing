@@ -10,7 +10,7 @@ import hashlib
 import json
 from decimal import Decimal, InvalidOperation, ROUND_DOWN, ROUND_HALF_UP
 
-from overseas_costing.services.transport_fee_service import HISTORICAL_SURCHARGES, PRIMARY_FREIGHT
+from overseas_costing.services.transport_fee_service import HISTORICAL_SURCHARGES, OTHER_FEE_TYPES, PRIMARY_FREIGHT, is_other_fee_key
 
 
 COUNTED_AMOUNT_STATUSES = frozenset({"ESTIMATED", "ACTUAL"})
@@ -22,6 +22,7 @@ SYSTEM_ALLOCATION_BASES = {
     "customs_clearance_fee": "goods_value",
     "import_tax": "goods_value",
     "destination_delivery": "gross_weight",
+    **{key: "gross_weight" for key, _label in OTHER_FEE_TYPES},
 }
 
 
@@ -119,6 +120,8 @@ def preferred_allocation_basis(fee: dict) -> str:
                           for field in ("amount_revision", "scope_revision"))
     if manual_revision and saved_basis in {"goods_value", "gross_weight", "volume", "chargeable_weight"}:
         return saved_basis
+    if is_other_fee_key(key):
+        return "gross_weight"
     return SYSTEM_ALLOCATION_BASES.get(key) or str(
         fee.get("allocation_basis") or fee.get("basis_field") or "goods_value"
     )

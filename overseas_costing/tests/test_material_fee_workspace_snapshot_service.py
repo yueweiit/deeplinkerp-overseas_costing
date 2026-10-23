@@ -410,6 +410,23 @@ def _rewrite_cached_schema(store, service, batch: str, version: str, schema_vers
     store.commit()
 
 
+def test_pre_other_fee_menu_cache_is_rebuilt_with_optional_fee_choices():
+    from overseas_costing.services import fee_service, material_fee_workspace_snapshot_service as service
+
+    store = _store()
+    kwargs = dict(store=store, fingerprint_loader=lambda *_: "same-inputs", now="2026-10-23T02:00:00+00:00")
+    service.get_snapshot("B1", "V1", snapshot_builder=_builder([]), **kwargs)
+    _rewrite_cached_schema(store, service, "B1", "V1", 3)
+
+    def current_builder(*args):
+        data = _builder([])(*args)
+        data["fees"]["other_fee_options"] = fee_service.build_other_fee_templates()
+        return data
+
+    current = service.get_snapshot("B1", "V1", snapshot_builder=current_builder, **kwargs)
+    assert len(current["data"]["fees"]["other_fee_options"]) == 5
+
+
 def test_snapshot_written_by_an_older_projection_is_rebuilt_not_served() -> None:
     """改过投影口径后旧快照必须重建。
 

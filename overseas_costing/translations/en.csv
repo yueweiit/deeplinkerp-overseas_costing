@@ -5677,3 +5677,29 @@ rows_payload 必须是数组。,rows_payload must be an array.
 暂无差额,No difference
 待分类,Pending classification
 未配置,Not configured
+费用名称 / 原币金额,Fee name / original amount
+其他费用,Other fees
+＋ 添加其他费用,＋ Add other fee
+当前费用由来源管理或只读,Fees are source-managed or read-only
+其他费用合计：{0},Other fees total: {0}
+删除其他费用：{0},Remove other fee: {0}
+删除此费用,Remove this fee
+选择或填写费用名称,Select or enter a fee name
+其他费用名称,Other fee name
+选择其他费用名称,Select an other fee name
+港口杂费,Port miscellaneous charges
+码头费用,Terminal charges
+代理费,Agency fee
+海关查验费,Customs inspection fee
+费用最新状态读取失败，请重试。,Could not read the latest fees. Please retry.
+费用移除失败。,Could not remove the fee.
+最新费用状态读取失败，请刷新后重试。,Could not read the latest fees. Refresh and retry.
+请先保存当前修改，再添加其他费用。,Save your changes before adding another fee.
+该费用需通过原有来源、停用或重复费用核对处理。,Review this fee through its original source or inactive/duplicate fee checks.
+其他费用保存失败。,Could not save the other fee.
+请填写具体费用名称。,Enter a specific fee name.
+费用名称不能超过 140 个字符。,Fee names cannot exceed 140 characters.
+费用名称,Fee name
+其他费用实例标识不合法。,Invalid other fee instance identifier.
+其他费用名称不能为空，且不能超过 140 个字符。,Other fee names are required and cannot exceed 140 characters.
+该费用已停用，请先核对历史记录，不能通过关联凭证恢复启用。,This fee is inactive. Review its history; linking evidence cannot reactivate it.

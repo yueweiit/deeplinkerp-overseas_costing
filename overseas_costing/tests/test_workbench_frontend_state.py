@@ -110,7 +110,7 @@ def test_cost_trial_entry_uses_ai_review_and_exposes_user_recovery_actions() -> 
 
 
 FEE_INPUT_FIXTURE = r"""
-function makeFeeInput({amount, currency, originalAmount, originalCurrency, forceActual=false, feeKey='international_sea_freight'}) {
+function makeFeeInput({amount, currency, originalAmount, originalCurrency, expenseCategory, originalExpenseCategory, forceActual=false, feeKey='international_sea_freight'}) {
   const classes = new Set();
   const data = {};
   const attrs = {title: ''};
@@ -124,6 +124,7 @@ function makeFeeInput({amount, currency, originalAmount, originalCurrency, force
   };
   const amountInput = makeInput('amount', amount, originalAmount);
   const currencyInput = makeInput('currency', currency, originalCurrency);
+  const nameInput = expenseCategory === undefined ? null : makeInput('expense_category', expenseCategory, originalExpenseCategory);
   function makeInput(kind, value, original) {
     return {
       length: 1,
@@ -144,8 +145,8 @@ function makeFeeInput({amount, currency, originalAmount, originalCurrency, force
     };
   }
   const collection = {
-    prop(name, next) { amountInput.prop(name, next); currencyInput.prop(name, next); return this; },
-    attr(name, next) { amountInput.attr(name, next); currencyInput.attr(name, next); return this; },
+    prop(name, next) { [amountInput, currencyInput, nameInput].filter(Boolean).forEach(input => input.prop(name, next)); return this; },
+    attr(name, next) { [amountInput, currencyInput, nameInput].filter(Boolean).forEach(input => input.attr(name, next)); return this; },
   };
   const cell = {
     data(name, next) { if (arguments.length > 1) { data[name] = next; return this; } return data[name]; },
@@ -156,13 +157,14 @@ function makeFeeInput({amount, currency, originalAmount, originalCurrency, force
     find(selector) {
       if (selector === '[data-mf-fee-amount]') return amountInput;
       if (selector === '[data-mf-fee-currency]') return currencyInput;
+      if (selector === '[data-mf-other-fee-name]') return nameInput || {length: 0};
       if (selector === '[data-mf-fee-error]') return errorElement;
       return collection;
     },
   };
   amountInput.cell = cell;
   currencyInput.cell = cell;
-  return {amountInput, currencyInput, errorElement, cell, classes, attrs};
+  return {amountInput, currencyInput, nameInput, errorElement, cell, classes, attrs};
 }
 """
 
