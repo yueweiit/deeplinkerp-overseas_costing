@@ -249,8 +249,6 @@ ITEM_FILTER_FIELDS = (
     "category",
 )
 ITEM_KEYWORD_FIELDS = ITEM_FILTER_FIELDS + ("project_collection", "transport_mode")
-DEFAULT_FX_RMB_TO_MXN = 2.6
-DEFAULT_FX_USD_TO_RMB = round(1 / 0.1393, 6)
 HIDDEN_APPROVAL_STATUSES = ("TERMINATED", "CANCELED", "CANCELLED", "REVOKED", "撤销", "已撤销")
 INVALID_APPROVAL_STATUSES = HIDDEN_APPROVAL_STATUSES + (
     "REJECTED",
@@ -382,8 +380,8 @@ def create_batch(batch_payload: str | dict | None = None) -> dict:
         "status": "Active",
         "is_current": 1,
         "source_type": "Manual",
-        "fx_usd_to_rmb": DEFAULT_FX_USD_TO_RMB,
-        "fx_rmb_to_mxn": DEFAULT_FX_RMB_TO_MXN,
+        "fx_usd_to_rmb": None,
+        "fx_rmb_to_mxn": None,
         "remark": "前端手工新增批次默认版本",
     }
 

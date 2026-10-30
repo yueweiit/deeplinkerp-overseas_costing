@@ -263,8 +263,6 @@ ATTACHMENT_FILE_NAME_KEYS = ("fileName", "file_name", "filename", "name", "title
 ATTACHMENT_FILE_URL_KEYS = ("fileUrl", "file_url", "downloadUrl", "download_url", "url", "previewUrl", "preview_url")
 ATTACHMENT_SPACE_ID_KEYS = ("spaceId", "space_id", "spaceID")
 DEFAULT_LOGISTICS_PROCESS_CODE = "PROC-RIYJTXWV-CN52YRK70C5499JG0TJ03-3GSSHZQJ-5"
-DEFAULT_FX_RMB_TO_MXN = 2.6
-DEFAULT_FX_USD_TO_RMB = round(1 / 0.1393, 6)
 MAX_AUDIT_TEXT_LENGTH = 20000
 MAX_AI_LOGISTICS_TEXT_LENGTH = 6000
 DINGTALK_ENV_FILE_CANDIDATES = (
@@ -4345,8 +4343,8 @@ def _ensure_oa_trace_version(batch_name: str, batch_no: str) -> str:
             "status": "Active",
             "is_current": 1,
             "source_type": "Import",
-            "fx_usd_to_rmb": DEFAULT_FX_USD_TO_RMB,
-            "fx_rmb_to_mxn": DEFAULT_FX_RMB_TO_MXN,
+            "fx_usd_to_rmb": None,
+            "fx_rmb_to_mxn": None,
             "remark": f"钉钉国际物流审批追溯默认版本：{batch_no}",
         }
     ).insert(ignore_permissions=True)
@@ -5773,7 +5771,7 @@ def sync_existing_oa_finished_times(limit: int | None = 200) -> dict:
             field_name="source_finished_at",
             old_value=row.get("source_finished_at"),
             new_value=finished_at,
-            remark="从已保存钉钉 OA 快照回填来源完成时间，用于缺真实付款日时暂估汇率",
+            remark="从已保存钉钉国际物流 OA 快照回填来源完成时间；不作为付款日汇率依据",
         )
         updated_items.append(
             {
@@ -5918,7 +5916,7 @@ def refresh_missing_oa_finished_times(
             field_name="source_finished_at",
             old_value=row.get("source_finished_at"),
             new_value=updates.get("source_finished_at") or "",
-            remark="从钉钉审批详情补充来源完成时间，用于缺真实付款日时暂估汇率",
+            remark="从钉钉国际物流审批详情补充来源完成时间；不作为付款日汇率依据",
         )
         updated_items.append(
             {

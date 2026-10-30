@@ -554,6 +554,22 @@ console.log(JSON.stringify(h.renderCostTrialAIReview()));
     assert "2023-12-29" in html
 
 
+def test_ai_trial_legacy_rate_warns_and_does_not_claim_a_source_date():
+    html = _frontend_result(FRONTEND_SETUP + """
+h.escape=value=>String(value ?? '');
+state.costTrialAI={status:'READY',draft:{fee_suggestions:[],fx_resolution:{
+  ok:true,calculation_date:'2026-10-30',date_source_label:'真实付款日',
+  fx_usd_to_rmb:6.6583,fx_rmb_to_mxn:2.837751,legacy_default_currencies:['USD','MXN'],
+  rates:{USD:{source:'currency_exchange'},MXN:{source:'currency_exchange'}},blocking_errors:[]
+}}};
+console.log(JSON.stringify(h.renderCostTrialAIReview()));
+""")
+
+    assert "来源日期未记录" in html
+    assert "检测到历史默认汇率" in html
+    assert "实际采用 2026-10-30" not in html
+
+
 def test_ai_trial_missing_fx_disables_confirmation_and_shows_chinese_error():
     result = _frontend_result(FRONTEND_SETUP + """
 h.escape=value=>String(value ?? '');

@@ -18,6 +18,7 @@ except ImportError:
 
 
 import json
+import math
 import os
 import re
 from collections import defaultdict
@@ -58,8 +59,6 @@ from overseas_costing.utils.field_mapper import (
 )
 
 ITEM_KEY_FIELDS = ("material_code", "product_name", "spec_model")
-DEFAULT_FX_RMB_TO_MXN = 2.6
-DEFAULT_FX_USD_TO_RMB = round(1 / 0.1393, 6)
 DEFAULT_DINGTALK_CORP_ID = "ding144583309b2fb01c35c2f4657eb6378f"
 PURCHASE_WRITEBACK_FIELDS = (
     "unit_price",
@@ -279,8 +278,12 @@ def import_main_excel(
         }
 
     created_batches = []
-    resolved_fx_usd_to_rmb = fx_usd_to_rmb or DEFAULT_FX_USD_TO_RMB
-    resolved_fx_rmb_to_mxn = fx_rmb_to_mxn or DEFAULT_FX_RMB_TO_MXN
+    resolved_fx_usd_to_rmb = _to_float(fx_usd_to_rmb, default=float("nan")) if fx_usd_to_rmb not in (None, "") else None
+    resolved_fx_rmb_to_mxn = _to_float(fx_rmb_to_mxn, default=float("nan")) if fx_rmb_to_mxn not in (None, "") else None
+    if resolved_fx_usd_to_rmb is not None and (not math.isfinite(resolved_fx_usd_to_rmb) or resolved_fx_usd_to_rmb <= 0):
+        raise ValueError(_("USD 兑 RMB 汇率必须大于零。"))
+    if resolved_fx_rmb_to_mxn is not None and (not math.isfinite(resolved_fx_rmb_to_mxn) or resolved_fx_rmb_to_mxn <= 0):
+        raise ValueError(_("RMB 兑 MXN 汇率必须大于零。"))
 
     for block in blocks:
         batch_doc, batch_action = _resolve_or_create_excel_batch(
@@ -3426,7 +3429,7 @@ def _resolve_or_create_excel_version(
     batch_doc_name: str,
     version_type: str,
     fx_usd_to_rmb: float | None,
-    fx_rmb_to_mxn: float,
+    fx_rmb_to_mxn: float | None,
 ):
     existing_name = frappe.db.get_value(
         "Overseas Cost Version",
@@ -3439,8 +3442,8 @@ def _resolve_or_create_excel_version(
         "version_type": version_type,
         "is_current": 1,
         "source_type": "Import",
-        "fx_usd_to_rmb": fx_usd_to_rmb or 0,
-        "fx_rmb_to_mxn": fx_rmb_to_mxn or DEFAULT_FX_RMB_TO_MXN,
+        "fx_usd_to_rmb": fx_usd_to_rmb,
+        "fx_rmb_to_mxn": fx_rmb_to_mxn,
     }
 
     existing_versions = frappe.get_all(
@@ -3453,6 +3456,9 @@ def _resolve_or_create_excel_version(
         frappe.db.set_value("Overseas Cost Version", row["name"], "is_current", 0, update_modified=False)
 
     if existing_name:
+        for fieldname in ("fx_usd_to_rmb", "fx_rmb_to_mxn"):
+            if values[fieldname] is None:
+                values.pop(fieldname)
         frappe.db.set_value("Overseas Cost Version", existing_name, values, update_modified=True)
         return frappe.get_doc("Overseas Cost Version", existing_name), "updated"
 
@@ -3674,10 +3680,11 @@ def _normalize_currency_code(value) -> str:
     return normalized.upper()
 
 
-def _get_version_fx_context(version_name: str | None) -> dict:
+def _get_version_fx_context(version_name: str | None, *, persist: bool = False,
+                            include_resolution: bool = False) -> dict:
     context = {
-        "fx_usd_to_rmb": DEFAULT_FX_USD_TO_RMB,
-        "fx_rmb_to_mxn": DEFAULT_FX_RMB_TO_MXN,
+        "fx_usd_to_rmb": None,
+        "fx_rmb_to_mxn": None,
     }
     if frappe is None or not version_name:
         return context
@@ -3685,21 +3692,30 @@ def _get_version_fx_context(version_name: str | None) -> dict:
     row = frappe.db.get_value(
         "Overseas Cost Version",
         version_name,
-        ["fx_usd_to_rmb", "fx_rmb_to_mxn"],
+        ["batch", "fx_usd_to_rmb", "fx_rmb_to_mxn"],
         as_dict=True,
     )
     if row:
-        fx_usd_to_rmb = _to_float(row.get("fx_usd_to_rmb")) or DEFAULT_FX_USD_TO_RMB
-        fx_rmb_to_mxn = _to_float(row.get("fx_rmb_to_mxn")) or DEFAULT_FX_RMB_TO_MXN
-        context["fx_usd_to_rmb"] = fx_usd_to_rmb
-        context["fx_rmb_to_mxn"] = fx_rmb_to_mxn
-        updates = {}
-        if not _to_float(row.get("fx_usd_to_rmb")):
-            updates["fx_usd_to_rmb"] = fx_usd_to_rmb
-        if not _to_float(row.get("fx_rmb_to_mxn")):
-            updates["fx_rmb_to_mxn"] = fx_rmb_to_mxn
-        if updates:
-            frappe.db.set_value("Overseas Cost Version", version_name, updates, update_modified=False)
+        batch_name = row.get("batch")
+        if not batch_name:
+            raise ValueError(_("成本版本缺少所属批次，无法取得汇率。"))
+        from overseas_costing.services.cost_preview_service import FrappeCostRepository
+
+        repository = FrappeCostRepository()
+        resolution = repository.prepare_fx_resolution(batch_name, version_name)
+        if not resolution.get("ok"):
+            errors = [entry.get("message") for entry in resolution.get("blocking_errors") or []]
+            raise ValueError("；".join(message for message in errors if message) or _("未取得可用汇率。"))
+        context = {
+            "fx_usd_to_rmb": resolution.get("fx_usd_to_rmb"),
+            "fx_rmb_to_mxn": resolution.get("fx_rmb_to_mxn"),
+        }
+        if include_resolution:
+            context["_resolution"] = resolution
+        if persist:
+            repository.persist_fx_resolution(
+                {"batch": batch_name, "version": version_name}, resolution,
+            )
     return context
 
 
@@ -3707,9 +3723,15 @@ def _amount_to_rmb(amount, currency, fx_context: dict) -> float:
     value = _to_float(amount, default=0.0)
     currency_code = _normalize_currency_code(currency)
     if currency_code == "USD":
-        return value * (_to_float(fx_context.get("fx_usd_to_rmb")) or DEFAULT_FX_USD_TO_RMB)
+        rate = _to_float(fx_context.get("fx_usd_to_rmb"))
+        if not math.isfinite(rate) or rate <= 0:
+            raise ValueError(_("缺少 USD 兑 RMB 汇率，请先核对成本版本。"))
+        return value * rate
     if currency_code == "MXN":
-        return value / (_to_float(fx_context.get("fx_rmb_to_mxn")) or DEFAULT_FX_RMB_TO_MXN)
+        rate = _to_float(fx_context.get("fx_rmb_to_mxn"))
+        if not math.isfinite(rate) or rate <= 0:
+            raise ValueError(_("缺少 RMB 兑 MXN 汇率，请先核对成本版本。"))
+        return value / rate
     return value
 
 
@@ -5398,7 +5420,7 @@ def preview_linked_purchase_expense_oa(
             )
 
     preview_version_name = _resolve_version_name(batch_doc_name, version_name) if batch_doc_name else version_name
-    fx_context = _get_version_fx_context(preview_version_name)
+    fx_context = _get_version_fx_context(preview_version_name) if mapped_rows else {}
 
     def build_purchase_updates(mapped_row: dict, target: dict) -> dict:
         return _convert_purchase_updates_to_rmb(
@@ -5447,6 +5469,7 @@ def apply_linked_purchase_expense_fillable_fields(
     linked_purchase_json: str | None = None,
     purchase_summaries_json: str | None = None,
     recalculate_after_writeback: bool = True,
+    commit_after_writeback: bool = True,
     trusted_server_payload: bool = False,
 ) -> dict:
     """写入关联采购支出 OA 中已匹配物料行的采购字段。
@@ -5497,7 +5520,12 @@ def apply_linked_purchase_expense_fillable_fields(
     skipped_rows: list[dict] = []
     changed_field_count = 0
     matched_rows = writeback_preview.get("matched_rows") or []
-    fx_context = _get_version_fx_context(resolved_version_name)
+    if matched_rows:
+        frappe.db.sql(
+            "SELECT name FROM `tabOverseas Cost Batch` WHERE name=%s FOR UPDATE",
+            (batch_doc_name,),
+        )
+    fx_context = _get_version_fx_context(resolved_version_name, include_resolution=True) if matched_rows else {}
     matched_rows_by_target: dict[str, list[dict]] = defaultdict(list)
     for row in matched_rows:
         target_item_name = row.get("target_item_name")
@@ -5577,9 +5605,16 @@ def apply_linked_purchase_expense_fillable_fields(
             changed_field_count += len(changed_fields)
 
     if applied_rows:
+        resolution = fx_context.get("_resolution")
+        if resolution:
+            from overseas_costing.services.cost_preview_service import FrappeCostRepository
+
+            FrappeCostRepository().persist_fx_resolution(
+                {"batch": batch_doc_name, "version": resolved_version_name}, resolution,
+            )
         _mark_batch_dirty(batch_doc_name)
         commit = getattr(getattr(frappe, "db", None), "commit", None)
-        if callable(commit):
+        if commit_after_writeback and callable(commit):
             commit()
         recalculate_result = _recalculate_after_writeback(
             batch_doc_name=batch_doc_name,

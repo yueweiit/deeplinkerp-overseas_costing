@@ -3267,6 +3267,7 @@ Ped. 6000151
 26  16  1681  6000151
 A1
 01/04/2026
+FECHA DE PAGO: 01/04/2026
 DTA 0 5532 PRV 0 330
 IVA/PRV 0 53 IVA 0 113244
 IGI/IGE 0 10724
@@ -3300,6 +3301,7 @@ IVA 16.00000 1 0 5186
     assert result["header"]["pedimento_ref"] == "MZ260108"
     assert result["header"]["container_no"] == "HPCU5155607"
     assert result["header"]["payment_date"] == "01/04/2026"
+    assert result["header"]["payment_date_source"] == "explicit_label"
     assert result["header"]["exchange_rate"] == 17.7957
     assert result["tax_totals"]["dta_mxn"] == 5532
     assert result["tax_totals"]["iva_mxn"] == 113244
@@ -3314,6 +3316,15 @@ IVA 16.00000 1 0 5186
     assert result["line_items"][0]["taxes"]["iva_amount_mxn"] == 32719
     assert result["reconciliation"]["status"] == "pending"
     assert result["reconciliation"]["voucher"]["paid_total_mxn"] == 129883
+
+
+def test_tax_certificate_does_not_treat_first_document_date_as_payment_date() -> None:
+    parsed = attachment_parse_service.parse_tax_certificate_text(
+        "Ped. 6000151\n01/04/2026\nIMPORTE PAGADO:\n$129,883",
+    )
+    assert parsed["header"]["entry_date"] == "01/04/2026"
+    assert parsed["header"]["payment_date"] == ""
+    assert parsed["header"]["payment_date_source"] == ""
 
 
 def test_preview_tax_certificate_pdf_flags_failed_validation_for_amount_mismatch() -> None:
@@ -3401,7 +3412,17 @@ def test_save_tax_certificate_parse_result_updates_version_fx_by_payment_date(mo
                 audit_payloads.append(self.payload)
             return self
 
+        def save(self, **_kwargs):
+            self.payload["parse_result_json"] = getattr(self, "parse_result_json", None)
+            return self
+
     class FakeDB:
+        @staticmethod
+        def sql(query, *_args, **_kwargs):
+            if "tabOverseas Cost Attachment" in query:
+                return [{"parse_result_json": row["parse_result_json"]} for row in attachment_payloads]
+            return []
+
         @staticmethod
         def get_value(doctype, name_or_filters, fields=None, as_dict=False, **_kwargs):
             if doctype == "Overseas Cost Version" and name_or_filters == "VER-001":
@@ -3452,7 +3473,7 @@ def test_save_tax_certificate_parse_result_updates_version_fx_by_payment_date(mo
             if doctype == "Overseas Cost Item":
                 return []
             if doctype == "Overseas Cost Attachment":
-                return []
+                return [{"parse_result_json": row["parse_result_json"]} for row in attachment_payloads]
             return []
 
         @staticmethod
@@ -3464,6 +3485,7 @@ Ped. 6000151
 9 17.79570 23540.000 160
 26  16  1681  6000151
 01/04/2026
+FECHA DE PAGO: 01/04/2026
 DTA 0 5532 PRV 0 330
 IVA/PRV 0 53 IVA 0 113244
 IGI/IGE 0 10724
@@ -3479,7 +3501,15 @@ IVA 16.00000 1 0 32719
 ********* FIN DE PEDIMENTO NUM. TOTAL DE PARTIDAS: CLAVE PREVALIDADOR: 01001****** ****** *********
 """
 
+    from overseas_costing.services import cost_preview_service
+
     monkeypatch.setattr(attachment_parse_service, "frappe", FakeFrappe)
+    monkeypatch.setattr(attachment_parse_service, "_", lambda message: message)
+    monkeypatch.setattr(cost_preview_service, "frappe", FakeFrappe)
+    monkeypatch.setattr(
+        attachment_parse_service, "_refresh_costing_after_fx_sync",
+        lambda **_kwargs: {"action": "refreshed", "recalculated": True},
+    )
 
     def fake_fx_context(*, payment_date=None, approval_finished_at=None):
         assert payment_date == "01/04/2026"
@@ -3520,6 +3550,9 @@ IVA 16.00000 1 0 32719
     assert result["fx_sync"]["voucher_usd_to_mxn"] == pytest.approx(17.7957)
     assert version_row["fx_usd_to_rmb"] == pytest.approx(6.8)
     assert version_row["fx_rmb_to_mxn"] == pytest.approx(2.5)
+    fx_snapshot = json.loads(version_row["extra_json"])["costing_fx_snapshot"]
+    assert fx_snapshot["date_source"] == "payment_date"
+    assert fx_snapshot["rates"]["MXN"]["rate_date"] == "2026-04-01"
     assert "PD_MZ260108.pdf" in version_row["remark"]
     assert "汇率日期 2026-04-01（真实付款日）" in version_row["remark"]
     assert batch_updates[("Overseas Cost Batch", "BATCH-001", '"status"')] == "Dirty"
@@ -3529,7 +3562,91 @@ IVA 16.00000 1 0 32719
     assert commit_count["value"] == 1
 
 
-def test_sync_tax_certificate_fx_falls_back_to_approval_finished_at(monkeypatch) -> None:
+def test_tax_certificate_conflicting_date_is_saved_without_changing_cost(monkeypatch) -> None:
+    from overseas_costing.services import cost_preview_service
+
+    attachments = [{"parse_result_json": '{"header":{"payment_date":"2026-10-29","payment_date_source":"explicit_label"}}'}]
+    transaction = {"commits": 0, "rollbacks": 0}
+
+    class FakeDoc:
+        def __init__(self, payload):
+            self.__dict__.update(payload)
+            self.payload = payload
+            self.name = "NEW-CERT"
+
+        def insert(self, **_kwargs):
+            attachments.append(self.payload)
+            return self
+
+        def save(self, **_kwargs):
+            self.payload["parse_result_json"] = self.parse_result_json
+            return self
+
+    class FakeFrappe:
+        class db:
+            @staticmethod
+            def sql(query, *_args, **_kwargs):
+                if "tabOverseas Cost Attachment" in query:
+                    return list(attachments)
+                return []
+
+            @staticmethod
+            def commit():
+                transaction["commits"] += 1
+
+            @staticmethod
+            def rollback():
+                transaction["rollbacks"] += 1
+
+        @staticmethod
+        def get_doc(payload):
+            return FakeDoc(payload)
+
+        @staticmethod
+        def get_all(_doctype, **kwargs):
+            start = kwargs.get("limit_start", 0)
+            return attachments[start:start + kwargs.get("limit_page_length", 200)]
+
+    batch = {"name": "B1", "current_version": "V1"}
+    parsed = {"header": {"payment_date": "2026-10-30", "payment_date_source": "explicit_label"}, "reconciliation": {"batch": batch}}
+    monkeypatch.setattr(attachment_parse_service, "frappe", FakeFrappe)
+    monkeypatch.setattr(attachment_parse_service, "_", lambda message: message)
+    monkeypatch.setattr(cost_preview_service, "frappe", FakeFrappe)
+    monkeypatch.setattr(cost_preview_service, "_", lambda message: message)
+    monkeypatch.setattr(attachment_parse_service, "_has_frappe_db_context", lambda: True)
+    monkeypatch.setattr(attachment_parse_service, "preview_tax_certificate_pdf", lambda **_kwargs: parsed)
+    monkeypatch.setattr(attachment_parse_service, "_sync_tax_certificate_identity", lambda **_kwargs: {})
+    monkeypatch.setattr(attachment_parse_service, "_find_existing_tax_certificate_attachment", lambda _values: None)
+    monkeypatch.setattr(attachment_parse_service, "_build_tax_certificate_attachment_values", lambda **_kwargs: {
+        "batch": "B1", "parse_result_json": '{"header":{"payment_date":"2026-10-30","payment_date_source":"explicit_label"}}',
+    })
+    def unexpected_fx_sync(**_kwargs):
+        raise AssertionError("conflicting dates must not update the version")
+
+    monkeypatch.setattr(attachment_parse_service, "_sync_tax_certificate_exchange_rate_to_version", unexpected_fx_sync)
+
+    result = attachment_parse_service.save_tax_certificate_parse_result(batch_name="B1")
+    assert result["saved"] is True
+    assert result["fx_sync"]["action"] == "skipped"
+    assert "不同的完税凭证付款日" in result["fx_sync"]["reason"]
+    assert transaction == {"commits": 1, "rollbacks": 0}
+
+    attachments.clear()
+    monkeypatch.setattr(attachment_parse_service, "_sync_tax_certificate_exchange_rate_to_version", lambda **_kwargs: {
+        "action": "updated",
+    })
+    monkeypatch.setattr(attachment_parse_service, "_refresh_costing_after_fx_sync", lambda **_kwargs: {
+        "action": "failed", "message": "重算失败",
+    })
+    with pytest.raises(ValueError, match="重算失败"):
+        attachment_parse_service.save_tax_certificate_parse_result(batch_name="B1")
+    assert transaction == {"commits": 1, "rollbacks": 1}
+
+
+def test_sync_tax_certificate_fx_uses_explicit_payment_approval_finished_at(monkeypatch) -> None:
+    assert attachment_parse_service._batch_approval_finished_at({
+        "source_finished_at": "2026-04-01 17:16:00",
+    }) == ""
     version_row = {"fx_usd_to_rmb": 0, "fx_rmb_to_mxn": 0, "remark": ""}
     batch_updates = {}
     audit_payloads = []
@@ -3598,7 +3715,9 @@ def test_sync_tax_certificate_fx_falls_back_to_approval_finished_at(monkeypatch)
 
     result = attachment_parse_service._sync_tax_certificate_exchange_rate_to_version(
         parsed={"header": {"payment_date": "", "exchange_rate": "17.5", "pedimento_no": "26 16 1681 6000151"}},
-        batch={"name": "BATCH-001", "current_version": "VER-001", "source_finished_at": "2026-04-21 17:16:00"},
+        batch={"name": "BATCH-001", "current_version": "VER-001",
+               "source_finished_at": "2026-04-01 17:16:00",
+               "payment_approval_finished_at": "2026-04-21 17:16:00"},
         source_name="PD_MZ260108.pdf",
     )
 
@@ -3615,6 +3734,39 @@ def test_sync_tax_certificate_fx_falls_back_to_approval_finished_at(monkeypatch)
     assert "汇率日期 2026-04-21（付款审批完成日（暂估））" in version_row["remark"]
     assert batch_updates[("Overseas Cost Batch", "BATCH-001", '"status"')] == "Dirty"
     assert {row["field_name"] for row in audit_payloads} == {"fx_usd_to_rmb", "fx_rmb_to_mxn"}
+
+
+def test_tax_certificate_refresh_defers_commit_to_attachment_save(monkeypatch) -> None:
+    from overseas_costing.services import calculate_service, import_service
+
+    calls = {}
+
+    def fake_purchase_sync(**kwargs):
+        calls["purchase"] = kwargs
+        return {"ok": True, "updated_count": 0}
+
+    def fake_recalculate(**kwargs):
+        calls["recalculate"] = kwargs
+        return {"ok": True}
+
+    monkeypatch.setattr(import_service, "apply_linked_purchase_expense_fillable_fields", fake_purchase_sync)
+    monkeypatch.setattr(calculate_service, "recalculate_batch", fake_recalculate)
+
+    result = attachment_parse_service._refresh_costing_after_fx_sync(
+        fx_sync={"action": "updated"}, batch={"name": "B1", "current_version": "V1"},
+    )
+    assert result["recalculated"] is True
+    assert calls["purchase"]["commit_after_writeback"] is False
+    assert calls["recalculate"]["commit_after_recalculate"] is False
+
+    monkeypatch.setattr(import_service, "apply_linked_purchase_expense_fillable_fields", lambda **_kwargs: {
+        "ok": False, "message": "采购同步失败",
+    })
+    failed = attachment_parse_service._refresh_costing_after_fx_sync(
+        fx_sync={"action": "updated"}, batch={"name": "B1", "current_version": "V1"},
+    )
+    assert failed["action"] == "failed"
+    assert failed["message"] == "采购同步失败"
 
 
 def test_get_tax_certificate_parse_record_enriches_missing_fx_with_version_fallback(monkeypatch) -> None:
@@ -4000,7 +4152,10 @@ def test_build_packing_list_parse_task_defaults_to_multi_template_router() -> No
     assert "goods_value" in task["parse_targets"]
 
 
-def test_import_main_excel_returns_yuewei_block_preview_without_frappe() -> None:
+def test_import_main_excel_returns_yuewei_block_preview_without_frappe(monkeypatch) -> None:
+    from overseas_costing.services import import_service
+
+    monkeypatch.setattr(import_service, "frappe", None)
     result = import_main_excel(
         source_name="墨西哥进口物料综合成本核算.xlsx",
         source_sheet="2026年YUEWEI",
@@ -4017,6 +4172,182 @@ def test_import_main_excel_returns_yuewei_block_preview_without_frappe() -> None
     assert result["preview_batches"][0]["batch_no"] == "HPCU5155607"
     assert result["preview_batches"][0]["mapped_preview_items"][0]["material_code"] == "YL000098"
     assert result["preview_batches"][0]["mapped_preview_items"][0]["transport_mode"] == "SEA"
+
+
+def test_imported_cost_version_has_no_implicit_exchange_rates(monkeypatch) -> None:
+    from overseas_costing.services import import_service
+
+    inserted = []
+
+    class FakeDB:
+        @staticmethod
+        def get_value(*_args, **_kwargs):
+            return None
+
+    class FakeDoc:
+        def __init__(self, values):
+            self.values = values
+
+        def insert(self, **_kwargs):
+            inserted.append(self.values)
+            return self
+
+    class FakeFrappe:
+        db = FakeDB()
+
+        @staticmethod
+        def get_all(*_args, **_kwargs):
+            return []
+
+        @staticmethod
+        def get_doc(values):
+            return FakeDoc(values)
+
+    monkeypatch.setattr(import_service, "frappe", FakeFrappe)
+    import_service._resolve_or_create_excel_version(
+        batch_doc_name="B1", version_type="Estimated",
+        fx_usd_to_rmb=None, fx_rmb_to_mxn=None,
+    )
+    assert inserted[0]["fx_usd_to_rmb"] is None
+    assert inserted[0]["fx_rmb_to_mxn"] is None
+
+
+def test_reimport_without_rates_preserves_existing_version_rates(monkeypatch) -> None:
+    from overseas_costing.services import import_service
+
+    updates = []
+
+    class FakeDB:
+        @staticmethod
+        def get_value(*_args, **_kwargs):
+            return "V1"
+
+        @staticmethod
+        def set_value(doctype, name, values, *_args, **_kwargs):
+            updates.append((doctype, name, values))
+
+    class FakeFrappe:
+        db = FakeDB()
+
+        @staticmethod
+        def get_all(*_args, **_kwargs):
+            return [{"name": "V1"}]
+
+        @staticmethod
+        def get_doc(*_args, **_kwargs):
+            return object()
+
+    monkeypatch.setattr(import_service, "frappe", FakeFrappe)
+    import_service._resolve_or_create_excel_version(
+        batch_doc_name="B1", version_type="Estimated",
+        fx_usd_to_rmb=None, fx_rmb_to_mxn=None,
+    )
+    updated_version = next(values for doctype, _name, values in updates if doctype == "Overseas Cost Version" and isinstance(values, dict))
+    assert "fx_usd_to_rmb" not in updated_version
+    assert "fx_rmb_to_mxn" not in updated_version
+
+
+def test_purchase_amount_conversion_uses_resolved_fx_without_defaults(monkeypatch) -> None:
+    from overseas_costing.services import cost_preview_service, import_service
+
+    class FakeFrappe:
+        class db:
+            @staticmethod
+            def get_value(*_args, **_kwargs):
+                return {"batch": "B1", "fx_usd_to_rmb": None, "fx_rmb_to_mxn": None}
+
+    class FakeRepository:
+        persisted = 0
+
+        def prepare_fx_resolution(self, batch, version):
+            assert (batch, version) == ("B1", "V1")
+            return {"ok": True, "fx_usd_to_rmb": 6.6583, "fx_rmb_to_mxn": 2.837751}
+
+        def persist_fx_resolution(self, context, _resolution):
+            assert context == {"batch": "B1", "version": "V1"}
+            self.persisted += 1
+
+    repository = FakeRepository()
+    monkeypatch.setattr(import_service, "frappe", FakeFrappe)
+    monkeypatch.setattr(cost_preview_service, "FrappeCostRepository", lambda: repository)
+    context = import_service._get_version_fx_context("V1", persist=True)
+    assert context == {"fx_usd_to_rmb": 6.6583, "fx_rmb_to_mxn": 2.837751}
+    assert repository.persisted == 1
+    assert import_service._amount_to_rmb(100, "MXN", context) == pytest.approx(100 / 2.837751)
+
+
+def test_purchase_apply_without_changed_rows_does_not_persist_fx(monkeypatch) -> None:
+    from overseas_costing.services import import_service
+
+    class FakeFrappe:
+        class db:
+            @staticmethod
+            def commit():
+                raise AssertionError("no rows changed, so no commit is allowed")
+
+    monkeypatch.setattr(import_service, "frappe", FakeFrappe)
+    monkeypatch.setattr(import_service, "preview_linked_purchase_expense_oa", lambda **_kwargs: {
+        "ok": True, "batch_doc_name": "B1", "version_name": "V1",
+        "writeback_preview": {"matched_rows": []},
+    })
+    monkeypatch.setattr(import_service, "_invalid_batch_cost_write_response", lambda *_args: None)
+    def unexpected_fx_resolution(*_args, **_kwargs):
+        raise AssertionError("no FX resolution is needed")
+
+    monkeypatch.setattr(import_service, "_get_version_fx_context", unexpected_fx_resolution)
+
+    result = import_service.apply_linked_purchase_expense_fillable_fields(batch_name="B1")
+    assert result["ok"] is True
+    assert result["updated_count"] == 0
+
+
+def test_purchase_apply_defers_fx_commit_when_called_from_voucher(monkeypatch) -> None:
+    from overseas_costing.services import cost_preview_service, import_service
+
+    events = []
+
+    class FakeFrappe:
+        class db:
+            @staticmethod
+            def sql(query, values):
+                assert "tabOverseas Cost Batch" in query
+                assert values == ("B1",)
+                events.append("batch_locked")
+
+            @staticmethod
+            def commit():
+                events.append("commit")
+
+    class FakeRepository:
+        @staticmethod
+        def persist_fx_resolution(context, resolution):
+            assert context == {"batch": "B1", "version": "V1"}
+            assert resolution["batch_name"] == "B1"
+            events.append("fx_persisted")
+
+    monkeypatch.setattr(import_service, "frappe", FakeFrappe)
+    monkeypatch.setattr(cost_preview_service, "FrappeCostRepository", FakeRepository)
+    monkeypatch.setattr(import_service, "preview_linked_purchase_expense_oa", lambda **_kwargs: {
+        "ok": True, "batch_doc_name": "B1", "version_name": "V1",
+        "writeback_preview": {"matched_rows": [{
+            "target_item_name": "I1", "business_changes": [{
+                "field_name": "unit_price", "new_value": 10, "status": "fillable",
+            }],
+        }]},
+    })
+    monkeypatch.setattr(import_service, "_invalid_batch_cost_write_response", lambda *_args: None)
+    monkeypatch.setattr(import_service, "_get_version_fx_context", lambda *_args, **_kwargs: {
+        "fx_usd_to_rmb": 6.7, "fx_rmb_to_mxn": 2.8,
+        "_resolution": {"batch_name": "B1", "version_name": "V1"},
+    })
+    monkeypatch.setattr(import_service, "_update_item_fields", lambda **_kwargs: [{"field_name": "unit_price"}])
+    monkeypatch.setattr(import_service, "_mark_batch_dirty", lambda _name: events.append("batch_dirty"))
+
+    result = import_service.apply_linked_purchase_expense_fillable_fields(
+        batch_name="B1", recalculate_after_writeback=False, commit_after_writeback=False,
+    )
+    assert result["updated_count"] == 1
+    assert events == ["batch_locked", "fx_persisted", "batch_dirty"]
 
 
 def test_coerce_item_numeric_defaults_keeps_formula_cache_blanks_importable() -> None:

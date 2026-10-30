@@ -460,7 +460,10 @@ def test_get_batch_filter_options_uses_all_dingtalk_entities(monkeypatch) -> Non
     assert result["items"] == ["LEMOS MX", "YW MOLDES/UV"]
 
 
-def test_create_batch_dry_run_builds_manual_batch_and_version() -> None:
+def test_create_batch_dry_run_builds_manual_batch_and_version(monkeypatch) -> None:
+    from overseas_costing.services import batch_service
+
+    monkeypatch.setattr(batch_service, "frappe", None)
     result = create_batch(
         json.dumps(
             {
@@ -486,6 +489,8 @@ def test_create_batch_dry_run_builds_manual_batch_and_version() -> None:
     assert result["batch"]["source_instance_id"] == "PROC-MANUAL-001"
     assert result["version"]["version_code"] == "手工-MANUAL-001"
     assert result["version"]["is_current"] == 1
+    assert result["version"]["fx_usd_to_rmb"] is None
+    assert result["version"]["fx_rmb_to_mxn"] is None
 
 
 def test_create_batch_dry_run_requires_batch_no() -> None:

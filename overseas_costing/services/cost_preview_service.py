@@ -774,15 +774,13 @@ def preview_comprehensive_cost(batch_name: str, version_name: str | None = None)
         ["fx_usd_to_rmb", "fx_rmb_to_mxn", "extra_json"],
         as_dict=True,
     ) or {}
-    nowdate = getattr(getattr(frappe, "utils", None), "nowdate", None)
-    fx_resolution = (
-        fx_rate_service.resolve_costing_fx(
-            version_fx=version_row,
-            calculation_date=nowdate(),
-        )
-        if callable(nowdate)
-        else {}
-    )
+    fx_resolution = FrappeCostRepository().prepare_fx_resolution(batch_name, version)
+    if not fx_resolution.get("ok"):
+        return {
+            "ok": False, "read_only": True, "batch_name": batch_name,
+            "version_name": version, "fx_resolution": fx_resolution,
+            "message": "；".join(str(row.get("message") or "") for row in fx_resolution.get("blocking_errors") or []),
+        }
     effective_fx = {
         **version_row,
         "fx_usd_to_rmb": fx_resolution.get("fx_usd_to_rmb", version_row.get("fx_usd_to_rmb")),
@@ -991,6 +989,62 @@ def assert_persistable_item_updates(result: dict) -> None:
 
 
 class FrappeCostRepository:
+    @staticmethod
+    def costing_fx_date_context(batch_name, version_name=None, *, lock=False):
+        def attachment_rows():
+            if lock:
+                # 当前读可看到等待批次锁期间其他事务已提交的凭证。
+                yield from frappe.db.sql(
+                    "SELECT parse_result_json FROM `tabOverseas Cost Attachment` "
+                    "WHERE batch=%s AND attachment_type=%s AND parse_status=%s "
+                    "ORDER BY name FOR UPDATE",
+                    (batch_name, "Tax Certificate", "Parsed"),
+                    as_dict=True,
+                )
+                return
+            page_start = 0
+            while True:
+                attachments = frappe.get_all(
+                    "Overseas Cost Attachment",
+                    filters={"batch": batch_name, "attachment_type": "Tax Certificate", "parse_status": "Parsed"},
+                    fields=["parse_result_json"],
+                    order_by="name asc",
+                    limit_start=page_start,
+                    limit_page_length=200,
+                )
+                yield from attachments
+                if len(attachments) < 200:
+                    break
+                page_start += len(attachments)
+
+        payment_dates = set()
+        unverified_payment_date = False
+        for attachment in attachment_rows():
+            parsed = object_json(attachment.get("parse_result_json"))
+            header = parsed.get("header") if isinstance(parsed.get("header"), dict) else {}
+            date_value = fx_rate_service.normalize_payment_date(header.get("payment_date"))
+            if header.get("payment_date"):
+                if date_value and header.get("payment_date_source") == "explicit_label":
+                    payment_dates.add(date_value)
+                else:
+                    unverified_payment_date = True
+            if len(payment_dates) > 1:
+                break
+        if len(payment_dates) > 1:
+            return {
+                "ok": False, "date_source": "ambiguous",
+                "message": _("当前批次存在不同的完税凭证付款日，请先核对汇率日期。"),
+            }
+        if unverified_payment_date:
+            return {
+                "ok": False, "date_source": "unverified",
+                "message": _("完税凭证付款日缺少可核实来源，请重新解析附件。"),
+            }
+        context = fx_rate_service.resolve_fx_rate_date(payment_date=next(iter(payment_dates), ""))
+        if not context.get("ok"):
+            context["message"] = _("缺少可核实的付款日，无法自动试算汇率。")
+        return context
+
     def prepare_fx_resolution(self, batch_name, version_name=None):
         from overseas_costing.services import batch_service
 
@@ -1008,10 +1062,22 @@ class FrappeCostRepository:
         ) or {}
         if str(version_row.get("batch") or "") != str(name):
             raise ValueError(_("成本版本不属于当前批次。"))
-        resolution = fx_rate_service.resolve_costing_fx(
-            version_fx=version_row,
-            calculation_date=frappe.utils.nowdate(),
-        )
+        date_context = self.costing_fx_date_context(name, version)
+        if not date_context.get("ok"):
+            resolution = {
+                "ok": False, "calculation_date": "", "rates": {},
+                "blocking_errors": [{"code": "FX_DATE_REQUIRED", "message": date_context.get("message")}],
+            }
+        else:
+            resolution = fx_rate_service.resolve_costing_fx(
+                version_fx=version_row,
+                calculation_date=date_context["normalized_date"],
+            )
+        resolution.update({
+            "date_source": date_context.get("date_source") or "missing",
+            "date_source_label": date_context.get("date_source_label") or "",
+            "is_estimated": bool(resolution.get("is_estimated") or date_context.get("is_estimated_rate")),
+        })
         return {**resolution, "batch_name": name, "version_name": version}
 
     def persist_fx_resolution(self, context, resolution):
@@ -1020,11 +1086,20 @@ class FrappeCostRepository:
         if str(resolution.get("version_name") or "") != str(context.get("version") or ""):
             raise ValueError(_("试算汇率所属版本已变化，请重新预览。"))
         session_user = getattr(getattr(frappe, "session", None), "user", None)
+        frappe.db.sql(
+            "SELECT name FROM `tabOverseas Cost Batch` WHERE name=%s FOR UPDATE",
+            (context["batch"],),
+        )
+        date_context = self.costing_fx_date_context(context["batch"], context["version"], lock=True)
+        if not date_context.get("ok"):
+            raise ValueError(date_context.get("message") or _("缺少汇率日期，无法保存试算。"))
+        if str(date_context.get("date_source") or "") != str(resolution.get("date_source") or ""):
+            raise ValueError(_("汇率日期来源已变化，请重新生成试算预览。"))
         return fx_rate_service.persist_costing_fx_resolution(
             resolution=resolution,
             batch_name=context["batch"],
             version_name=context["version"],
-            current_date=frappe.utils.nowdate(),
+            current_date=date_context["normalized_date"],
             repository=fx_rate_service.FrappeCurrencyExchangeRepository(),
             operator=str(session_user or ""),
         )

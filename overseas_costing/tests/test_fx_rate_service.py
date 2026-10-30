@@ -9,6 +9,11 @@ import pytest
 from overseas_costing.services import fx_rate_service
 
 
+@pytest.fixture(autouse=True)
+def use_plain_messages(monkeypatch):
+    monkeypatch.setattr(fx_rate_service, "_", lambda message: message)
+
+
 class FakeResponse:
     def __init__(self, payload: dict):
         self.payload = payload
@@ -76,6 +81,17 @@ class FakePersistentCurrencyExchangeRepository(FakeCurrencyExchangeRepository):
 def test_normalize_payment_date_accepts_tax_certificate_date() -> None:
     assert fx_rate_service.normalize_payment_date("01/04/2026") == "2026-04-01"
     assert fx_rate_service.normalize_payment_date("2026-08-04") == "2026-08-04"
+
+
+def test_payment_date_fx_context_rejects_api_rate_from_another_day() -> None:
+    def fake_opener(_request, timeout):
+        assert timeout > 0
+        return FakeResponse({"cnyPerUnit": 6.7, "rateDate": "2026-10-29"})
+
+    result = fx_rate_service.build_fx_context_from_payment_date("2026-10-30", opener=fake_opener)
+    assert result["ok"] is False
+    assert "fx_usd_to_rmb" not in result
+    assert {error["action"] for error in result["errors"]} == {"rate_date_mismatch"}
 
 
 def test_resolve_fx_rate_date_prefers_real_payment_date() -> None:
@@ -193,6 +209,104 @@ def test_resolve_costing_fx_preserves_complete_version_snapshot() -> None:
     assert result["rates"]["MXN"]["source"] == "version_snapshot"
     assert repository.exact_calls == []
     assert repository.latest_calls == []
+
+
+def test_legacy_default_rates_are_refreshed_only_when_trial_is_saved() -> None:
+    repository = FakePersistentCurrencyExchangeRepository(
+        version={
+            "name": "VER-001", "batch": "BATCH-001", "status": "Active",
+            "fx_usd_to_rmb": 7.178751, "fx_rmb_to_mxn": 2.6, "extra_json": "{}",
+        },
+        exact={
+            "USD": {"name": "usd-rate", "date": "2026-10-30", "exchange_rate": 6.6583},
+            "MXN": {"name": "mxn-rate", "date": "2026-10-30", "exchange_rate": 0.3523916886},
+        },
+    )
+    resolution = fx_rate_service.resolve_costing_fx(
+        version_fx=repository.version,
+        calculation_date="2026-10-30",
+        repository=repository,
+        opener=lambda *_args, **_kwargs: pytest.fail("the exact database rates are available"),
+    )
+
+    assert resolution["legacy_default_currencies"] == ["USD", "MXN"]
+    assert repository.version["fx_usd_to_rmb"] == 7.178751
+    assert repository.version["fx_rmb_to_mxn"] == 2.6
+    saved = fx_rate_service.persist_costing_fx_resolution(
+        resolution=resolution, batch_name="BATCH-001", version_name="VER-001",
+        current_date="2026-10-30", repository=repository,
+    )
+    assert saved["changed_fields"] == ["fx_usd_to_rmb", "fx_rmb_to_mxn"]
+    assert repository.version["fx_usd_to_rmb"] == pytest.approx(6.6583)
+    assert repository.version["fx_rmb_to_mxn"] == pytest.approx(2.837751)
+    assert len(repository.audit_rows) == 2
+
+    repository.exact = {
+        "USD": {"name": "usd-next", "date": "2026-10-31", "exchange_rate": 6.7},
+        "MXN": {"name": "mxn-next", "date": "2026-10-31", "exchange_rate": 0.35},
+    }
+    refreshed = fx_rate_service.resolve_costing_fx(
+        version_fx=repository.version, calculation_date="2026-10-31",
+        repository=repository,
+        opener=lambda *_args, **_kwargs: pytest.fail("the next-day database rates are available"),
+    )
+    assert refreshed["legacy_default_currencies"] == []
+    assert refreshed["stale_snapshot_rates"]["USD"] == pytest.approx(6.6583)
+    assert refreshed["rates"]["USD"]["rate_date"] == "2026-10-31"
+    saved_next = fx_rate_service.persist_costing_fx_resolution(
+        resolution=refreshed, batch_name="BATCH-001", version_name="VER-001",
+        current_date="2026-10-31", repository=repository,
+    )
+    assert saved_next["changed_fields"] == ["fx_usd_to_rmb", "fx_rmb_to_mxn"]
+    assert repository.version["fx_usd_to_rmb"] == pytest.approx(6.7)
+    assert repository.version["fx_rmb_to_mxn"] == pytest.approx(1 / 0.35, rel=1e-6)
+
+
+def test_stale_fx_snapshot_rejects_concurrent_version_change(monkeypatch) -> None:
+    monkeypatch.setattr(fx_rate_service, "_", lambda message: message)
+    repository = FakePersistentCurrencyExchangeRepository(
+        version={
+            "name": "VER-001", "batch": "BATCH-001", "status": "Active",
+            "fx_usd_to_rmb": 6.8, "fx_rmb_to_mxn": 2.5,
+            "extra_json": json.dumps({"costing_fx_snapshot": {
+                "calculation_date": "2026-10-20",
+                "rates": {"USD": {"cny_per_unit": 6.8, "source": "currency_exchange"},
+                          "MXN": {"cny_per_unit": 0.4, "source": "currency_exchange"}},
+            }}),
+        },
+        exact={"USD": {"name": "usd-30", "date": "2026-10-30", "exchange_rate": 6.7},
+               "MXN": {"name": "mxn-30", "date": "2026-10-30", "exchange_rate": 0.35}},
+    )
+    resolution = fx_rate_service.resolve_costing_fx(
+        version_fx=repository.version, calculation_date="2026-10-30", repository=repository,
+    )
+    repository.version["fx_usd_to_rmb"] = 6.9
+    with pytest.raises(ValueError, match="版本汇率已变化"):
+        fx_rate_service.persist_costing_fx_resolution(
+            resolution=resolution, batch_name="BATCH-001", version_name="VER-001",
+            current_date="2026-10-30", repository=repository,
+        )
+
+
+def test_version_snapshot_with_mismatched_api_date_is_refreshed() -> None:
+    repository = FakeCurrencyExchangeRepository(exact={
+        "USD": {"name": "usd-30", "date": "2026-10-30", "exchange_rate": 6.7},
+        "MXN": {"name": "mxn-30", "date": "2026-10-30", "exchange_rate": 0.35},
+    })
+    version = {
+        "fx_usd_to_rmb": 6.8, "fx_rmb_to_mxn": 2.5,
+        "extra_json": json.dumps({"costing_fx_snapshot": {
+            "calculation_date": "2026-10-30",
+            "rates": {"USD": {"cny_per_unit": 6.8, "source": "fx_api", "rate_date": "2026-10-29"},
+                      "MXN": {"cny_per_unit": 0.4, "source": "fx_api", "rate_date": "2026-10-29"}},
+        }}),
+    }
+    result = fx_rate_service.resolve_costing_fx(
+        version_fx=version, calculation_date="2026-10-30", repository=repository,
+    )
+    assert result["stale_snapshot_rates"] == {"USD": 6.8, "MXN": 2.5}
+    assert result["fx_usd_to_rmb"] == pytest.approx(6.7)
+    assert result["rates"]["MXN"]["rate_date"] == "2026-10-30"
 
 
 def test_resolve_costing_fx_uses_database_then_api_for_only_missing_currency() -> None:
@@ -440,7 +554,7 @@ def test_persist_costing_fx_resolution_rejects_cross_day_preview() -> None:
         "blocking_errors": [],
     }
 
-    with pytest.raises(ValueError, match="跨日"):
+    with pytest.raises(ValueError, match="汇率日期已变化"):
         fx_rate_service.persist_costing_fx_resolution(
             resolution=resolution,
             batch_name="BATCH-001",

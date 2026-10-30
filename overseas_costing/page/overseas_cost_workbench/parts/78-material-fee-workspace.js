@@ -6361,12 +6361,18 @@
   }
 
   costTrialFxSourceLabel(rate = {}) {
-    return rate.source_label || {
+    const sourceLabel = rate.source_label || {
       version_snapshot: ocTranslate("当前版本汇率"),
       currency_exchange: ocTranslate("当日汇率库"),
       fx_api: ocTranslate("当日汇率 API"),
       historical_currency_exchange: ocTranslate("历史汇率暂估"),
     }[String(rate.source || "")] || ocTranslate("已解析汇率");
+    const originalLabel = {
+      currency_exchange: ocTranslate("当日汇率库"),
+      fx_api: ocTranslate("当日汇率 API"),
+      historical_currency_exchange: ocTranslate("历史汇率暂估"),
+    }[String(rate.original_source || "")];
+    return originalLabel ? `${sourceLabel} · ${originalLabel}` : sourceLabel;
   }
 
   renderCostTrialFxResolution(resolution = this.costTrialFxResolution()) {
@@ -6382,11 +6388,16 @@
     const rateDates = [...new Set([usd.rate_date, mxn.rate_date].filter(Boolean))];
     const dateDetail = rateDates.length
       ? ocTranslate("实际采用 {0}", [rateDates.join(" / ")])
-      : ocTranslate("实际采用 {0}", [resolution.calculation_date || "--"]);
+      : ocTranslate("来源日期未记录");
+    const dateSource = resolution.date_source_label ? ocTranslate(resolution.date_source_label) : "";
+    const legacyWarning = (resolution.legacy_default_currencies || []).length
+      ? `<p class="ocw-cost-trial-warning">${ocTranslate("检测到历史默认汇率，将按所示日期重新取值；应用试算时才更新成本版本。")}</p>`
+      : "";
     return `<section class="ocw-cost-trial-fx ${estimated ? "is-estimated" : ""}">
       <header><strong>${estimated ? ocTranslate("历史汇率暂估") : ocTranslate("计算汇率")}</strong><span>${ocTranslate("汇率日期 {0}", [this.escape(resolution.calculation_date || "--")])}</span></header>
-      <div><span>${this.escape(sourceLabels)}</span><span>${this.escape(dateDetail)}</span></div>
+      <div><span>${this.escape(sourceLabels)}</span><span>${this.escape(dateSource ? `${dateSource} · ${dateDetail}` : dateDetail)}</span></div>
       <p><strong>1 USD = ${this.escape(this.formatCostTrialFxRate(resolution.fx_usd_to_rmb))} RMB</strong><strong>1 RMB = ${this.escape(this.formatCostTrialFxRate(resolution.fx_rmb_to_mxn))} MXN</strong></p>
+      ${legacyWarning}
     </section>`;
   }
 

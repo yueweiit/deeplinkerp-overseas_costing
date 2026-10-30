@@ -506,20 +506,17 @@ def save_tax_certificate_parse_result(
             "message": "未匹配到系统批次，暂不保存解析结果。请先确认报关单号或柜号。",
         }
 
+    # 串行化同批次凭证保存与成本试算，避免并发写入时各自漏看对方的付款日。
+    frappe.db.sql(
+        "SELECT name FROM `tabOverseas Cost Batch` WHERE name=%s FOR UPDATE",
+        (matched_batch["name"],),
+    )
     identity_sync = _sync_tax_certificate_identity(
         parsed=parsed,
         batch=matched_batch,
         source_name=source_name or parsed.get("file_name") or "",
     )
-    fx_sync = _sync_tax_certificate_exchange_rate_to_version(
-        parsed=parsed,
-        batch=matched_batch,
-        source_name=source_name or parsed.get("file_name") or "",
-    )
-    cost_refresh = _refresh_costing_after_fx_sync(fx_sync=fx_sync, batch=matched_batch)
     parsed["identity_sync"] = identity_sync
-    parsed["fx_sync"] = fx_sync
-    parsed["cost_refresh"] = cost_refresh
     values = _build_tax_certificate_attachment_values(
         parsed=parsed,
         batch=matched_batch,
@@ -527,18 +524,47 @@ def save_tax_certificate_parse_result(
         file_path=file_path,
         file_url=file_url,
     )
-    existing_name = _find_existing_tax_certificate_attachment(values)
-    if existing_name:
-        doc = frappe.get_doc("Overseas Cost Attachment", existing_name)
-        for fieldname, value in values.items():
-            setattr(doc, fieldname, value)
-        doc.save(ignore_permissions=True)
-        action = "updated"
-    else:
-        doc = frappe.get_doc({"doctype": "Overseas Cost Attachment", **values}).insert(ignore_permissions=True)
-        action = "created"
+    try:
+        existing_name = _find_existing_tax_certificate_attachment(values)
+        if existing_name:
+            doc = frappe.get_doc("Overseas Cost Attachment", existing_name)
+            for fieldname, value in values.items():
+                setattr(doc, fieldname, value)
+            doc.save(ignore_permissions=True)
+            action = "updated"
+        else:
+            doc = frappe.get_doc({"doctype": "Overseas Cost Attachment", **values}).insert(ignore_permissions=True)
+            action = "created"
 
-    frappe.db.commit()
+        # 新凭证必须先进入同一事务的日期集合，才能检查与已存凭证是否冲突。
+        from overseas_costing.services.cost_preview_service import FrappeCostRepository
+
+        date_context = FrappeCostRepository.costing_fx_date_context(matched_batch["name"], lock=True)
+        if date_context.get("ok"):
+            fx_sync = _sync_tax_certificate_exchange_rate_to_version(
+                parsed=parsed,
+                batch=matched_batch,
+                source_name=source_name or parsed.get("file_name") or "",
+            )
+        else:
+            fx_sync = {"action": "skipped", "reason": date_context.get("message") or "缺少可用汇率日期。"}
+        cost_refresh = _refresh_costing_after_fx_sync(fx_sync=fx_sync, batch=matched_batch)
+        if cost_refresh.get("action") == "failed" or (
+            cost_refresh.get("action") == "refreshed" and not cost_refresh.get("recalculated")
+        ):
+            raise ValueError(
+                (cost_refresh.get("recalculate_sync") or {}).get("message")
+                or cost_refresh.get("message")
+                or _("汇率更新后成本重算失败。")
+            )
+        parsed["fx_sync"] = fx_sync
+        parsed["cost_refresh"] = cost_refresh
+        doc.parse_result_json = _json_dumps({**(_json_loads(doc.parse_result_json) or {}), "fx_sync": fx_sync, "cost_refresh": cost_refresh})
+        doc.save(ignore_permissions=True)
+        frappe.db.commit()
+    except Exception:
+        frappe.db.rollback()
+        raise
     parsed["saved_attachment_name"] = doc.name
     return {
         "ok": True,
@@ -999,7 +1025,7 @@ def parse_tax_certificate_text(text: str, source_name: str | None = None) -> dic
     tax_total_sum = round(sum(value for value in tax_totals.values() if isinstance(value, (int, float))), 2)
 
     dates = re.findall(r"\b\d{2}/\d{2}/\d{4}\b", normalized)
-    payment_date = _search(r"FECHA DE PAGO:[\s\S]{0,80}?(\d{2}/\d{2}/\d{4})", normalized) or (dates[0] if dates else "")
+    payment_date = _search(r"FECHA\s+(?:DE\s+)?PAGO\s*:?\s*(\d{2}/\d{2}/\d{4})", normalized)
     entry_date = dates[0] if dates else ""
     exchange_match = re.search(
         r"TIPO\s+CAMBIO:\s*(\d+\.\d{4,6})[\s\S]{0,120}?PESO\s+BRUTO:\s*([\d,]+\.\d{3})",
@@ -1017,6 +1043,7 @@ def parse_tax_certificate_text(text: str, source_name: str | None = None) -> dic
         "importer_name": _search(r"\b(YUEWEI SA DE CV)\b", normalized),
         "entry_date": entry_date,
         "payment_date": payment_date,
+        "payment_date_source": "explicit_label" if payment_date else "",
         "exchange_rate": _to_number(exchange_match.group(1)) if exchange_match else None,
         "gross_weight_kg": _to_number(exchange_match.group(2)) if exchange_match else None,
         "paid_total_mxn": paid_total,
@@ -1552,11 +1579,8 @@ def _insert_fx_sync_audit_log(
 
 
 def _batch_approval_finished_at(batch: dict) -> str:
-    for fieldname in ("source_finished_at", "source_finish_time", "finish_time", "complete_time", "completed_at"):
-        value = batch.get(fieldname)
-        if value:
-            return str(value).strip()
-    return ""
+    # source_finished_at 是国际物流 OA 的完成时间，不能充当付款审批完成日。
+    return str(batch.get("payment_approval_finished_at") or "").strip()
 
 
 def _fx_sync_date_fields(fx_context: dict, *, payment_date: str, approval_finished_at: str) -> dict:
@@ -1727,7 +1751,7 @@ def _sync_tax_certificate_exchange_rate_to_version(*, parsed: dict, batch: dict,
     version = frappe.db.get_value(
         "Overseas Cost Version",
         version_name,
-        ["fx_usd_to_rmb", "fx_rmb_to_mxn", "remark"],
+        ["fx_usd_to_rmb", "fx_rmb_to_mxn", "remark", "extra_json"],
         as_dict=True,
     ) or {}
     old_usd_to_rmb = _to_number(version.get("fx_usd_to_rmb"))
@@ -1752,7 +1776,13 @@ def _sync_tax_certificate_exchange_rate_to_version(*, parsed: dict, batch: dict,
         f"USD→RMB {usd_to_rmb or '缺失'}，RMB→MXN {rmb_to_mxn or '缺失'}"
     )
 
-    if not updates:
+    extra = _json_loads(version.get("extra_json")) or {}
+    previous_snapshot = extra.get("costing_fx_snapshot") if isinstance(extra.get("costing_fx_snapshot"), dict) else {}
+    snapshot_date_changed = (
+        previous_snapshot.get("calculation_date") != normalized_fx_rate_date
+        or previous_snapshot.get("date_source") != fx_date_fields.get("fx_date_source")
+    )
+    if not updates and not snapshot_date_changed:
         return {
             "action": "unchanged",
             "version_name": version_name,
@@ -1764,6 +1794,31 @@ def _sync_tax_certificate_exchange_rate_to_version(*, parsed: dict, batch: dict,
             **fx_date_fields,
         }
 
+    previous_rates = previous_snapshot.get("rates") if isinstance(previous_snapshot.get("rates"), dict) else {}
+    rate_snapshots = fx_context.get("rate_snapshots") or {}
+    rates = dict(previous_rates)
+    for currency_code in ("USD", "MXN"):
+        snapshot = rate_snapshots.get(currency_code) or {}
+        rate = _to_number(snapshot.get("cny_per_unit"))
+        if snapshot.get("ok") and rate and rate > 0:
+            rates[currency_code] = {
+                "currency": currency_code,
+                "cny_per_unit": rate,
+                "source": "fx_api",
+                "rate_date": snapshot.get("rate_date") or normalized_fx_rate_date,
+                "source_url": snapshot.get("source_url") or "",
+                "fetched_at": snapshot.get("fetched_at"),
+            }
+    extra["costing_fx_snapshot"] = {
+        "schema": 1,
+        "calculation_date": normalized_fx_rate_date,
+        "date_source": fx_date_fields.get("fx_date_source") or "",
+        "fx_usd_to_rmb": usd_to_rmb,
+        "fx_rmb_to_mxn": rmb_to_mxn,
+        "rates": rates,
+        "is_estimated": bool(fx_date_fields.get("is_estimated_rate")),
+    }
+    updates["extra_json"] = _json_dumps(extra)
     updates["remark"] = _append_version_remark(version.get("remark"), remark)
     frappe.db.set_value("Overseas Cost Version", version_name, updates, update_modified=True)
     frappe.db.set_value("Overseas Cost Batch", batch_name, "status", "Dirty", update_modified=True)
@@ -1811,7 +1866,13 @@ def _refresh_costing_after_fx_sync(*, fx_sync: dict | None, batch: dict) -> dict
             batch_name=batch_name,
             version_name=version_name,
             recalculate_after_writeback=False,
+            commit_after_writeback=False,
         )
+        if purchase_sync.get("ok") is False:
+            return {
+                "action": "failed", "stage": "purchase_sync",
+                "message": purchase_sync.get("message") or _("汇率更新后采购字段同步失败。"),
+            }
     except Exception as exc:
         return {
             "action": "failed",
@@ -1822,7 +1883,9 @@ def _refresh_costing_after_fx_sync(*, fx_sync: dict | None, batch: dict) -> dict
     try:
         from overseas_costing.services.calculate_service import recalculate_batch
 
-        recalculate_sync = recalculate_batch(batch_name=batch_name, version_name=version_name)
+        recalculate_sync = recalculate_batch(
+            batch_name=batch_name, version_name=version_name, commit_after_recalculate=False,
+        )
     except Exception as exc:
         recalculate_sync = {
             "ok": False,
@@ -1855,6 +1918,8 @@ def _tax_certificate_save_message(fx_sync: dict | None = None, cost_refresh: dic
         return f"完税凭证解析结果已保存；{date_note}已同步到当前版本，批次已标记为待重算。"
     if fx_sync.get("action") == "unchanged":
         return f"完税凭证解析结果已保存；{date_label}汇率与当前版本一致。"
+    if fx_sync.get("reason"):
+        return _("完税凭证解析结果已保存；{0} 未更新成本。").format(fx_sync["reason"])
     return "完税凭证解析结果已保存到附件记录，未写入成本字段。"
 
 

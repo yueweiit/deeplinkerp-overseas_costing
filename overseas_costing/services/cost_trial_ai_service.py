@@ -792,6 +792,9 @@ def start_cost_trial_ai_review(
     repo = _repo(repository)
     try:
         fx_resolution = _prepare_fx_resolution(repo, str(batch_name), str(version_name or "") or None)
+        if fx_resolution and not fx_resolution.get("ok", True):
+            messages = [str(row.get("message") or "") for row in fx_resolution.get("blocking_errors") or []]
+            raise ValueError("；".join(message for message in messages if message) or _("未取得可用汇率。"))
         inputs = repo.load_trial_inputs(
             str(batch_name), str(version_name or "") or None,
             edit_token=edit_token, expected_modified=expected_modified, write=True,

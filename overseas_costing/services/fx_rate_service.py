@@ -25,6 +25,9 @@ except Exception:  # pragma: no cover - pure tests do not require Frappe
 
 DEFAULT_FX_RATE_API_URL = "http://8.135.70.130:3003/api/fx-rate"
 DEFAULT_TIMEOUT_SECONDS = 8
+# 仅识别历史预填值；不得用这两个数值折算新成本。
+LEGACY_DEFAULT_FX_USD_TO_RMB = Decimal("7.178751")
+LEGACY_DEFAULT_FX_RMB_TO_MXN = Decimal("2.6")
 
 FX_DATE_SOURCE_PAYMENT = "payment_date"
 FX_DATE_SOURCE_APPROVAL_FINISHED = "approval_finished_at"
@@ -104,7 +107,7 @@ def normalize_payment_date(value) -> str:
             return datetime.strptime(text, fmt).date().isoformat()
         except ValueError:
             continue
-    return text
+    return ""
 
 
 def resolve_fx_rate_date(*, payment_date=None, approval_finished_at=None) -> dict:
@@ -317,10 +320,56 @@ def resolve_costing_fx(
 
     usd_to_rmb = _positive_decimal(version_fx.get("fx_usd_to_rmb"))
     rmb_to_mxn = _positive_decimal(version_fx.get("fx_rmb_to_mxn"))
+    saved_snapshot = _json_object(version_fx.get("extra_json")).get("costing_fx_snapshot")
+    if not isinstance(saved_snapshot, dict):
+        saved_snapshot = {}
+    saved_rates = saved_snapshot.get("rates") if isinstance(saved_snapshot.get("rates"), dict) else {}
+    saved_calculation_date = normalize_payment_date(saved_snapshot.get("calculation_date"))
+    stale_snapshot_rates = {}
+
+    def version_rate(currency_code: str, value: Decimal) -> dict:
+        saved = saved_rates.get(currency_code) if isinstance(saved_rates.get(currency_code), dict) else {}
+        saved_value = _positive_decimal(saved.get("cny_per_unit"))
+        original_source = str(saved.get("original_source") or saved.get("source") or "")
+        saved_matches = (
+            saved_value is not None
+            and abs(saved_value - value) <= Decimal("0.000001")
+            and original_source in {"currency_exchange", "fx_api", "historical_currency_exchange", "manual"}
+        )
+        resolved = _rate_payload(
+            currency_code, value, source="version_snapshot",
+            rate_date=saved.get("rate_date") if saved_matches else "",
+            record_name=saved.get("record_name") if saved_matches else "",
+            api_snapshot=saved if saved_matches else None,
+        )
+        resolved["original_source"] = original_source if saved_matches else ""
+        resolved["is_estimated"] = bool(saved_matches and (saved.get("is_estimated") or original_source == "historical_currency_exchange"))
+        return resolved
+
+    legacy_defaults = []
     if usd_to_rmb is not None:
-        rates["USD"] = _rate_payload("USD", usd_to_rmb, source="version_snapshot")
+        usd_snapshot = version_rate("USD", usd_to_rmb)
+        if (usd_snapshot["original_source"] in {"currency_exchange", "fx_api", "historical_currency_exchange"}
+                and ((saved_calculation_date and saved_calculation_date != normalized_date)
+                     or (usd_snapshot["original_source"] != "historical_currency_exchange"
+                         and usd_snapshot["rate_date"] != normalized_date))):
+            stale_snapshot_rates["USD"] = float(usd_to_rmb)
+        elif abs(usd_to_rmb - LEGACY_DEFAULT_FX_USD_TO_RMB) <= Decimal("0.000001") and not usd_snapshot["original_source"]:
+            legacy_defaults.append("USD")
+        else:
+            rates["USD"] = usd_snapshot
     if rmb_to_mxn is not None:
-        rates["MXN"] = _rate_payload("MXN", Decimal("1") / rmb_to_mxn, source="version_snapshot")
+        mxn_to_rmb = Decimal("1") / rmb_to_mxn
+        mxn_snapshot = version_rate("MXN", mxn_to_rmb)
+        if (mxn_snapshot["original_source"] in {"currency_exchange", "fx_api", "historical_currency_exchange"}
+                and ((saved_calculation_date and saved_calculation_date != normalized_date)
+                     or (mxn_snapshot["original_source"] != "historical_currency_exchange"
+                         and mxn_snapshot["rate_date"] != normalized_date))):
+            stale_snapshot_rates["MXN"] = float(rmb_to_mxn)
+        elif abs(rmb_to_mxn - LEGACY_DEFAULT_FX_RMB_TO_MXN) <= Decimal("0.000001") and not mxn_snapshot["original_source"]:
+            legacy_defaults.append("MXN")
+        else:
+            rates["MXN"] = mxn_snapshot
 
     for currency_code in ("USD", "MXN"):
         if currency_code in rates:
@@ -392,6 +441,9 @@ def resolve_costing_fx(
         "fx_usd_to_rmb": float(usd_rate) if usd_rate is not None else None,
         "fx_rmb_to_mxn": float(resolved_rmb_to_mxn) if resolved_rmb_to_mxn is not None else None,
         "rates": rates,
+        "legacy_default_currencies": legacy_defaults,
+        "stale_snapshot_rates": stale_snapshot_rates,
+        "prior_snapshot_date": saved_calculation_date if stale_snapshot_rates else "",
         "is_estimated": any(bool(row.get("is_estimated")) for row in rates.values()),
         "blocking_errors": blocking_errors,
     }
@@ -439,7 +491,7 @@ def persist_costing_fx_resolution(
     calculation_date = normalize_payment_date(resolution.get("calculation_date"))
     normalized_current_date = normalize_payment_date(current_date)
     if not calculation_date or calculation_date != normalized_current_date:
-        raise ValueError(_("试算汇率已跨日，请重新生成预览。"))
+        raise ValueError(_("汇率日期已变化，请重新生成试算预览。"))
 
     version = repository.get_version_for_update(version_name) or {}
     if str(version.get("batch") or "") != str(batch_name or ""):
@@ -485,14 +537,40 @@ def persist_costing_fx_resolution(
     updates = {}
     changed_fields = []
     audit_changes = []
+    legacy_defaults = set(stored_resolution.get("legacy_default_currencies") or [])
+    stale_snapshot_rates = stored_resolution.get("stale_snapshot_rates") or {}
+    prior_snapshot = _json_object(version.get("extra_json")).get("costing_fx_snapshot")
+    if not isinstance(prior_snapshot, dict):
+        prior_snapshot = {}
+    prior_rates = prior_snapshot.get("rates") if isinstance(prior_snapshot.get("rates"), dict) else {}
+    if stale_snapshot_rates and normalize_payment_date(prior_snapshot.get("calculation_date")) != stored_resolution.get("prior_snapshot_date"):
+        raise ValueError(_("版本汇率来源日期已变化，请重新生成试算预览。"))
     for fieldname, target in target_values.items():
         if target is None:
             continue
         current = _positive_decimal(version.get(fieldname))
+        currency_code = "USD" if fieldname == "fx_usd_to_rmb" else "MXN"
+        if currency_code in stale_snapshot_rates:
+            prior_rate = prior_rates.get(currency_code) if isinstance(prior_rates.get(currency_code), dict) else {}
+            prior_source = str(prior_rate.get("original_source") or prior_rate.get("source") or "")
+            prior_cny = _positive_decimal(prior_rate.get("cny_per_unit"))
+            expected_prior_cny = current if currency_code == "USD" else (Decimal("1") / current if current else None)
+            if (not _numbers_close(current, stale_snapshot_rates[currency_code])
+                    or not _numbers_close(prior_cny, expected_prior_cny)
+                    or prior_source not in {"currency_exchange", "fx_api", "historical_currency_exchange"}):
+                raise ValueError(_("版本汇率已变化，请重新生成试算预览。"))
         if current is not None:
             if not _numbers_close(current, target):
-                raise ValueError(_("{0} 已被人工修改，请重新预览。").format(fieldname))
-            continue
+                legacy_value = LEGACY_DEFAULT_FX_USD_TO_RMB if currency_code == "USD" else LEGACY_DEFAULT_FX_RMB_TO_MXN
+                prior_rate = prior_rates.get(currency_code) if isinstance(prior_rates.get(currency_code), dict) else {}
+                prior_source = str(prior_rate.get("original_source") or prior_rate.get("source") or "")
+                from_stale_snapshot = currency_code in stale_snapshot_rates
+                from_legacy_default = (currency_code in legacy_defaults and _numbers_close(current, legacy_value)
+                                       and prior_source not in {"currency_exchange", "fx_api", "historical_currency_exchange", "manual"})
+                if not from_stale_snapshot and not from_legacy_default:
+                    raise ValueError(_("{0} 已被人工修改，请重新预览。").format(fieldname))
+            else:
+                continue
         value = float(target)
         updates[fieldname] = value
         changed_fields.append(fieldname)
@@ -502,6 +580,7 @@ def persist_costing_fx_resolution(
     extra["costing_fx_snapshot"] = {
         "schema": 1,
         "calculation_date": calculation_date,
+        "date_source": str(stored_resolution.get("date_source") or ""),
         "fx_usd_to_rmb": float(target_values["fx_usd_to_rmb"]) if target_values["fx_usd_to_rmb"] is not None else None,
         "fx_rmb_to_mxn": float(target_values["fx_rmb_to_mxn"]),
         "rates": rates,
@@ -519,7 +598,7 @@ def persist_costing_fx_resolution(
             old_value=old_value,
             new_value=new_value,
             operator=operator,
-            remark=f"试算汇率自动补全；计算日期 {calculation_date}",
+            remark=f"试算汇率更新；汇率日期 {calculation_date}",
         )
 
     return {
@@ -660,6 +739,11 @@ def build_fx_context_from_payment_date(
             timeout=timeout,
             opener=opener,
         )
+        if snapshot.get("ok") and normalize_payment_date(snapshot.get("rate_date")) != normalized_date:
+            snapshot = {
+                **snapshot, "ok": False, "action": "rate_date_mismatch",
+                "message": _("汇率接口返回的日期与付款日不一致。"),
+            }
         snapshots[currency_code] = snapshot
         if not snapshot.get("ok"):
             errors.append(

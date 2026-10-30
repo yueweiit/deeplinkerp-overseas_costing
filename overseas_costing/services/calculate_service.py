@@ -47,7 +47,6 @@ except Exception:  # pragma: no cover - local tests can import without Frappe
 
 from overseas_costing.utils.currency import round_money as _round_money
 
-DEFAULT_FX_RMB_TO_MXN = 2.6
 PURCHASE_CORRECTION_FIELDS = frozenset(
     {"goods_value", "unit_price", "purchase_currency", "purchase_uom", "unit_price_uom"}
 )
@@ -965,9 +964,8 @@ def _calculate_selected_item_rows(
         if row.get("goods_value") in (None, "") and quantity and unit_price:
             row["goods_value"] = float(_money(quantity * unit_price))
 
-    has_final = any(_is_final_rule(rule) for rule in enabled_rules)
     if fx_rmb_to_mxn is _UNSET_FX:
-        fx_rmb_to_mxn = None if has_final else DEFAULT_FX_RMB_TO_MXN
+        fx_rmb_to_mxn = None
     mxn_rate = _positive_fx(fx_rmb_to_mxn, "RMB/MXN")
     basis_totals_decimal = {
         basis: sum((_basis_decimal(row, basis) for row in rows), Decimal(0))

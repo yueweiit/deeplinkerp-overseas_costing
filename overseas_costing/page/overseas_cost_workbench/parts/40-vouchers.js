@@ -921,7 +921,7 @@
   formatSystemPaymentFx(fxSync = {}, rawPaymentDate = "") {
     const hasFx = fxSync && (fxSync.action === "updated" || fxSync.action === "unchanged" || fxSync.usd_to_rmb || fxSync.rmb_to_mxn);
     if (!hasFx) {
-      const message = fxSync.reason || fxSync.message || "未保存系统汇率；保存后优先按真实付款日查询，缺失时按付款审批完成日暂估。";
+      const message = fxSync.reason || fxSync.message || ocTranslate("未保存系统汇率；保存后按真实付款日查询，缺少付款日则不自动更新。");
       return { heading: "系统采用汇率", title: message, lines: [message] };
     }
 

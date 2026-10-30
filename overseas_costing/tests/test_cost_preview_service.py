@@ -10,6 +10,11 @@ from overseas_costing.services import cost_preview_service
 from overseas_costing.services.cost_preview_service import preview_comprehensive_cost_data
 
 
+@pytest.fixture(autouse=True)
+def use_plain_messages(monkeypatch):
+    monkeypatch.setattr(cost_preview_service, "_", lambda message: message)
+
+
 def test_express_default_zero_fees_count_as_estimates_without_fx_or_physical_values():
     from overseas_costing.services.fee_service import build_default_fee_templates
     fees = build_default_fee_templates('EXPRESS')
@@ -763,7 +768,7 @@ def test_persistable_item_updates_reject_null_mxn_before_database_write() -> Non
         )
 
 
-def test_frappe_cost_repository_prepares_server_day_fx_without_writing(monkeypatch) -> None:
+def test_frappe_cost_repository_prepares_payment_day_fx_without_writing(monkeypatch) -> None:
     from overseas_costing.services import batch_service
 
     calls = []
@@ -773,7 +778,7 @@ def test_frappe_cost_repository_prepares_server_day_fx_without_writing(monkeypat
         def get_value(doctype, name, fields, as_dict=False):
             calls.append((doctype, name, fields, as_dict))
             if doctype == "Overseas Cost Batch":
-                return "V1"
+                return "V1" if fields == "current_version" else {"source_finished_at": "2026-09-19"}
             return {
                 "name": "V1", "batch": "B1", "status": "Active",
                 "fx_usd_to_rmb": 0, "fx_rmb_to_mxn": 0, "extra_json": "{}",
@@ -781,7 +786,11 @@ def test_frappe_cost_repository_prepares_server_day_fx_without_writing(monkeypat
 
     class FakeFrappe:
         db = FakeDB()
-        utils = type("Utils", (), {"nowdate": staticmethod(lambda: "2026-09-20")})
+
+        @staticmethod
+        def get_all(doctype, **_kwargs):
+            assert doctype == "Overseas Cost Attachment"
+            return [{"parse_result_json": '{"header":{"payment_date":"2026-09-20","payment_date_source":"explicit_label"}}'}]
 
     captured = {}
 
@@ -803,7 +812,84 @@ def test_frappe_cost_repository_prepares_server_day_fx_without_writing(monkeypat
     assert captured["version_fx"]["fx_rmb_to_mxn"] == 0
     assert result["batch_name"] == "B1"
     assert result["version_name"] == "V1"
+    assert result["date_source"] == "payment_date"
     assert all(call[0] != "Currency Exchange" for call in calls)
+
+
+def test_costing_fx_date_blocks_missing_and_conflicting_payment_dates(monkeypatch) -> None:
+    monkeypatch.setattr(cost_preview_service, "_", lambda message: message)
+    class FakeFrappe:
+        class db:
+            @staticmethod
+            def get_value(doctype, *_args, **_kwargs):
+                if doctype == "Overseas Cost Version":
+                    return {"extra_json": '{"costing_fx_snapshot":{"date_source":"payment_date","calculation_date":"2026-10-30"}}'}
+                return {"source_finished_at": ""}
+
+        rows = []
+
+        @classmethod
+        def get_all(cls, *_args, **_kwargs):
+            return cls.rows
+
+    monkeypatch.setattr(cost_preview_service, "frappe", FakeFrappe)
+    assert cost_preview_service.FrappeCostRepository.costing_fx_date_context("B1")["ok"] is False
+    assert cost_preview_service.FrappeCostRepository.costing_fx_date_context("B1", "V1")["ok"] is False
+
+    FakeFrappe.rows = [
+        {"parse_result_json": '{"header":{"payment_date":"2026-10-29","payment_date_source":"explicit_label"}}'},
+        {"parse_result_json": '{"header":{"payment_date":"2026-10-30","payment_date_source":"explicit_label"}}'},
+    ]
+    result = cost_preview_service.FrappeCostRepository.costing_fx_date_context("B1")
+    assert result["ok"] is False
+    assert result["date_source"] == "ambiguous"
+
+    FakeFrappe.rows = []
+    assert cost_preview_service.FrappeCostRepository.costing_fx_date_context("B1", "V1")["ok"] is False
+
+    FakeFrappe.rows = [{"parse_result_json": '{"header":{"payment_date":"2026-10-30"}}'}]
+    assert cost_preview_service.FrappeCostRepository.costing_fx_date_context("B1")["date_source"] == "unverified"
+
+
+def test_costing_fx_date_checks_attachments_after_first_page(monkeypatch) -> None:
+    monkeypatch.setattr(cost_preview_service, "_", lambda message: message)
+    rows = [{"parse_result_json": '{"header":{"payment_date":"2026-10-29","payment_date_source":"explicit_label"}}'}] * 200
+    rows.append({"parse_result_json": '{"header":{"payment_date":"2026-10-30","payment_date_source":"explicit_label"}}'})
+
+    class FakeFrappe:
+        @staticmethod
+        def get_all(_doctype, **kwargs):
+            start = kwargs["limit_start"]
+            return rows[start:start + kwargs["limit_page_length"]]
+
+    monkeypatch.setattr(cost_preview_service, "frappe", FakeFrappe)
+    result = cost_preview_service.FrappeCostRepository.costing_fx_date_context("B1")
+    assert result["ok"] is False
+    assert result["date_source"] == "ambiguous"
+
+
+def test_costing_fx_date_uses_locked_current_read_before_saving(monkeypatch) -> None:
+    queries = []
+
+    class FakeFrappe:
+        class db:
+            @staticmethod
+            def sql(query, values, as_dict=False):
+                queries.append((query, values, as_dict))
+                return [
+                    {"parse_result_json": '{"header":{"payment_date":"2026-10-29","payment_date_source":"explicit_label"}}'},
+                    {"parse_result_json": '{"header":{"payment_date":"2026-10-30","payment_date_source":"explicit_label"}}'},
+                ]
+
+        @staticmethod
+        def get_all(*_args, **_kwargs):
+            raise AssertionError("locked check must use a current read")
+
+    monkeypatch.setattr(cost_preview_service, "frappe", FakeFrappe)
+    result = cost_preview_service.FrappeCostRepository.costing_fx_date_context("B1", lock=True)
+    assert result["date_source"] == "ambiguous"
+    assert "FOR UPDATE" in queries[0][0]
+    assert queries[0][1][0] == "B1"
 
 
 def test_read_only_preview_uses_resolved_fx_and_returns_provenance(monkeypatch) -> None:
@@ -848,6 +934,7 @@ def test_read_only_preview_uses_resolved_fx_and_returns_provenance(monkeypatch) 
     }
 
     monkeypatch.setattr(cost_preview_service, "frappe", FakeFrappe)
+    monkeypatch.setattr(cost_preview_service.FrappeCostRepository, "prepare_fx_resolution", lambda _self, _batch, _version: dict(resolution))
     monkeypatch.setattr(cost_preview_service.fx_rate_service, "resolve_costing_fx", lambda **_kwargs: dict(resolution))
     monkeypatch.setattr(cost_preview_service, "project_batch_items", lambda rows, _batch, _version: (rows, {}))
     monkeypatch.setattr(cost_preview_service.fee_service, "_query_rules", lambda _batch, _version: [fee])

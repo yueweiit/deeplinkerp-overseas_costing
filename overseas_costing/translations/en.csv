@@ -5703,3 +5703,24 @@ rows_payload 必须是数组。,rows_payload must be an array.
 其他费用实例标识不合法。,Invalid other fee instance identifier.
 其他费用名称不能为空，且不能超过 140 个字符。,Other fee names are required and cannot exceed 140 characters.
 该费用已停用，请先核对历史记录，不能通过关联凭证恢复启用。,This fee is inactive. Review its history; linking evidence cannot reactivate it.
+当前批次存在不同的完税凭证付款日，请先核对汇率日期。,This batch has conflicting tax certificate payment dates. Verify the exchange rate date first.
+汇率日期已变化，请重新生成试算预览。,The exchange rate date has changed. Generate a new trial preview.
+汇率日期来源已变化，请重新生成试算预览。,The exchange rate date source has changed. Generate a new trial preview.
+缺少汇率日期，无法保存试算。,An exchange rate date is required to save the trial calculation.
+未取得可用汇率。,No valid exchange rate was found.
+缺少 USD 兑 RMB 汇率，请先核对成本版本。,The USD to RMB rate is missing. Check the cost version first.
+缺少 RMB 兑 MXN 汇率，请先核对成本版本。,The RMB to MXN rate is missing. Check the cost version first.
+USD 兑 RMB 汇率必须大于零。,The USD to RMB rate must be greater than zero.
+RMB 兑 MXN 汇率必须大于零。,The RMB to MXN rate must be greater than zero.
+来源日期未记录,Source date not recorded
+检测到历史默认汇率，将按所示日期重新取值；应用试算时才更新成本版本。,A legacy default rate was detected. Rates will be refreshed for the shown date and the cost version will change only when you apply the trial.
+成本版本缺少所属批次，无法取得汇率。,The cost version has no batch and its exchange rate cannot be resolved.
+缺少可核实的付款日，无法自动试算汇率。,A verifiable payment date is required to calculate exchange rates automatically.
+版本汇率来源日期已变化，请重新生成试算预览。,The source date of the version exchange rates has changed. Generate a new trial preview.
+版本汇率已变化，请重新生成试算预览。,The version exchange rates have changed. Generate a new trial preview.
+汇率接口返回的日期与付款日不一致。,The date returned by the exchange rate API differs from the payment date.
+未保存系统汇率；保存后按真实付款日查询，缺少付款日则不自动更新。,The system exchange rates have not been saved. Saving will use the actual payment date; without one rates will not be updated automatically.
+汇率更新后成本重算失败。,Cost recalculation failed after updating exchange rates.
+完税凭证解析结果已保存；{0} 未更新成本。,The tax certificate parse result was saved; {0} Costs were not updated.
+完税凭证付款日缺少可核实来源，请重新解析附件。,The tax certificate payment date has no verifiable source. Parse the attachment again.
+汇率更新后采购字段同步失败。,Purchase field synchronization failed after updating exchange rates.

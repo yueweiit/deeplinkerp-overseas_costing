@@ -576,6 +576,21 @@ class FxTrialRepository(TrialRepository):
         }
 
 
+def test_trial_stops_before_ai_when_fx_date_is_missing():
+    repo = FxTrialRepository()
+    repo.fx_resolution = {
+        "ok": False,
+        "blocking_errors": [{"code": "FX_DATE_REQUIRED", "message": "缺少真实付款日和付款审批完成日"}],
+    }
+    with pytest.raises(ValueError, match="缺少真实付款日"):
+        cost_trial_ai_service.start_cost_trial_ai_review(
+            "B1", "V1", repository=repo, enqueue=lambda *_args, **_kwargs: pytest.fail("AI must not start"),
+        )
+    assert repo.prepared == 1
+    assert repo.persisted == 0
+    assert repo.rollbacks == 1
+
+
 def _ai_volume(**_kwargs):
     return {
         "ok": True,

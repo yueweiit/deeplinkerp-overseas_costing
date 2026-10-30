@@ -657,7 +657,6 @@
           source_sheet: values.source_sheet || null,
           transport_keyword: "",
           include_double_clear: values.include_double_clear ? 1 : 0,
-          fx_rmb_to_mxn: 2.6,
         },
         true
       );
