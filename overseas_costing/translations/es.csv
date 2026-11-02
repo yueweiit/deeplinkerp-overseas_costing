@@ -5954,3 +5954,6 @@ RMB 兑 MXN 汇率必须大于零。,El tipo de cambio de RMB a MXN debe ser may
 完税凭证解析结果已保存；{0} 未更新成本。,Se guardó el resultado de análisis del comprobante fiscal; {0} No se actualizaron los costos.
 完税凭证付款日缺少可核实来源，请重新解析附件。,La fecha de pago del comprobante fiscal no tiene un origen verificable. Vuelva a analizar el archivo adjunto.
 汇率更新后采购字段同步失败。,La sincronización de los campos de compra falló después de actualizar los tipos de cambio.
+钉钉国际物流来源只能通过审批导入创建。,El origen de logística internacional solo puede crearse mediante la importación de aprobaciones.
+钉钉国际物流审批来源不可手工修改，请通过审批同步更新。,El origen de la aprobación de logística internacional no puede modificarse manualmente. Actualícelo mediante la sincronización de aprobaciones.
+无法核验批次原始来源，请刷新后重试。,No se pudo verificar el origen original del lote. Actualice la página e inténtelo de nuevo.

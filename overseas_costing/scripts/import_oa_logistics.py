@@ -51,7 +51,7 @@ PACKAGE_ROOT = CURRENT_FILE.parents[2]
 if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
-from overseas_costing.integrations.dingtalk_approval_source import ApprovalSourceConfig, PostgresApprovalSource
+from overseas_costing.integrations.dingtalk_approval_source import ApprovalSourceConfig, PostgresApprovalSource, SHANGHAI
 from overseas_costing.services.supplier_resolution_service import (
     load_active_suppliers,
     resolve_supplier_reference,
@@ -3569,10 +3569,12 @@ def _to_frappe_datetime(value: Any) -> str:
     if text.isdigit():
         number = int(text)
         timestamp = number / 1000 if number > 10_000_000_000 else number
-        return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
+        return datetime.fromtimestamp(timestamp, tz=SHANGHAI).strftime("%Y-%m-%d %H:%M:%S")
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-        return parsed.replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(SHANGHAI)
+        return parsed.strftime("%Y-%m-%d %H:%M:%S")
     except ValueError:
         return text
 
@@ -4383,6 +4385,7 @@ def _update_oa_trace_batch(batch_name: str, values: dict) -> dict:
         "transport_mode",
         "business_type",
         "source_approval_status",
+        "source_created_at",
         "source_attachment_count",
         "source_finished_at",
     }

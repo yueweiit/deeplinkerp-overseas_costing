@@ -5724,3 +5724,6 @@ RMB 兑 MXN 汇率必须大于零。,The RMB to MXN rate must be greater than ze
 完税凭证解析结果已保存；{0} 未更新成本。,The tax certificate parse result was saved; {0} Costs were not updated.
 完税凭证付款日缺少可核实来源，请重新解析附件。,The tax certificate payment date has no verifiable source. Parse the attachment again.
 汇率更新后采购字段同步失败。,Purchase field synchronization failed after updating exchange rates.
+钉钉国际物流来源只能通过审批导入创建。,An international logistics source can only be created through the approval import.
+钉钉国际物流审批来源不可手工修改，请通过审批同步更新。,The international logistics approval source cannot be changed manually. Update it through approval synchronization.
+无法核验批次原始来源，请刷新后重试。,The original batch source could not be verified. Refresh and try again.

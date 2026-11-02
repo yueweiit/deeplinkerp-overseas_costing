@@ -1835,7 +1835,14 @@ def test_build_batch_values_from_oa_logistics_approval() -> None:
     assert values["source_approval_no"] == "202601291020000337788"
     assert values["source_instance_id"] == "PROC-SEA-TRACE"
     assert values["source_attachment_count"] == 1
-    assert values["source_created_at"] == "2026-01-29 10:20:00"
+    assert values["source_created_at"] == "2026-01-29 18:20:00"
+
+
+def test_oa_datetime_uses_shanghai_day_for_utc_and_epoch_values() -> None:
+    from overseas_costing.scripts.import_oa_logistics import _to_frappe_datetime
+
+    assert _to_frappe_datetime("2026-01-29T16:30:00Z") == "2026-01-30 00:30:00"
+    assert _to_frappe_datetime("1769704200000") == "2026-01-30 00:30:00"
 
 
 def test_build_batch_values_keeps_linked_purchase_approvals_in_extra_json() -> None:
@@ -2148,7 +2155,7 @@ def test_transport_mode_follows_camino_envio_value() -> None:
     assert express["transport_mode"] == "EXPRESS"
 
 
-def test_existing_oa_batch_refreshes_transport_mode(monkeypatch) -> None:
+def test_existing_oa_batch_refreshes_transport_mode_and_corrected_source_time(monkeypatch) -> None:
     from overseas_costing.scripts import import_oa_logistics
 
     set_values = []
@@ -2167,6 +2174,7 @@ def test_existing_oa_batch_refreshes_transport_mode(monkeypatch) -> None:
             if doctype == "Overseas Cost Batch" and filters == "BATCH-001" and isinstance(fieldname, list):
                 current = {name: "" for name in fieldname}
                 current["transport_mode"] = "SEA"
+                current["source_created_at"] = "2026-01-29 16:30:00"
                 return current if as_dict else current
             return None
 
@@ -2205,11 +2213,15 @@ def test_existing_oa_batch_refreshes_transport_mode(monkeypatch) -> None:
 
     monkeypatch.setattr(import_oa_logistics, "frappe", FakeFrappe)
 
-    result = import_oa_logistics._update_oa_trace_batch("BATCH-001", {"transport_mode": "EXPRESS"})
+    result = import_oa_logistics._update_oa_trace_batch("BATCH-001", {
+        "transport_mode": "EXPRESS", "source_created_at": "2026-01-30 00:30:00",
+    })
 
     assert result["action"] == "updated"
-    assert result["changed_fields"] == ["transport_mode"]
-    assert set_values[0]["values"] == {"transport_mode": "EXPRESS"}
+    assert result["changed_fields"] == ["transport_mode", "source_created_at"]
+    assert set_values[0]["values"] == {
+        "transport_mode": "EXPRESS", "source_created_at": "2026-01-30 00:30:00",
+    }
     assert audits[0]["field_name"] == "oa_logistics_trace"
 
 
