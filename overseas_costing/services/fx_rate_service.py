@@ -25,17 +25,20 @@ except Exception:  # pragma: no cover - pure tests do not require Frappe
 
 DEFAULT_FX_RATE_API_URL = "http://8.135.70.130:3003/api/fx-rate"
 DEFAULT_TIMEOUT_SECONDS = 8
+MAX_HISTORICAL_FX_AGE_DAYS = 7
 # 仅识别历史预填值；不得用这两个数值折算新成本。
 LEGACY_DEFAULT_FX_USD_TO_RMB = Decimal("7.178751")
 LEGACY_DEFAULT_FX_RMB_TO_MXN = Decimal("2.6")
 
 FX_DATE_SOURCE_PAYMENT = "payment_date"
 FX_DATE_SOURCE_APPROVAL_FINISHED = "approval_finished_at"
+FX_DATE_SOURCE_OA_LOGISTICS_STARTED = "oa_logistics_started_at"
 FX_DATE_SOURCE_MISSING = "missing"
 
 FX_DATE_SOURCE_LABELS = {
     FX_DATE_SOURCE_PAYMENT: "真实付款日",
     FX_DATE_SOURCE_APPROVAL_FINISHED: "付款审批完成日（暂估）",
+    FX_DATE_SOURCE_OA_LOGISTICS_STARTED: "国际物流审批发起日（暂估）",
     FX_DATE_SOURCE_MISSING: "未取得汇率日期",
 }
 
@@ -110,13 +113,15 @@ def normalize_payment_date(value) -> str:
     return ""
 
 
-def resolve_fx_rate_date(*, payment_date=None, approval_finished_at=None) -> dict:
+def resolve_fx_rate_date(*, payment_date=None, approval_finished_at=None, oa_logistics_started_at=None) -> dict:
     """确定本次汇率查询应该使用的日期，并保留来源说明。"""
 
     raw_payment_date = str(payment_date or "").strip()
     normalized_payment_date = normalize_payment_date(payment_date)
     raw_approval_finished_at = str(approval_finished_at or "").strip()
     normalized_approval_finished_at = normalize_payment_date(approval_finished_at)
+    raw_oa_logistics_started_at = str(oa_logistics_started_at or "").strip()
+    normalized_oa_logistics_started_at = normalize_payment_date(oa_logistics_started_at)
 
     if normalized_payment_date:
         return {
@@ -146,6 +151,20 @@ def resolve_fx_rate_date(*, payment_date=None, approval_finished_at=None) -> dic
             "approval_finished_at": raw_approval_finished_at,
             "normalized_approval_finished_at": normalized_approval_finished_at,
             "message": "未识别到真实付款日，已按付款审批完成日暂估汇率。",
+        }
+
+    if normalized_oa_logistics_started_at:
+        return {
+            "ok": True,
+            "date": raw_oa_logistics_started_at,
+            "normalized_date": normalized_oa_logistics_started_at,
+            "date_source": FX_DATE_SOURCE_OA_LOGISTICS_STARTED,
+            "date_source_label": FX_DATE_SOURCE_LABELS[FX_DATE_SOURCE_OA_LOGISTICS_STARTED],
+            "is_estimated_rate": True,
+            "payment_date": raw_payment_date,
+            "normalized_payment_date": "",
+            "oa_logistics_started_at": raw_oa_logistics_started_at,
+            "message": _("未取得可核实的付款日，已按国际物流审批发起日暂估汇率。"),
         }
 
     return {
@@ -412,11 +431,25 @@ def resolve_costing_fx(
         latest = repository.find_latest_buying_rate(currency_code, normalized_date) or {}
         latest_rate = _positive_decimal(latest.get("exchange_rate"))
         if latest_rate is not None:
+            latest_date = normalize_payment_date(latest.get("date"))
+            age_days = (
+                (date.fromisoformat(normalized_date) - date.fromisoformat(latest_date)).days
+                if latest_date else None
+            )
+            if age_days is None or not 0 <= age_days <= MAX_HISTORICAL_FX_AGE_DAYS:
+                blocking_errors.append({
+                    "currency": currency_code,
+                    "code": "FX_HISTORICAL_RATE_TOO_OLD",
+                    "message": _(
+                        "{0} 最近的历史汇率日期为 {1}，不在计算日期 {2} 之前 {3} 天内，请补充近期汇率。"
+                    ).format(currency_code, latest_date or "--", normalized_date, MAX_HISTORICAL_FX_AGE_DAYS),
+                })
+                continue
             rates[currency_code] = _rate_payload(
                 currency_code,
                 latest_rate,
                 source="historical_currency_exchange",
-                rate_date=latest.get("date") or "",
+                rate_date=latest_date,
                 record_name=latest.get("name") or "",
             )
             continue
@@ -581,6 +614,7 @@ def persist_costing_fx_resolution(
         "schema": 1,
         "calculation_date": calculation_date,
         "date_source": str(stored_resolution.get("date_source") or ""),
+        "date_source_ref": str(stored_resolution.get("date_source_ref") or ""),
         "fx_usd_to_rmb": float(target_values["fx_usd_to_rmb"]) if target_values["fx_usd_to_rmb"] is not None else None,
         "fx_rmb_to_mxn": float(target_values["fx_rmb_to_mxn"]),
         "rates": rates,
@@ -589,6 +623,27 @@ def persist_costing_fx_resolution(
     }
     updates["extra_json"] = json.dumps(extra, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     repository.update_version(version_name, updates)
+
+    prior_date_basis = (
+        normalize_payment_date(prior_snapshot.get("calculation_date")),
+        str(prior_snapshot.get("date_source") or ""),
+        str(prior_snapshot.get("date_source_ref") or ""),
+    )
+    new_date_basis = (
+        calculation_date,
+        str(stored_resolution.get("date_source") or ""),
+        str(stored_resolution.get("date_source_ref") or ""),
+    )
+    if stored_resolution.get("date_source") and prior_date_basis != new_date_basis:
+        repository.insert_audit_log(
+            batch_name=batch_name,
+            version_name=version_name,
+            field_name="costing_fx_date_source",
+            old_value=" | ".join(prior_date_basis),
+            new_value=" | ".join(new_date_basis),
+            operator=operator,
+            remark=f"试算汇率日期来源：{stored_resolution.get('date_source_label') or ''}",
+        )
 
     for fieldname, old_value, new_value in audit_changes:
         repository.insert_audit_log(

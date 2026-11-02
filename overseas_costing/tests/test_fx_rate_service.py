@@ -98,6 +98,7 @@ def test_resolve_fx_rate_date_prefers_real_payment_date() -> None:
     result = fx_rate_service.resolve_fx_rate_date(
         payment_date="01/04/2026",
         approval_finished_at="2026-04-21 17:16:00",
+        oa_logistics_started_at="2026-01-29 10:20:00",
     )
 
     assert result["ok"] is True
@@ -105,6 +106,20 @@ def test_resolve_fx_rate_date_prefers_real_payment_date() -> None:
     assert result["date_source"] == "payment_date"
     assert result["date_source_label"] == "真实付款日"
     assert result["is_estimated_rate"] is False
+
+
+def test_resolve_fx_rate_date_marks_logistics_approval_start_as_estimate() -> None:
+    result = fx_rate_service.resolve_fx_rate_date(
+        oa_logistics_started_at="2026-01-29 10:20:00",
+    )
+
+    assert result["normalized_date"] == "2026-01-29"
+    assert result["date_source"] == "oa_logistics_started_at"
+    assert result["date_source_label"] == "国际物流审批发起日（暂估）"
+    assert result["is_estimated_rate"] is True
+    assert fx_rate_service.resolve_fx_rate_date(
+        approval_finished_at="2026-04-21", oa_logistics_started_at="2026-01-29",
+    )["date_source"] == "approval_finished_at"
 
 
 def test_build_fx_context_for_costing_uses_approval_finished_at_as_estimate() -> None:
@@ -351,7 +366,7 @@ def test_resolve_costing_fx_uses_database_then_api_for_only_missing_currency() -
     assert "currency=MXN" in requested_urls[0]
 
 
-def test_resolve_costing_fx_falls_back_to_latest_database_rate_without_age_limit() -> None:
+def test_resolve_costing_fx_blocks_historical_rates_older_than_seven_days() -> None:
     repository = FakeCurrencyExchangeRepository(
         latest={
             "USD": {"name": "old-usd", "date": "2024-01-02", "exchange_rate": 6.5},
@@ -371,19 +386,16 @@ def test_resolve_costing_fx_falls_back_to_latest_database_rate_without_age_limit
         opener=fake_opener,
     )
 
-    assert result["ok"] is True
-    assert result["fx_usd_to_rmb"] == pytest.approx(6.5)
-    assert result["fx_rmb_to_mxn"] == pytest.approx(2.5)
-    assert result["is_estimated"] is True
-    assert result["rates"]["USD"]["rate_date"] == "2024-01-02"
-    assert result["rates"]["MXN"]["rate_date"] == "2023-12-29"
-    assert result["rates"]["USD"]["source"] == "historical_currency_exchange"
-    assert result["rates"]["MXN"]["source"] == "historical_currency_exchange"
+    assert result["ok"] is False
+    assert result["rates"] == {}
+    assert [error["code"] for error in result["blocking_errors"]] == [
+        "FX_HISTORICAL_RATE_TOO_OLD", "FX_HISTORICAL_RATE_TOO_OLD",
+    ]
 
 
 def test_resolve_costing_fx_keeps_partial_api_success_and_falls_back_only_missing_currency() -> None:
     repository = FakeCurrencyExchangeRepository(
-        latest={"MXN": {"name": "old-mxn", "date": "2025-06-30", "exchange_rate": 0.4}}
+        latest={"MXN": {"name": "old-mxn", "date": "2026-09-13", "exchange_rate": 0.4}}
     )
 
     def fake_opener(request, timeout):
@@ -501,6 +513,40 @@ def test_persist_costing_fx_resolution_caches_api_rates_and_updates_version_snap
     assert saved_extra["costing_fx_snapshot"]["rates"]["MXN"]["record_name"] == "2026-09-20-MXN-CNY-Buying"
     assert [row["field_name"] for row in repository.audit_rows] == ["fx_usd_to_rmb", "fx_rmb_to_mxn"]
     assert result["changed_fields"] == ["fx_usd_to_rmb", "fx_rmb_to_mxn"]
+
+
+def test_persist_estimated_approval_date_keeps_provenance_and_audit() -> None:
+    repository = FakePersistentCurrencyExchangeRepository(
+        version={
+            "name": "VER-001", "batch": "BATCH-001", "status": "Active",
+            "fx_usd_to_rmb": 0, "fx_rmb_to_mxn": 0, "extra_json": "{}",
+        },
+        exact={
+            "USD": {"name": "usd-jan", "date": "2026-01-29", "exchange_rate": 6.8},
+            "MXN": {"name": "mxn-jan", "date": "2026-01-29", "exchange_rate": 0.4},
+        },
+    )
+    resolution = fx_rate_service.resolve_costing_fx(
+        version_fx=repository.version, calculation_date="2026-01-29", repository=repository,
+    )
+    resolution.update({
+        "date_source": "oa_logistics_started_at",
+        "date_source_label": "国际物流审批发起日（暂估）",
+        "date_source_ref": "OA-INSTANCE-1",
+        "is_estimated": True,
+    })
+
+    fx_rate_service.persist_costing_fx_resolution(
+        resolution=resolution, batch_name="BATCH-001", version_name="VER-001",
+        current_date="2026-01-29", repository=repository,
+    )
+
+    snapshot = json.loads(repository.version["extra_json"])["costing_fx_snapshot"]
+    assert (snapshot["calculation_date"], snapshot["date_source"], snapshot["date_source_ref"]) == (
+        "2026-01-29", "oa_logistics_started_at", "OA-INSTANCE-1",
+    )
+    assert snapshot["is_estimated"] is True
+    assert any(row["field_name"] == "costing_fx_date_source" for row in repository.audit_rows)
 
 
 def test_persist_costing_fx_resolution_preserves_existing_manual_values() -> None:

@@ -6,13 +6,14 @@ import json
 
 import pytest
 
-from overseas_costing.services import cost_preview_service
+from overseas_costing.services import cost_preview_service, fx_rate_service
 from overseas_costing.services.cost_preview_service import preview_comprehensive_cost_data
 
 
 @pytest.fixture(autouse=True)
 def use_plain_messages(monkeypatch):
     monkeypatch.setattr(cost_preview_service, "_", lambda message: message)
+    monkeypatch.setattr(fx_rate_service, "_", lambda message: message)
 
 
 def test_express_default_zero_fees_count_as_estimates_without_fx_or_physical_values():
@@ -849,6 +850,81 @@ def test_costing_fx_date_blocks_missing_and_conflicting_payment_dates(monkeypatc
 
     FakeFrappe.rows = [{"parse_result_json": '{"header":{"payment_date":"2026-10-30"}}'}]
     assert cost_preview_service.FrappeCostRepository.costing_fx_date_context("B1")["date_source"] == "unverified"
+
+
+def test_costing_fx_date_uses_completed_logistics_start_for_legacy_batch(monkeypatch) -> None:
+    class FakeFrappe:
+        rows = [{"parse_result_json": '{"header":{"payment_date":"2026-04-01"}}'}]
+        batch = {
+            "source_type": "oa_logistics",
+            "source_created_at": "2026-01-29 10:20:00",
+            "source_instance_id": "OA-INSTANCE-1",
+            "source_approval_status": "COMPLETED",
+            "extra_json": '{"approval_result":"agree","excluded":false}',
+        }
+
+        class db:
+            @staticmethod
+            def get_value(_doctype, _name, _fields, **_kwargs):
+                return FakeFrappe.batch
+
+        @classmethod
+        def get_all(cls, *_args, **_kwargs):
+            return cls.rows
+
+    monkeypatch.setattr(cost_preview_service, "frappe", FakeFrappe)
+    context = cost_preview_service.FrappeCostRepository.costing_fx_date_context("B1")
+    assert context["normalized_date"] == "2026-01-29"
+    assert context["date_source"] == "oa_logistics_started_at"
+    assert context["date_source_ref"] == "OA-INSTANCE-1"
+    assert context["is_estimated_rate"] is True
+    assert "未经核实" in context["date_warning"]
+
+    FakeFrappe.rows = [{"parse_result_json": '{"header":{"payment_date":"2026-04-01","payment_date_source":"explicit_label"}}'}]
+    context = cost_preview_service.FrappeCostRepository.costing_fx_date_context("B1")
+    assert context["normalized_date"] == "2026-04-01"
+    assert context["date_source"] == "payment_date"
+
+    FakeFrappe.rows = []
+    FakeFrappe.batch = {**FakeFrappe.batch, "source_approval_status": "REJECTED"}
+    assert cost_preview_service.FrappeCostRepository.costing_fx_date_context("B1")["ok"] is False
+
+
+def test_costing_fx_date_uses_current_locked_approval_and_rejects_source_change(monkeypatch) -> None:
+    reads = []
+
+    class FakeFrappe:
+        session = type("Session", (), {"user": "test@example.com"})()
+
+        class db:
+            @staticmethod
+            def sql(query, *_args, **_kwargs):
+                reads.append(query)
+                return []
+
+            @staticmethod
+            def get_value(_doctype, _name, _fields, **kwargs):
+                reads.append(kwargs)
+                return {
+                    "source_type": "oa_logistics",
+                    "source_created_at": "2026-01-29 10:20:00",
+                    "source_instance_id": "OA-INSTANCE-NEW",
+                    "source_approval_status": "COMPLETED",
+                    "extra_json": '{"approval_result":"agree"}',
+                }
+
+    monkeypatch.setattr(cost_preview_service, "frappe", FakeFrappe)
+    current = cost_preview_service.FrappeCostRepository.costing_fx_date_context("B1", lock=True)
+    assert current["date_source_ref"] == "OA-INSTANCE-NEW"
+    assert reads[0].endswith("FOR UPDATE")
+    assert reads[1]["for_update"] is True
+
+    with pytest.raises(ValueError, match="来源审批已变化"):
+        cost_preview_service.FrappeCostRepository().persist_fx_resolution(
+            {"batch": "B1", "version": "V1"},
+            {"batch_name": "B1", "version_name": "V1", "date_source": current["date_source"],
+             "date_source_ref": "OA-INSTANCE-OLD"},
+        )
 
 
 def test_costing_fx_date_checks_attachments_after_first_page(monkeypatch) -> None:

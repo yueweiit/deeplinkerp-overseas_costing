@@ -5724,6 +5724,14 @@ RMB 兑 MXN 汇率必须大于零。,The RMB to MXN rate must be greater than ze
 完税凭证解析结果已保存；{0} 未更新成本。,The tax certificate parse result was saved; {0} Costs were not updated.
 完税凭证付款日缺少可核实来源，请重新解析附件。,The tax certificate payment date has no verifiable source. Parse the attachment again.
 汇率更新后采购字段同步失败。,Purchase field synchronization failed after updating exchange rates.
+国际物流审批发起日（暂估）,International logistics approval initiation date (estimate)
+未取得可核实的付款日，已按国际物流审批发起日暂估汇率。,No verifiable payment date was found. The exchange rate is estimated using the international logistics approval initiation date.
+存在未经核实的历史凭证日期，本次按国际物流审批发起日暂估；取得真实付款日后请重算。,An unverified date exists in a historical certificate. This trial uses the international logistics approval initiation date as an estimate; recalculate when the actual payment date is known.
+缺少可核实的付款日或已完成国际物流审批发起时间，无法自动试算汇率。,A verifiable payment date or the initiation time of a completed international logistics approval is required to calculate exchange rates automatically.
+汇率日期来源审批已变化，请重新生成试算预览。,The approval used as the exchange rate date source has changed. Generate a new trial preview.
 钉钉国际物流来源只能通过审批导入创建。,An international logistics source can only be created through the approval import.
 钉钉国际物流审批来源不可手工修改，请通过审批同步更新。,The international logistics approval source cannot be changed manually. Update it through approval synchronization.
 无法核验批次原始来源，请刷新后重试。,The original batch source could not be verified. Refresh and try again.
+{0} 最近的历史汇率日期为 {1}，不在计算日期 {2} 之前 {3} 天内，请补充近期汇率。,The latest historical rate for {0} is dated {1} and falls outside the {3} days before calculation date {2}. Add a recent rate.
+手工设定,Set manually
+{0} 沿用版本汇率，未按所示日期重新查询；请核对来源和原始日期。,{0} uses the version rate without a new lookup for the shown date. Verify its source and original date.

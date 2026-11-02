@@ -1035,14 +1035,50 @@ class FrappeCostRepository:
                 "ok": False, "date_source": "ambiguous",
                 "message": _("当前批次存在不同的完税凭证付款日，请先核对汇率日期。"),
             }
+        if payment_dates and unverified_payment_date:
+            return {
+                "ok": False, "date_source": "unverified",
+                "message": _("完税凭证付款日缺少可核实来源，请重新解析附件。"),
+            }
+        if payment_dates:
+            return fx_rate_service.resolve_fx_rate_date(payment_date=next(iter(payment_dates)))
+
+        # 老批次可能只有未经来源核验的凭证日期。仅在来源审批可追溯且已完成时，
+        # 使用该审批的发起日暂估；不能将旧凭证日期或其他 OA 审批日期冒充真实付款日。
+        from overseas_costing.scripts.import_oa_logistics import is_completed_approval_status
+
+        batch = frappe.db.get_value(
+            "Overseas Cost Batch", batch_name,
+            ["source_type", "source_created_at", "source_instance_id", "source_approval_status", "extra_json"],
+            as_dict=True, for_update=lock,
+        ) or {}
+        extra = object_json(batch.get("extra_json"))
+        if (
+            batch.get("source_type") == "oa_logistics"
+            and batch.get("source_instance_id")
+            and not extra.get("excluded")
+            and is_completed_approval_status(
+                batch.get("source_approval_status"), result=extra.get("approval_result"), allow_empty=False,
+            )
+        ):
+            context = fx_rate_service.resolve_fx_rate_date(
+                oa_logistics_started_at=batch.get("source_created_at"),
+            )
+            if context.get("ok"):
+                context["date_source_ref"] = str(batch["source_instance_id"])
+                if unverified_payment_date:
+                    context["date_warning"] = _(
+                        "存在未经核实的历史凭证日期，本次按国际物流审批发起日暂估；取得真实付款日后请重算。"
+                    )
+                return context
         if unverified_payment_date:
             return {
                 "ok": False, "date_source": "unverified",
                 "message": _("完税凭证付款日缺少可核实来源，请重新解析附件。"),
             }
-        context = fx_rate_service.resolve_fx_rate_date(payment_date=next(iter(payment_dates), ""))
+        context = fx_rate_service.resolve_fx_rate_date()
         if not context.get("ok"):
-            context["message"] = _("缺少可核实的付款日，无法自动试算汇率。")
+            context["message"] = _("缺少可核实的付款日或已完成国际物流审批发起时间，无法自动试算汇率。")
         return context
 
     def prepare_fx_resolution(self, batch_name, version_name=None):
@@ -1076,6 +1112,8 @@ class FrappeCostRepository:
         resolution.update({
             "date_source": date_context.get("date_source") or "missing",
             "date_source_label": date_context.get("date_source_label") or "",
+            "date_source_ref": date_context.get("date_source_ref") or "",
+            "date_warning": date_context.get("date_warning") or "",
             "is_estimated": bool(resolution.get("is_estimated") or date_context.get("is_estimated_rate")),
         })
         return {**resolution, "batch_name": name, "version_name": version}
@@ -1095,6 +1133,8 @@ class FrappeCostRepository:
             raise ValueError(date_context.get("message") or _("缺少汇率日期，无法保存试算。"))
         if str(date_context.get("date_source") or "") != str(resolution.get("date_source") or ""):
             raise ValueError(_("汇率日期来源已变化，请重新生成试算预览。"))
+        if str(date_context.get("date_source_ref") or "") != str(resolution.get("date_source_ref") or ""):
+            raise ValueError(_("汇率日期来源审批已变化，请重新生成试算预览。"))
         return fx_rate_service.persist_costing_fx_resolution(
             resolution=resolution,
             batch_name=context["batch"],
