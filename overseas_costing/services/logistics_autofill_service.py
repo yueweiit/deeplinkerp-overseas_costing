@@ -52,7 +52,7 @@ def run_supplement(callback, *, seconds: float = 60) -> dict:
 
 from overseas_costing.services.material_value_semantics import is_placeholder_token
 from overseas_costing.services.source_review_extract_service import _approval_goods_rows
-from overseas_costing.utils.field_mapper import map_oa_row_to_item
+from overseas_costing.utils.field_mapper import map_oa_row_to_item, normalize_unit
 
 PURCHASE_FIELDS = ("quantity", "goods_value", "unit_price", "purchase_currency", "purchase_uom",
                    "unit_price_uom", "source_doc_no", "source_type")
@@ -267,7 +267,16 @@ def build_logistics_reconciliation(
     """Build an authoritative logistics-scope draft without mutating inputs."""
     if source.get("approval_role") != "international_logistics":
         return None
-    goods = [map_oa_row_to_item(row) for row in _approval_goods_rows(source)]
+    from .purchase_value_evidence import row_context, shipment_row_cells
+
+    goods = []
+    for raw in _approval_goods_rows(source):
+        raw = row_context(raw, source)
+        row = map_oa_row_to_item(raw)
+        quantity, unit = shipment_row_cells(raw)
+        row["quantity"] = format(quantity[2], "f") if quantity else None
+        row["unit"] = normalize_unit(unit[1]) if unit else None
+        goods.append(row)
     by_name: dict[str, list[dict]] = {}
     for item in items:
         normalized_name = _normalized_material_name(item.get("product_name"))

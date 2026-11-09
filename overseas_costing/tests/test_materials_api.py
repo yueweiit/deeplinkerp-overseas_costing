@@ -412,6 +412,39 @@ def test_source_reanalysis_flag_is_server_boolean(monkeypatch):
     assert captured['reanalyze_original_sources'] is True
 
 
+@pytest.mark.parametrize('always_conflicts', [False, True])
+def test_confirm_selection_retries_once_from_fresh_request_transaction(monkeypatch, always_conflicts):
+    from overseas_costing.services import material_ai_selection_service as selection
+
+    api = _load_api(monkeypatch)
+    calls = []
+    api.frappe.db = SimpleNamespace(rollback=lambda: calls.append(('rollback',)))
+
+    class QueryDeadlockError(Exception):
+        pass
+
+    def permission(batch, ptype):
+        calls.append(('permission', batch, ptype))
+        return 'BATCH-DOC'
+
+    def confirm(*args):
+        calls.append(('confirm', *args))
+        if always_conflicts or sum(call[0] == 'confirm' for call in calls) == 1:
+            raise QueryDeadlockError(1020, 'Record has changed since last read')
+        return {'ok': True, 'idempotent': True}
+
+    monkeypatch.setattr(api, 'require_batch_permission', permission)
+    monkeypatch.setattr(selection, 'confirm', confirm)
+    args = ('BATCH', 'RUN', 'PREVIEW', 'REV', 'TOKEN', 'MOD')
+    if always_conflicts:
+        with pytest.raises(QueryDeadlockError):
+            api.confirm_source_ai_selection(*args)
+    else:
+        assert api.confirm_source_ai_selection(*args) == {'ok': True, 'idempotent': True}
+    attempt = [('permission', 'BATCH', 'write'), ('confirm', 'BATCH-DOC', *args[1:])]
+    assert calls == [*attempt, ('rollback',), *attempt, *([('rollback',)] if always_conflicts else [])]
+
+
 def test_payment_selection_is_returned_by_the_unified_start_endpoint(monkeypatch):
     api = _load_api(monkeypatch)
     calls = []

@@ -12,6 +12,7 @@ except ImportError:
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Callable, Dict, Optional
 from uuid import uuid4
+import json
 
 try:
     import frappe
@@ -39,6 +40,7 @@ GRID_FIELDS = (
     "product_name",
     "product_name_es",
     "spec_model",
+    "recipient",
     "unit",
     "purchase_uom",
     "unit_price",
@@ -292,11 +294,12 @@ def present_material_row(item: dict) -> dict:
     valuation = shipment_value(row)
     row['shipment_value_rmb'] = valuation['amount_rmb']
     row['shipment_valuation'] = valuation
-    from .purchase_value_evidence import META_KEY, adopted_price
+    from .purchase_value_evidence import META_KEY, adopted_price, purchase_value_summary
     fact = object_json(row.get('extra_json')).get(META_KEY)
     row.pop('adopted_price', None)
     if fact:
         row['adopted_price'] = adopted_price(fact, row) or {}
+        row['purchase_value_evidence'] = purchase_value_summary(row, fact, valuation)
     else:
         settlement_method = valuation.get('method') in {
             'settlement_expense_unit_price', 'settlement_purchase_unit_price'
@@ -312,6 +315,30 @@ def present_material_row(item: dict) -> dict:
     if (row.get("adopted_price") or {}).get("source_type") == "purchase_total_derived":
         row["purchase_price_source"] = "按货值÷采购数量计算"
     return row
+
+
+def _public_material_item(row):
+    """Keep new source/target identity pins server-side at the grid boundary."""
+    def redact(value):
+        if isinstance(value, dict):
+            return {key: redact(nested) for key, nested in value.items()
+                    if key not in ('_review_source_identity', 'target_identity')}
+        if isinstance(value, list):
+            return [redact(nested) for nested in value]
+        return value
+
+    result = dict(row)
+    for field in ('extra_json', 'adopted_price', 'shipment_valuation'):
+        if field not in result:
+            continue
+        value = result[field]
+        if isinstance(value, str):
+            if '_review_source_identity' in value or 'target_identity' in value:
+                from .shipment_cost_service import object_json
+                result[field] = json.dumps(redact(object_json(value)), ensure_ascii=False, default=str)
+        else:
+            result[field] = redact(value)
+    return result
 
 
 def purchase_value_coverage(items: list[dict]) -> dict:
@@ -512,7 +539,7 @@ def get_material_grid(
         "ok": True,
         "batch_name": resolved_batch,
         "version_name": resolved_version,
-        "items": items,
+        "items": [_public_material_item(item) for item in items],
         "total": total,
         "page": normalized_page,
         "page_length": normalized_length,

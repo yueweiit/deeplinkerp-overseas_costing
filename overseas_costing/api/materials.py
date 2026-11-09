@@ -422,13 +422,24 @@ def preview_source_ai_selection(batch_name,run_id,row_ids_json,fee_ids_json,mode
 
 @frappe.whitelist(methods=['POST'])
 def confirm_source_ai_selection(batch_name,run_id,preview_id,preview_revision,edit_token,expected_modified):
-    batch_name=require_batch_permission(batch_name,'write')
     from overseas_costing.services.material_ai_selection_service import confirm
-    try:
-        return confirm(batch_name,str(run_id),str(preview_id),str(preview_revision),str(edit_token),str(expected_modified))
-    except ValueError as error:
-        frappe.db.rollback()
-        return {'ok':False,'code':'REVIEW_REQUIRED','message':str(error)}
+
+    for attempt in range(2):
+        try:
+            authorized_batch = require_batch_permission(batch_name, 'write')
+            try:
+                return confirm(authorized_batch,str(run_id),str(preview_id),str(preview_revision),str(edit_token),str(expected_modified))
+            except ValueError as error:
+                frappe.db.rollback()
+                return {'ok':False,'code':'REVIEW_REQUIRED','message':str(error)}
+        except Exception as error:
+            if type(error).__name__ != 'QueryDeadlockError':
+                raise
+            # A concurrent confirmation can invalidate the permission/read snapshot.
+            # This POST owns the transaction; restart once with the same receipt.
+            frappe.db.rollback()
+            if attempt:
+                raise
 
 
 @frappe.whitelist(methods=['POST'])

@@ -182,11 +182,12 @@ def test_update_selected_changes_one_of_eight_without_removing_other_rows():
 
 def test_update_selected_carries_trusted_price_lineage_for_server_writer():
     items = [item('I1', 'SKU-1', unit_price=10)]
+    price = {'unit_price': 12, 'purchase_currency': 'RMB', 'purchase_uom': '件', 'unit_price_uom': '件'}
     proposal = reconcile([source(
         'SKU-1',
-        unit_price=12,
-        _review_purchase_values={'unit_price': 12},
-        _review_price_metadata={'logistics_row': {'purchase_fact': {'unit_price': 12}}},
+        _review_purchase_values=price,
+        _review_price_metadata={'logistics_row': {'purchase_fact': {
+            **price, 'quantity': 1, 'material_code': 'SKU-1', 'source_doc_no': 'PURCHASE-DOC'}}},
     )])
 
     review = catalog(items, [proposal])
@@ -380,12 +381,12 @@ def test_plain_same_stage_conflict_requires_manual_choice_while_distinct_fields_
     ]
     proposals = [
         {'proposal_id': 'PACK', 'proposal_type': 'item_update', 'target_item_name': 'I1',
-         'default_selected': True, 'source_refs': [{'source_id': 'PACK'}],
+         'default_selected': True, 'source_refs': [{'source_id': 'PACK', 'row': 2}],
          'payload': {'fields': {'actual_shipped_qty': 200, 'shipped_uom': '个',
                                 'package_count': 0, 'net_weight_kg': '-',
                                 'gross_weight_kg': '/', 'volume_m3': '—'}}},
         {'proposal_id': 'OA', 'proposal_type': 'item_update', 'target_item_name': 'I1',
-         'default_selected': True, 'source_refs': [{'source_id': 'OA'}],
+         'default_selected': True, 'source_refs': [{'source_id': 'OA', 'row': 2}],
          'payload': {'fields': {'actual_shipped_qty': 500, 'shipped_uom': '个',
                                 'package_count': 1, 'net_weight_kg': 12.9,
                                 'gross_weight_kg': 13.4, 'volume_m3': 0.03528,
@@ -410,6 +411,10 @@ def test_plain_same_stage_conflict_requires_manual_choice_while_distinct_fields_
     choices['I1:actual_shipped_qty'] = next(
         candidate['candidate_id'] for candidate in review['field_candidates']
         if candidate['fieldname'] == 'actual_shipped_qty' and candidate['row_id'] == candidates['PACK']['row_id']
+    )
+    choices['I1:shipped_uom'] = next(
+        candidate['candidate_id'] for candidate in review['field_candidates']
+        if candidate['fieldname'] == 'shipped_uom' and candidate['row_id'] == candidates['PACK']['row_id']
     )
     projected = service.project(items, review, [], [], 'update_selected', field_choices=choices)
     assert projected['rows'][0]['actual_shipped_qty'] == 200
@@ -769,7 +774,7 @@ def test_presentation_representative_prefers_safe_default_then_existing_business
          'target_item_name': 'I1', 'confidence': confidence,
          'source_refs': [{'source_id': source_row['source_id']}],
          **({'_purchase_value_fact': {
-             **fact, 'source_refs': [{'source_id': source_row['source_id']}],
+             **fact, 'source_refs': [{'source_id': source_row['source_id'], 'row': 1}],
          }} if has_fact else {}),
          'payload': {'fields': {'goods_value': value}}}
         for source_row, confidence, has_fact, value in zip(
@@ -783,7 +788,7 @@ def test_presentation_representative_prefers_safe_default_then_existing_business
     assert by_source['B-LOW']['can_apply'] is True
     assert by_source['B-LOW']['default_selected'] is False
     assert representative['default_selected'] is True
-    assert all(row['presentation_representative_candidate_id'] == representative['candidate_id']
+    assert all(row['presentation_representative_candidate_id'] == row['candidate_id']
                for row in candidates)
 
     large_group = field_candidate_review([5] * 200)['field_candidates']
@@ -1365,7 +1370,7 @@ def test_longest_field_marker_prevents_cross_field_correction(
     assert by_proposal['WRONG']['correction_kind'] == 'none'
     assert by_proposal['WRONG']['default_selected'] is False
     assert by_proposal['CORRECT']['correction_kind'] == 'explicit'
-    assert by_proposal['CORRECT']['default_selected'] is True
+    assert by_proposal['CORRECT']['default_selected'] is (correct_field != 'purchase_uom')
 
 
 def test_low_confidence_explicit_correction_blocks_the_superseded_default():
@@ -1630,7 +1635,7 @@ def test_single_proposal_referencing_payment_and_purchase_is_a_conflict_in_both_
 
 
 def test_row_review_policy_is_stage_snapshot_version():
-    assert service.POLICY == 'ai-field-review-7'
+    assert service.POLICY == 'ai-field-review-8'
 
 
 def test_fee_stage_snapshots_are_fixed_even_when_no_fee_source_exists():

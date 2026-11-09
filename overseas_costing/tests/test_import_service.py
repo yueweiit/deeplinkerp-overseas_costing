@@ -1278,6 +1278,7 @@ def test_apply_linked_purchase_expense_fillable_fields_writes_matched_conflicts(
     }
     batch_updates = {}
     audit_payloads = []
+    batch_locks = []
     commit_count = {"value": 0}
     recalculate_calls = []
 
@@ -1290,6 +1291,11 @@ def test_apply_linked_purchase_expense_fillable_fields_writes_matched_conflicts(
         }
 
     class FakeDB:
+        @staticmethod
+        def sql(query, values):
+            assert query == "SELECT name FROM `tabOverseas Cost Batch` WHERE name=%s FOR UPDATE"
+            batch_locks.append(values)
+
         @staticmethod
         def get_value(doctype, name_or_filters, fields=None, as_dict=False, **_kwargs):
             if doctype == "Overseas Cost Batch" and name_or_filters == "FSCU8486789":
@@ -1378,6 +1384,7 @@ def test_apply_linked_purchase_expense_fillable_fields_writes_matched_conflicts(
     assert items["ITEM-002"].goods_value == 11750
     assert batch_updates[("Overseas Cost Batch", "BATCH-DOC", "status")] == "Dirty"
     assert commit_count["value"] == 1
+    assert batch_locks == [("BATCH-DOC",)]
     assert len(audit_payloads) == 5
     assert recalculate_calls == [{"batch_name": "BATCH-DOC", "version_name": "VER-DOC"}]
     assert result["recalculate_result"]["action"] == "recalculated"
@@ -1409,6 +1416,7 @@ def test_apply_linked_purchase_expense_aggregates_duplicate_target_rows(monkeypa
     )
     batch_updates = {}
     audit_payloads = []
+    batch_locks = []
     commit_count = {"value": 0}
 
     class FakeAuditDoc:
@@ -1421,6 +1429,11 @@ def test_apply_linked_purchase_expense_aggregates_duplicate_target_rows(monkeypa
             return self
 
     class FakeDB:
+        @staticmethod
+        def sql(query, values):
+            assert query == "SELECT name FROM `tabOverseas Cost Batch` WHERE name=%s FOR UPDATE"
+            batch_locks.append(values)
+
         @staticmethod
         def get_value(doctype, name_or_filters, fields=None, as_dict=False, **_kwargs):
             if doctype == "Overseas Cost Batch" and name_or_filters == "FSCU8486789":
@@ -1481,6 +1494,14 @@ def test_apply_linked_purchase_expense_aggregates_duplicate_target_rows(monkeypa
 
     monkeypatch.setattr(import_service, "frappe", FakeFrappe)
 
+    approved_rate = 7.2
+
+    def version_fx(version_name, **_kwargs):
+        assert version_name == "VER-DOC"
+        return {"fx_usd_to_rmb": approved_rate}
+
+    monkeypatch.setattr(import_service, "_get_version_fx_context", version_fx)
+
     result = apply_linked_purchase_expense_fillable_fields(
         batch_name="FSCU8486789",
         trusted_server_payload=True,
@@ -1498,11 +1519,12 @@ def test_apply_linked_purchase_expense_aggregates_duplicate_target_rows(monkeypa
     assert result["ok"] is True
     assert result["updated_count"] == 1
     assert result["skipped_count"] == 0
-    assert item.unit_price == pytest.approx((34850 / 15500) * import_service.DEFAULT_FX_USD_TO_RMB)
+    assert item.unit_price == pytest.approx((34850 / 15500) * approved_rate)
     assert item.purchase_currency == "美元Dólar"
-    assert item.goods_value == pytest.approx((34850 / 15500) * import_service.DEFAULT_FX_USD_TO_RMB * 15000)
+    assert item.goods_value == pytest.approx((34850 / 15500) * approved_rate * 15000)
     assert batch_updates[("Overseas Cost Batch", "BATCH-DOC", "status")] == "Dirty"
     assert commit_count["value"] == 1
+    assert batch_locks == [("BATCH-DOC",)]
     assert len(audit_payloads) == 3
 
 

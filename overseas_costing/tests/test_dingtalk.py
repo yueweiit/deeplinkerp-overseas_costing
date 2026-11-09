@@ -3497,14 +3497,14 @@ def test_sync_existing_oa_finished_times_backfills_only_empty(monkeypatch) -> No
             "doctype": "Overseas Cost Batch",
             "name": "BATCH-MISSING-FINISH",
             "fieldname": "source_finished_at",
-            "value": "2026-04-21 17:16:00",
+            "value": "2026-04-22 01:16:00",
             "update_modified": False,
         }
     ]
     assert audit_payloads[0]["field_name"] == "source_finished_at"
-    assert "暂估汇率" in audit_payloads[0]["action_remark"]
+    assert "不作为付款日汇率依据" in audit_payloads[0]["action_remark"]
     assert commit_count["value"] == 1
-    assert result["items"][0]["source_finished_at"] == "2026-04-21 17:16:00"
+    assert result["items"][0]["source_finished_at"] == "2026-04-22 01:16:00"
     assert {item["batch_name"] for item in result["skipped_items"]} == {"BATCH-HAS-FINISH", "BATCH-NO-SNAPSHOT-FINISH"}
 
 
@@ -3616,12 +3616,12 @@ def test_refresh_missing_oa_finished_times_only_updates_finish_fields(monkeypatc
     assert {call["process_instance_id"] for call in detail_calls} == {"PROC-SEA-TRACE", "PROC-NO-FINISH"}
     assert set_values[0]["doctype"] == "Overseas Cost Batch"
     assert set_values[0]["name"] == "BATCH-MISSING-FINISH"
-    assert set_values[0]["fieldname"]["source_finished_at"] == "2026-04-21 17:16:00"
+    assert set_values[0]["fieldname"]["source_finished_at"] == "2026-04-22 01:16:00"
     assert set_values[0]["fieldname"]["source_approval_status"] == "COMPLETED"
     assert "extra_json" in set_values[0]["fieldname"]
     assert set_values[0]["update_modified"] is False
     assert audit_payloads[0]["field_name"] == "source_finished_at"
-    assert "暂估汇率" in audit_payloads[0]["action_remark"]
+    assert "不作为付款日汇率依据" in audit_payloads[0]["action_remark"]
     assert commit_count["value"] == 1
 
 

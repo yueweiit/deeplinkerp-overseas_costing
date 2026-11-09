@@ -38,7 +38,9 @@ def write_rows(store,ledger,preview,context):
         name=copies['item'].get(target)
         if not is_source and original:
             kept.add(name);adopted.append(ledger.get('item',name));continue
-        values={k:deepcopy(v) for k,v in incoming.items() if k in (*IDENTITY,*FILL_FIELDS,'quantity','unit','goods_value','source_doc_no','supplier','stable_line_key')}
+        values={k:deepcopy(v) for k,v in incoming.items() if k in (
+            *IDENTITY, *FILL_FIELDS, 'quantity', 'unit', 'source_doc_no', 'stable_line_key',
+            'actual_shipped_qty_mode', 'actual_shipped_qty_source_revision')}
         meta=deepcopy(source_meta)
         if preview['mode']=='update_selected' and original and incoming.get('_price_metadata'):
             # The catalog derives this only from trusted purchase evidence and
@@ -82,7 +84,8 @@ def write_rows(store,ledger,preview,context):
                 values['actual_shipped_qty_mode']='EXPLICIT_SOURCE';values['actual_shipped_qty_source_revision']=preview['revision']
             valuation_fields={'actual_shipped_qty','shipped_uom','unit_price','purchase_currency','unit_price_uom','purchase_uom'}
             trusted_price_refresh=bool(incoming.get('_price_metadata') and changed_fields & valuation_fields)
-            if (meta.get('settlement_cargo') or trusted_price_refresh) and changed_fields & valuation_fields:
+            if ('field_results' not in preview
+                    and (meta.get('settlement_cargo') or trusted_price_refresh) and changed_fields & valuation_fields):
                 cargo=compact_cargo({**(meta.get('settlement_cargo') or {}),
                     **{k:values.get(k) or original.get(k) for k in IDENTITY},
                     'quantity':values.get('actual_shipped_qty'),'unit':values.get('shipped_uom'),
@@ -105,8 +108,9 @@ def write_rows(store,ledger,preview,context):
         trusted_valuation=incoming.get('_shipment_valuation')
         if trusted_valuation is not None:
             amount=trusted_valuation.get('amount_rmb') if isinstance(trusted_valuation,dict) else None
-            if (amount is None or trusted_valuation.get('error')
-                    or str(amount) != str(incoming.get('shipment_value_rmb'))):
+            from .shipment_cost_service import number
+            if (number(amount) is None or trusted_valuation.get('error')
+                    or number(amount) != number(incoming.get('shipment_value_rmb'))):
                 raise ValueError(_('发货货值凭据已变化，请重新预览。'))
             valuation=deepcopy(trusted_valuation)
             valuation.update(status='automatic',trusted_shipment_source=True)

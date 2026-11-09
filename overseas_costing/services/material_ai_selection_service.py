@@ -13,7 +13,7 @@ from . import material_ai_row_selection as rows, material_ai_fee_policy as fees
 from .logistics_settlement.model import digest
 
 
-RECEIPT_POLICY = 'ai-field-preview-receipt-7'
+RECEIPT_POLICY = 'ai-field-preview-receipt-8'
 
 _SKIPPED_PROGRESS_STATUSES = frozenset({
     'FAILED', 'SKIPPED', 'UNREADABLE', 'TIMEOUT', 'FORBIDDEN', 'MISSING',
@@ -359,8 +359,10 @@ def _attach_control_metadata(projection, merged_amount_groups, packing_group_can
             'code':'MERGED_AMOUNT_ALLOCATION_REQUIRED',
             'message':'合并金额组缺少独立单价或合计不一致，请完成人工分摊后重新预览。',
         })
-    if not blocking and any(candidate.get('default_selected') and candidate.get('can_apply')
-                            for candidate in packing_group_candidates):
+    if any(result['status'] == 'review' for result in projection.get('field_results') or []):
+        projection['can_apply'] = False
+    elif not blocking and any(candidate.get('default_selected') and candidate.get('can_apply')
+                              for candidate in packing_group_candidates):
         projection['can_apply']=True
     return projection
 
@@ -372,6 +374,7 @@ def _preview_revision(context,items,sources,current_fees,catalog,selection,depen
         selection.get('merged_amount_groups') or [],selection.get('selected_packing_group_ids') or [],
         selection.get('selected_packing_assignments') or {},
         selection.get('payment_match_candidates') or selection.get('payment_match_candidate'),
+        selection.get('field_results') or [],
     )
 
 
@@ -708,8 +711,28 @@ def public_catalog(catalog):
 
 def public_preview(preview):
     from .material_ai_fill_service import _public_ai_payload
-    return _public_ai_payload({k:v for k,v in preview.items()
-                               if k not in ('sources','input_fingerprint','source_context','fee_fingerprint','dependencies')})
+    from .material_input_service import _public_material_item
+    payload = {k:v for k,v in preview.items()
+               if k not in ('sources','input_fingerprint','source_context','fee_fingerprint','dependencies')}
+    if 'rows' in payload:
+        payload['rows'] = [_public_material_item(row) for row in payload['rows']]
+    return _public_ai_payload(payload)
+
+
+def _assert_supplier_choices(changes):
+    supplier_changes = [change for change in changes if change.get('fieldname') == 'supplier']
+    if not supplier_changes:
+        return
+    from .supplier_resolution_service import load_active_suppliers, resolve_supplier_reference
+
+    active = load_active_suppliers()
+    for change in supplier_changes:
+        proof = change.get('_review_verified_field') or {}
+        resolved = resolve_supplier_reference(proof.get('raw_value'), suppliers=active)
+        if (resolved.get('status') != 'EXACT'
+                or resolved.get('canonical_supplier') != change.get('value')
+                or proof.get('canonical_supplier') != change.get('value')):
+            raise ValueError(_('供应商资料已变化或不再唯一，请重新读取资料。'))
 
 
 def _reconstruct_locked_preview(repo,batch_name,run,receipt,draft):
@@ -765,6 +788,7 @@ def _reconstruct_locked_preview(repo,batch_name,run,receipt,draft):
         repo.assert_row_dependencies(batch_name,dependencies,lock=True,purpose='estimate')
     if not current['can_apply']:
         raise ValueError(_('请选择需要填充的物料或费用。'))
+    _assert_supplier_choices(current['changes'])
     fees.assert_allowed(current['fees'],current_fees,context.get('effective_source') or {})
     verified={**current,'id':receipt['id'],'revision':revision,'run_id':receipt['run_id'],'batch':batch_name,
               'version':context['version'],'source_context':context.get('effective_source') or {},

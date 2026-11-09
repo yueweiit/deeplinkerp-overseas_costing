@@ -73,6 +73,103 @@ assert(html.includes('按同来源货值÷数量计算'));
 """)
 
 
+def test_field_choice_indicators_and_counts_follow_current_server_preview():
+    run_ui(r"""
+const fill=ready();const candidates=[['V','goods_value','7365'],['N','product_name','Name'],['U','shipped_uom','套']]
+ .map(([id,field,value])=>({candidate_id:id,item_name:'I1',fieldname:field,suggested_value:value,
+  workflow_stage:'international_logistics',can_apply:true,default_selected:true,presentation_group_id:`G-${id}`,
+  presentation_representative_candidate_id:id,presentation_equivalent_candidate_ids:[id]}));
+fill.row_review={...fill.row_review,field_candidates:candidates,stage_snapshots:[
+ {stage:'international_logistics',status:'AVAILABLE',rows:[{item_name:'I1',material_code:'SKU',
+   field_candidates:{goods_value:['V'],product_name:['N'],shipped_uom:['U']}}]},
+]};delete fill.rowSelection;const selection=w.ensureMaterialAIRowSelection(fill);
+let html=w.renderMaterialAIReviewDialogContent();
+assert(!html.includes('✓'),'a locally selected field has not been accepted by the server');
+assert(html.includes('已选，待预览'));
+selection.previewKey=w.materialAIRowSelectionKey(fill);
+selection.preview={id:'P',revision:'R',rows:[],can_apply:false,field_results:[
+ {item_name:'I1',fieldname:'goods_value',candidate_id:'V',status:'review',code:'UNIT',message:'单位冲突 <source>'},
+ {item_name:'I1',fieldname:'product_name',candidate_id:'N',status:'retain',code:'MANUAL',message:'已有人工名称'},
+ {item_name:'I1',fieldname:'shipped_uom',candidate_id:'U',status:'apply'},
+]};
+html=w.renderMaterialAIReviewDialogContent();
+assert.equal((html.match(/✓/g)||[]).length,1);
+for(const text of ['将采用 1 项','保留原值','待核对 1 项','单位冲突 &lt;source>','已有人工名称',
+  'data-mf-ai-field-key="I1:goods_value" data-mf-ai-candidate-id=""','data-action="mf-ai-apply" disabled'])assert(html.includes(text),text);
+w.scheduleMaterialAIRowPreview=()=>{};
+w.changeMaterialAIRowSelection('fields','I1:goods_value','');
+assert(!selection.fields.has('I1:goods_value'));
+html=w.renderMaterialAIReviewDialogContent();
+assert(!html.includes('✓'));assert(!html.includes('单位冲突'));assert(html.includes('采用 7365'));
+""")
+
+
+def test_switching_fill_modes_does_not_restore_a_deselected_default_field():
+    run_ui(r"""
+const fill=ready();fill.row_review.field_candidates=[{
+ candidate_id:'V',item_name:'I1',fieldname:'goods_value',suggested_value:'7365',can_apply:true,
+ default_selected:true,presentation_group_id:'G-V',presentation_representative_candidate_id:'V',
+ presentation_equivalent_candidate_ids:['V'],
+}];delete fill.rowSelection;const selection=w.ensureMaterialAIRowSelection(fill);
+w.scheduleMaterialAIRowPreview=()=>{};
+assert.equal(selection.fields.get('I1:goods_value'),'V');
+w.changeMaterialAIRowSelection('fields','I1:goods_value','');
+for(const mode of ['fill_missing','add_selected','update_selected']){
+ w.changeMaterialAIRowSelection('mode',mode);
+ assert.equal(selection.fields.size,0,`mode ${mode} must not restore a rejected field`);
+}
+""")
+
+
+def test_final_preview_names_rows_outside_the_shipment_scope_before_confirmation():
+    run_ui(r"""
+const fill=ready();const selection=fill.rowSelection;
+fill.row_review.stage_snapshots[1].rows=[{item_name:'I2',material_code:'SK-X',product_name:'模具 <型号>',
+ baseline_values:{material_code:'SK-X',product_name:'模具 <型号>'},baseline_only:true,field_candidates:{}}];
+selection.previewKey=w.materialAIRowSelectionKey(fill);
+selection.preview={id:'P',revision:'R',can_apply:true,rows:[],removed_count:0,scope_excluded_item_names:['I2']};
+const html=w.renderMaterialAIReviewDialogContent();
+const scope=html.slice(html.indexOf('data-mf-ai-scope-exclusions'),html.indexOf('data-mf-ai-review-evidence'));
+for(const text of ['本票将排除 1 行','SK-X · 模具 &lt;型号>','不参与本票计算','已排除物料','排除 1'])assert(scope.includes(text),text);
+assert(!scope.includes('移除 0'));assert(!scope.includes('删除'));
+assert(html.indexOf('data-mf-ai-scope-exclusions') < html.indexOf('data-action="mf-ai-apply"'));
+""")
+
+
+def test_final_preview_separates_purchased_total_from_shipment_and_missing_packing():
+    run_ui(r"""
+const fill=ready();const selection=fill.rowSelection;
+selection.previewKey=w.materialAIRowSelectionKey(fill);
+selection.preview={id:'P',revision:'R',can_apply:true,rows:[{
+ name:'I1',material_code:'SKU',product_name:'模具',spec_model:'TPU',recipient:'收件方 A',supplier:'供应商 B',
+ project_collection:'项目 C',quantity:2,actual_shipped_qty:1,shipped_uom:'套',volume_m3:0,package_count:0,
+ goods_value:'7000',purchase_value_evidence:{original_amount:'1000',currency:'USD',amount_rmb:'7000',quantity:'2',uom:'套',status:'apply'},
+ adopted_price:{value:'3500.00',currency:'RMB',unit:'套',source_type:'purchase_total_derived'},shipment_value_rmb:'3500',
+}]};
+const html=w.renderMaterialAIReviewDialogContent();
+const final=html.slice(html.indexOf('data-mf-ai-final-preview'),html.indexOf('data-mf-ai-review-evidence'));
+for(const text of ['采购原币','原币金额','采购货值 RMB','采购单价','本次发货货值 RMB','规格型号','收件人','供应商','项目归属',
+ 'TPU','收件方 A','供应商 B','项目 C','>1000<','>USD<','7000','3500.00','按同来源货值÷数量计算'])assert(final.includes(text),text);
+assert.equal((final.match(/>待补</g)||[]).length,2,'unset cartons and volume must not look like measured zeroes');
+""")
+
+
+def test_distinct_monetary_bases_with_the_same_total_are_distinguishable_options():
+    run_ui(r"""
+const fill=ready();const candidates=['A','B'].map((id,i)=>({candidate_id:id,item_name:'I1',fieldname:'goods_value',suggested_value:'7365',
+ workflow_stage:'international_logistics',source_label:`资料 ${id}`,can_apply:true,default_selected:false,
+ value_basis:{currency:'RMB',amount_rmb:'7365',quantity:String(i+1),uom:'套'},presentation_group_id:`G-${id}`,
+ presentation_representative_candidate_id:id,presentation_equivalent_candidate_ids:[id]}));
+fill.row_review={...fill.row_review,field_candidates:candidates,stage_snapshots:[
+ {stage:'international_logistics',status:'AVAILABLE',rows:[{item_name:'I1',material_code:'SKU',field_candidates:{goods_value:['A','B']}}]},
+]};delete fill.rowSelection;
+const html=w.renderMaterialAIReviewDialogContent();
+const options=[...html.matchAll(/<option value="[AB]"[^>]*>([^<]*)<\/option>/g)].map(m=>m[1]);
+assert.equal(options.length,2);assert.notEqual(options[0],options[1]);
+for(const [i,option] of options.entries()){assert(option.includes('7365'));assert(option.includes(`${i+1} 套`));}
+""")
+
+
 def test_review_uses_compact_top_summary_and_keeps_full_scope_reason_only_in_evidence():
     run_ui(r"""
 const fill=ready();fill.row_review={...fill.row_review,
@@ -912,7 +1009,7 @@ const fill=ready();fill.row_review.rows[0].values={...fill.row_review.rows[0].va
 fill.rowSelection.preview={id:'P',revision:'R',can_apply:true,rows:[fill.row_review.rows[0].values]};
 fill.rowSelection.previewKey=w.materialAIRowSelectionKey(fill);
 const html=w.renderMaterialAIReviewDialogContent();
-for(const text of ['采购单价','币种','本次发货货值 RMB','4.40','10560'])assert(html.includes(text),text);
+for(const text of ['采购单价','采购原币','本次发货货值 RMB','4.40','10560'])assert(html.includes(text),text);
 """)
 
 

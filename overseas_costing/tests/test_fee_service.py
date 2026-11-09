@@ -404,6 +404,13 @@ def test_worklist_and_preview_agree_when_foreign_currency_has_no_fx(monkeypatch,
     monkeypatch.setattr(fee_service, "frappe", FakeFrappe())
     monkeypatch.setattr(cost_preview_service, "frappe", FakeFrappe())
     monkeypatch.setattr(fee_service, "_query_rules", lambda *args: rules)
+    # The preview now resolves its valuation date separately. Keep the
+    # fixture focused on fee allocation when there is no usable USD rate.
+    def resolve_without_usd(self, batch_name, version_name):
+        assert (batch_name, version_name) == ("B", "V")
+        return {"ok": True, "fx_usd_to_rmb": None, "fx_rmb_to_mxn": 2.5}
+
+    monkeypatch.setattr(cost_preview_service.FrappeCostRepository, "prepare_fx_resolution", resolve_without_usd)
     worklist = fee_service.get_fee_worklist("B", "V")
     preview = cost_preview_service.preview_comprehensive_cost("B", "V")
     assert worklist["fees"][0]["allocation_state"] == expected

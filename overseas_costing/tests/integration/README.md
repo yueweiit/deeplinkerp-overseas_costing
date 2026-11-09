@@ -50,3 +50,17 @@ SETTLEMENT_ADAPTER_TEST_DSN='postgresql://postgres@127.0.0.1:PORT/settlement_tes
 ```
 
 The eight tests cover migration grants and preflight, actual `bucket`/`object_key`/`content_quality` columns, raw-payload hydration and tenant isolation, keyset paging over 200 equal-timestamp rows, attachment changes/retirement and source tombstones, unchanged weekly metadata inventory, changed-source-only hydration, and empty changed-source requests. Default pytest runs skip these tests without the explicit DSN. The lightweight inventory does not transfer or hydrate full source payloads, but PostgreSQL still reads source content to compute its revision hash.
+
+## AI fill consistency and retry
+
+Run the guarded AI fill probe after migrating the isolated settlement site to the
+current app revision. It supplies synthetic, locally archived approval evidence
+and uses real server preview receipts, the edit lease, MariaDB transactions and
+document reads. It checks equal preview and saved values, unchanged raw purchase
+fields, two simultaneous confirmations of one receipt, and rollback after a
+real item write. The source authorization checks also run against the actual
+Frappe document controller. No external services are contacted.
+
+```sh
+docker exec -e PYTHONPATH=/tmp/settlement-code -w /home/frappe/frappe-bench/sites overseas-cost-local-backend-1 /home/frappe/frappe-bench/env/bin/python -m overseas_costing.tests.integration.run_ai_fill_consistency_frappe_integration
+```

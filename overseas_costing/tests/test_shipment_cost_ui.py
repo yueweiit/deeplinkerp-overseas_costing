@@ -164,6 +164,23 @@ console.log(JSON.stringify({column,automatic:make('automatic','12.5'),manual:mak
     assert "数量或单位已变化" in result["stale"]
 
 
+def test_saved_blocked_purchase_value_is_visible_without_filling_the_shipment_value():
+    result = _fee_workspace_result(r"""
+const w=Object.create(Harness.prototype);w.detailState={};
+w.escape=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+w.formatValue=v=>String(v??'');w.materialAICell=()=>null;
+const column=w.materialFeeGridColumns().find(row=>row.field==='shipment_value_rmb');
+console.log(JSON.stringify(w.renderMaterialFeeGridCell({name:'I',shipment_value_rmb:null,
+ shipment_valuation:{status:'missing',error:'PURCHASE_VALUE_IDENTITY_MISMATCH'},
+ purchase_value_evidence:{status:'review',original_amount:'1000',currency:'USD',amount_rmb:'7365',message:'规格有变化 <原单>'}},
+ column,new Set(['shipment_value_rmb']),3)));
+""")
+    assert '已存采购货值 7365 RMB · 仅供核对' in result
+    assert '规格有变化 &lt;原单&gt;' in result
+    assert 'value=""' in result and 'value="7365"' not in result
+    assert '自动估值' not in result and 'mf-shipment-valuation-adopt' not in result
+
+
 def test_shipment_value_zero_and_blank_use_existing_single_cell_save_contract():
     result = _fee_workspace_result(r"""
 const w=Object.create(Harness.prototype);w.detailState={batchName:'B',versionName:'V',tab:'documents',editToken:'T',expectedModified:'M'};

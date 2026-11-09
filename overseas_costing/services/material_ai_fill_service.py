@@ -814,6 +814,9 @@ def _fingerprint_item(item: dict) -> dict:
             "source_doc_no",
             "material_code",
             "product_name",
+            "recipient",
+            "supplier",
+            "volume_weight_kg",
             "spec_model",
             "quantity",
             "purchase_uom",
@@ -1649,15 +1652,16 @@ def _review_number(fieldname: str, value: Any) -> str:
 
 
 def _normalize_review_item_values(
-    values: Any, *, partial: bool = False, fx_rates: dict | None = None
+    values: Any, *, partial: bool = False, fx_rates: dict | None = None,
+    verified_fields: frozenset[str] = frozenset(),
 ) -> dict:
     if not isinstance(values, dict):
         raise ValueError(_i18n("物料提案字段必须是对象。"))
     normalized = {}
     for fieldname, value in values.items():
-        if fieldname not in REVIEW_REPLACEMENT_FIELDS:
+        if fieldname not in REVIEW_REPLACEMENT_FIELDS and fieldname not in verified_fields:
             raise ValueError(_i18n("不允许 AI 修改字段：{0}。").format(fieldname or '--'))
-        if fieldname in REVIEW_NUMERIC_FIELDS and not _is_blank(value):
+        if (fieldname in REVIEW_NUMERIC_FIELDS or fieldname == "volume_weight_kg") and not _is_blank(value):
             normalized[fieldname] = _review_number(fieldname, value)
         elif fieldname == "purchase_currency":
             currency = str(value or "").strip().upper().replace("CNY", "RMB")
@@ -1689,13 +1693,13 @@ def _normalize_review_item_values(
     return normalized
 
 
-def _normalize_review_item_update_values(values: Any) -> dict:
+def _normalize_review_item_update_values(values: Any, *, verified_fields: frozenset[str] = frozenset()) -> dict:
     if not isinstance(values, dict):
         raise ValueError(_i18n("物料更新字段必须是对象。"))
-    readonly = set(values) - REVIEW_ITEM_UPDATE_FIELDS
+    readonly = set(values) - REVIEW_ITEM_UPDATE_FIELDS - verified_fields
     if readonly:
         raise ValueError(_i18n("物料更新不能修改只读字段：{0}。").format(sorted(readonly)[0]))
-    return _normalize_review_item_values(values, partial=True)
+    return _normalize_review_item_values(values, partial=True, verified_fields=verified_fields)
 
 
 def _normalize_fee_values(values: Any, *, partial: bool = False) -> dict:
@@ -2215,6 +2219,7 @@ def normalize_source_review_proposals(
         for item_name, item in items_by_name.items()
     }
     from .logistics_settlement.model import digest
+    from .source_review_extract_service import VERIFIED_APPROVAL_FIELDS
 
     expected_semantic_ids = set()
     semantic_facts, _semantic_fact_documents = _semantic_fact_graph(evidence)
@@ -2235,6 +2240,7 @@ def normalize_source_review_proposals(
     normalized = []
     seen = set()
     seen_payloads = set()
+    approval_row_index = {}
     for index, raw in enumerate(proposals or [], start=1):
         if not isinstance(raw, dict):
             continue
@@ -2271,6 +2277,8 @@ def normalize_source_review_proposals(
         seen.add(proposal_id)
         system_origin = proposal_id in trusted_system_ids
         purchase_value_fact = None
+        verified_fields = {}
+        unresolved_reason = str(raw.get("_review_unresolved_reason") or "")[:500] if system_origin else ""
         target = str(raw.get("target_item_name") or (raw.get("payload") or {}).get("item_name") or "")
         try:
             if proposal_type == "material_replace":
@@ -2315,8 +2323,21 @@ def normalize_source_review_proposals(
             elif proposal_type == "item_update":
                 if target not in item_names:
                     continue
+                raw_fields = (raw.get("payload") or {}).get("fields") or {}
+                approval_evidence = raw.get("_approval_field_evidence") if system_origin else None
+                if isinstance(approval_evidence, dict) and len(refs) == 1 and refs[0].get("row"):
+                    for field, proof in approval_evidence.items():
+                        if (field not in raw_fields or not isinstance(proof, dict)
+                                or proof.get("scope") not in {"row", "header"} or not proof.get("column")):
+                            continue
+                        locator = {**refs[0], "column": str(proof["column"])}
+                        if proof["scope"] == "header":
+                            locator.update(field=str(proof["column"]), row=None)
+                        source_identity = evidence.get(refs[0]["document_id"], {}).get("_review_source_identity") or {}
+                        verified_fields[field] = {**deepcopy(proof), "source_refs": [locator],
+                                                  "_review_source_identity": deepcopy(source_identity)}
                 fields = _normalize_review_item_update_values(
-                    (raw.get("payload") or {}).get("fields") or {}
+                    raw_fields, verified_fields=frozenset(verified_fields) & VERIFIED_APPROVAL_FIELDS,
                 )
                 # Deterministic source readers (for example the selected packing
                 # sheet) already carry server-bound provenance and must retain
@@ -2346,10 +2367,11 @@ def normalize_source_review_proposals(
                 }
                 if not payload["fields"]:
                     continue
-                if 'goods_value' in payload['fields']:
+                if 'goods_value' in payload['fields'] and not unresolved_reason:
                     from .purchase_value_evidence import from_documents
                     purchase_value_fact = from_documents(
-                        payload['fields'], items_by_name[target], refs, evidence, fx_rates=fx_rates)
+                        payload['fields'], items_by_name[target], refs, evidence,
+                        fx_rates=fx_rates, items=items, approval_row_index=approval_row_index)
                     if purchase_value_fact:
                         payload['fields']['goods_value'] = purchase_value_fact['amount_rmb']
             else:
@@ -2419,7 +2441,7 @@ def normalize_source_review_proposals(
                 continue
             fact_ids = []
         confidence = float(_confidence(raw.get("confidence")))
-        conflict = bool(raw.get("conflict"))
+        conflict = bool(raw.get("conflict") or unresolved_reason)
         existing_value_conflict_fields = []
         existing_fee_conflict = False
         if proposal_type == "item_update":
@@ -2514,6 +2536,8 @@ def normalize_source_review_proposals(
                 "default_selected": bool(raw.get("default_selected", confidence >= 0.9)) and confidence >= 0.9 and not conflict,
                 "payload": payload,
                 **({'_purchase_value_fact': purchase_value_fact} if purchase_value_fact else {}),
+                **({"_review_verified_fields": verified_fields} if verified_fields and not unresolved_reason else {}),
+                **({"_review_unresolved_reason": unresolved_reason} if unresolved_reason else {}),
                 **(
                     {
                         "selection_role": semantic_relation["selection_role"],
@@ -2931,7 +2955,7 @@ def _source_review_context(context: dict | None) -> dict:
     }
 
 
-SOURCE_REVIEW_PROCESSING_VERSION = 'project-route-policy-12'
+SOURCE_REVIEW_PROCESSING_VERSION = 'verified-approval-field-projection-13'
 
 
 def _source_review_fingerprint(
@@ -3277,6 +3301,7 @@ def _load_json(value: Any, default: Any) -> Any:
 
 _PUBLIC_AI_HIDDEN_KEYS = frozenset({
     "_price_metadata", "_purchase_value_fact", "_verified_prior_item", "purchase_fact", "purchase_fact_history",
+    "_approval_field_evidence", "_review_verified_fields",
     "settlement_original_values", "ai_fill_original_values", "_shipment_valuation",
     "_semantic_payment_fee", "_semantic_read_only_unsupported", "_existing_fee_conflict",
 })
@@ -6004,6 +6029,7 @@ def execute_material_ai_fill(run_id: str, *, repository: Any | None = None) -> d
             )
             source_errors.append({"source": "", "message": error.safe_text})
 
+        document_source_identities = {}
         for source_index, source in enumerate(sources):
             if unified_review and source.get("selected") is False:
                 _update_source_progress(
@@ -6043,6 +6069,10 @@ def execute_material_ai_fill(run_id: str, *, repository: Any | None = None) -> d
                     document = {**document, "document_id": f"DOC-{len(documents) + 1}",
                                 'approval_role': source.get('approval_role') or document.get('approval_role') or ''}
                     documents.append(document)
+                    document_source_identities[document["document_id"]] = {
+                        key: str(source[key]) for key in ("source_id", "source_hash", "content_hash", "source_revision", "workflow_stage")
+                        if source.get(key) not in (None, "")
+                    }
                     if unified_review and source.get("source_kind") != "approval_form":
                         deterministic_proposals.extend(
                             build_document_fee_proposals(
@@ -6113,6 +6143,7 @@ def execute_material_ai_fill(run_id: str, *, repository: Any | None = None) -> d
                             source,
                             transport_mode=str(context.get("transport_mode") or ""),
                             fx_rates=context.get('fx_rates') or {},
+                            existing_items=items,
                         )
                         for proposal in approval_proposals:
                             proposal = deepcopy(proposal)
@@ -6313,10 +6344,16 @@ def execute_material_ai_fill(run_id: str, *, repository: Any | None = None) -> d
                 for document in ai_result.get("evidence_documents") or []
                 if isinstance(document, dict) and document.get("document_id")
             }
-            validation_documents = [
-                enhanced_by_id.get(str(document.get("document_id") or ""), document)
-                for document in documents
-            ]
+            validation_documents = []
+            for document in documents:
+                document_id = str(document.get("document_id") or "")
+                enhanced = enhanced_by_id.get(document_id, document)
+                validation_documents.append({
+                    **enhanced,
+                    **{key: document[key] for key in ("document_id", "source_ref", "approval_role", "form_fields")
+                       if key in document},
+                    "_review_source_identity": document_source_identities.get(document_id) or {},
+                })
             trusted_approved_proposal_ids = {
                 str(proposal.get("proposal_id") or "")
                 for proposal in deterministic_proposals
@@ -6378,6 +6415,17 @@ def execute_material_ai_fill(run_id: str, *, repository: Any | None = None) -> d
                         row["extra_json"] = _json(metadata)
                 retained = []
                 for proposal in candidates:
+                    if (proposal["proposal_type"] == "item_update"
+                            and (proposal.get("_review_verified_fields") or proposal.get("_review_unresolved_reason"))):
+                        # Preserve exact OA row/header provenance. Folding these
+                        # values into reconciliation would turn them into generic
+                        # scope evidence and drop protected fill-only fields.
+                        payload = proposal["payload"]
+                        for field in ("actual_shipped_qty", "shipped_uom"):
+                            payload["fields"].pop(field, None)
+                        if payload["fields"]:
+                            retained.append(proposal)
+                        continue
                     if proposal["proposal_type"] == "item_update" and proposal.get("default_selected"):
                         payload = proposal["payload"]
                         row = rows_by_name.get(payload["item_name"])

@@ -23,6 +23,7 @@ def valuation_selection(items, ctx, version, batch):
             'unit_price': '4.40',
             'currency': 'RMB',
             'quantity': '2400',
+            'uom': '个',
             'status': 'confirmed_source',
             'source': {'kind': 'packing_attachment', 'file_id': 'FILE-PACKING-1'},
         }}),

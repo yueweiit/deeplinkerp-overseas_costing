@@ -2504,7 +2504,9 @@
       && !manualUpdate
     );
     const valuationStatus = column.field === "shipment_value_rmb" ? this.shipmentValuationStatus(item.shipment_valuation) : "";
-    const valuationMeta = column.field === "shipment_value_rmb" ? this.renderShipmentValuationMeta(item.shipment_valuation, item.name) : "";
+    const valuationMeta = column.field === "shipment_value_rmb"
+      ? this.renderShipmentValuationMeta(item.shipment_valuation, item.name) + this.renderSavedPurchaseEvidence(item.purchase_value_evidence)
+      : "";
     const classes = ["ocw-mf-cell", isMissing ? "is-missing" : "", isDefault ? "is-default" : "", column.readonly ? "is-readonly" : "", requiresCorrection ? "is-protected-purchase" : "", draft?.error ? "is-save-error" : "", aiUpdate || manualUpdate ? "is-ai-draft" : "", aiCell && !aiUpdate ? "has-ai-candidate" : "", valuationStatus ? "is-shipment-valuation" : "", valuationStatus ? `is-valuation-${valuationStatus}` : ""].filter(Boolean).join(" ");
     const reason = draft?.error || (column.field === "shipment_value_rmb" ? item.shipment_valuation?.error_detail : "") || (item.requirements?.field_reasons?.[column.field] || []).map((row) => row.message || row.code).join("；");
     if (["project_collection", "supplier"].includes(column.field)) {
@@ -2556,6 +2558,17 @@
     const prior = valuation?.prior_amount_rmb ?? "";
     const calculated = valuation?.calculated_amount_rmb ?? "";
     return `<small class="ocw-mf-valuation-status">${ocTranslate("待确认 · 旧值 {0} · 计算值 {1}", [this.escape(prior), this.escape(calculated)])}</small><div class="ocw-mf-valuation-actions"><button type="button" data-action="mf-shipment-valuation-adopt" data-item-name="${this.escape(itemName)}" data-value="${this.escape(prior)}">${ocTranslate("采用旧值")}</button><button type="button" data-action="mf-shipment-valuation-adopt" data-item-name="${this.escape(itemName)}" data-value="${this.escape(calculated)}">${ocTranslate("采用计算值")}</button></div>`;
+  }
+
+  renderSavedPurchaseEvidence(evidence) {
+    if (evidence?.status !== "review") return "";
+    const hasRmbAmount = evidence.amount_rmb != null && evidence.amount_rmb !== "";
+    const amount = hasRmbAmount ? evidence.amount_rmb : evidence.original_amount;
+    if (amount == null || amount === "") return "";
+    const currency = hasRmbAmount ? "RMB" : evidence.currency;
+    const description = ocTranslate("已存采购货值 {0} · 仅供核对", [[amount, currency].filter(part => part != null && part !== "").join(" ")]);
+    const reason = evidence.message ? `<span>${this.escape(ocTranslate(evidence.message))}</span>` : "";
+    return `<small class="ocw-mf-purchase-evidence">${this.escape(description)}${reason}</small>`;
   }
 
   async adoptShipmentValuationCandidate($button) {
@@ -3353,19 +3366,22 @@
     const feePolicy = this.materialAIReviewFeePolicy(fill);
     if (kind === "mode") {
       if (!["fill_missing", "update_selected", "add_selected"].includes(id)) return;
+      const priorMode = selection.mode;
+      if (id === priorMode) return;
       selection.mode = id;
       selection.rows.forEach(rowId => {
         const row = rows.find(item => String(item.row_id) === rowId);
         const allowed = id === "update_selected" ? row?.can_update : id === "add_selected" ? row?.can_add : row?.can_fill;
         if (!row || !allowed) selection.rows.delete(rowId);
       });
-      if (id === "add_selected") { selection.fees.clear(); selection.fields.clear(); selection.packingAssignments.clear(); }
-      else if (!(selection.fields.size) && (fill.row_review.field_candidates || []).length) {
-        candidateIndex.entries.filter(entry => entry.candidate.default_selected).forEach(({ candidate, candidateId }) => {
-          const key = `${candidate.item_name}:${candidate.fieldname}`;
-          const representativeId = this.materialAIFieldRepresentativeCandidateId(candidateIndex, key, candidateId);
-          if (representativeId) selection.fields.set(key, representativeId);
-        });
+      if (id === "add_selected") {
+        selection.fieldsBeforeAdd = new Map(selection.fields);
+        selection.fields.clear();
+        selection.fees.clear();
+        selection.packingAssignments.clear();
+      } else if (priorMode === "add_selected" && selection.fieldsBeforeAdd) {
+        selection.fields = selection.fieldsBeforeAdd;
+        delete selection.fieldsBeforeAdd;
       }
       if (id !== "add_selected" && !selection.packingAssignments.size) {
         (fill.draft?.packing_group_candidates || []).forEach((candidate) => {
@@ -3374,6 +3390,7 @@
         });
       }
     } else if (kind === "fields") {
+      if (selection.mode === "add_selected") return;
       if (!checked) selection.fields.delete(String(id));
       else {
         const representativeId = this.materialAIFieldRepresentativeCandidateId(candidateIndex, id, checked);
@@ -3591,13 +3608,36 @@
     });
   }
 
-  renderMaterialAIFieldChoice({ candidates, candidatesById, key, material, label, selection, value, busy }) {
+  renderMaterialAIFieldChoice({ candidates, candidatesById, key, material, label, selection, results, value, busy }) {
     const groups = this.materialAIPresentationGroups(candidates, candidatesById);
     const applicableGroups = groups.filter(group => group.canApply);
     const readonlyGroups = groups.filter(group => !group.canApply);
     const selectedId = String(selection.fields.get(key) || "");
     const selectedGroup = groups.find(group => group.equivalentIds.has(selectedId));
-    const readonly = readonlyGroups.map(group => `<span class="ocw-mf-ai-field-readonly" data-mf-ai-presentation-group="${this.escape(group.groupId)}">${value(group.representative?.suggested_value)}<b>${ocTranslate("只读")}</b></span>`).join("");
+    const resultFor = group => (results.get(key) || []).find(row => group.equivalentIds.has(String(row.candidate_id)));
+    const reason = message => message ? `<small class="ocw-mf-ai-field-reason">${this.escape(ocTranslate(message))}</small>` : "";
+    const resultReason = result => result?.status === "apply" ? "" : reason(result?.message);
+    const state = (result, selected) => {
+      if (result?.status === "apply") return `<b class="is-apply" aria-label="${this.escape(ocTranslate("将采用"))}">✓</b>`;
+      if (result?.status === "retain" || result?.status === "review") {
+        return `<small class="ocw-mf-ai-field-outcome is-${result.status}">${ocTranslate(result.status === "retain" ? "保留原值" : "待核对")}</small>`;
+      }
+      return selected ? `<small class="ocw-mf-ai-field-outcome">${ocTranslate("已选，待预览")}</small>` : "";
+    };
+    const optionLabel = candidate => {
+      const basis = candidate?.value_basis;
+      if (!basis) return value(candidate?.suggested_value);
+      const details = [];
+      if (basis.quantity != null && basis.uom) details.push(ocTranslate("计价数量 {0} {1}", [basis.quantity, basis.uom]));
+      if (basis.currency) {
+        const original = basis.original_amount == null || basis.original_amount === ""
+          ? basis.currency : `${basis.original_amount} ${basis.currency}`;
+        details.push(ocTranslate("原币 {0}", [original]));
+      }
+      if (candidate.source_label) details.push(candidate.source_label);
+      return [value(candidate.suggested_value), ...details.map(text => this.escape(text))].join(" · ");
+    };
+    const readonly = readonlyGroups.map(group => `<span class="ocw-mf-ai-field-readonly" data-mf-ai-presentation-group="${this.escape(group.groupId)}">${value(group.representative?.suggested_value)}<b>${ocTranslate("只读")}</b></span>${reason(group.representative?.resolution_reason)}`).join("");
     const conflict = groups.length > 1
       ? `<span class="ocw-mf-ai-field-conflict-meta"><em>${ocTranslate("{0} 个值", [groups.length])}</em><button type="button" class="ocw-link-btn" data-action="mf-ai-show-evidence">${ocTranslate("查看依据")}</button></span>`
       : "";
@@ -3605,16 +3645,25 @@
     if (applicableGroups.length === 1) {
       const group = applicableGroups[0];
       const display = value(group.representative?.suggested_value);
-      const control = selectedGroup === group
-        ? `<span class="ocw-mf-ai-field-selected" data-mf-ai-field-selected="${this.escape(group.groupId)}">${display}<b aria-label="${ocTranslate('已采用')}">✓</b></span>`
+      const selected = selectedGroup === group;
+      const result = resultFor(group);
+      const deselect = selected ? `<button type="button" class="ocw-link-btn" data-action="mf-ai-adopt-field" data-mf-ai-field-key="${this.escape(key)}" data-mf-ai-candidate-id="" aria-label="${this.escape(ocTranslate("不采用 {0}", [`${material} ${label}`]))}" ${busy}>${ocTranslate("不采用")}</button>` : "";
+      const control = selected || result
+        ? `<span class="ocw-mf-ai-field-selected" ${selected ? `data-mf-ai-field-selected="${this.escape(group.groupId)}"` : ""}><span>${display}</span>${state(result, selected)}${deselect}</span>${resultReason(result)}`
         : `<button type="button" class="ocw-outline-btn ocw-mini-btn ocw-mf-ai-field-adopt" data-action="mf-ai-adopt-field" data-mf-ai-field-key="${this.escape(key)}" data-mf-ai-candidate-id="${this.escape(group.representativeId)}" ${busy}>${ocTranslate("采用 {0}", [display])}</button>`;
       return `${control}${readonly}${conflict}`;
     }
-    const options = [`<option value="" ${applicableGroups.includes(selectedGroup) ? "" : "selected"}>${ocTranslate("不采用")}</option>`, ...applicableGroups.map(group => `<option value="${this.escape(group.representativeId)}" ${selectedGroup === group ? "selected" : ""}>${value(group.representative?.suggested_value)}</option>`)].join("");
-    return `<select data-mf-ai-field-select="${this.escape(key)}" aria-label="${this.escape(material)} ${this.escape(ocTranslate(label))}" ${busy}>${options}</select>${readonly}${conflict}`;
+    const options = [`<option value="" ${applicableGroups.includes(selectedGroup) ? "" : "selected"}>${ocTranslate("不采用")}</option>`, ...applicableGroups.map(group => `<option value="${this.escape(group.representativeId)}" ${selectedGroup === group ? "selected" : ""}>${optionLabel(group.representative)}</option>`)].join("");
+    const outcomes = applicableGroups.map(group => {
+      const result = resultFor(group);
+      const selected = selectedGroup === group;
+      const display = selected ? "" : `<span>${value(group.representative?.suggested_value)}</span>`;
+      return selected || result ? `<span class="ocw-mf-ai-field-selected">${display}${state(result, selected)}</span>${resultReason(result)}` : "";
+    }).join("");
+    return `<select data-mf-ai-field-select="${this.escape(key)}" aria-label="${this.escape(material)} ${this.escape(ocTranslate(label))}" ${busy}>${options}</select>${outcomes}${readonly}${conflict}`;
   }
 
-  renderMaterialAIPackingStages(fill, selection, fieldColumnOrder, fieldLabels, value, busy, itemLabel) {
+  renderMaterialAIPackingStages(fill, selection, fieldColumnOrder, fieldLabels, value, busy, itemLabel, results) {
     const catalog = fill.row_review || {};
     const snapshots = new Map((catalog.stage_snapshots || []).map(stage => [String(stage.stage || ""), stage]));
     const specs = [["payment", 0, "支付申请"], ["international_logistics", 1, "国际物流"], ["purchase", 2, "采购支出"]];
@@ -3622,18 +3671,19 @@
     const stages = specs.map(([stage, rank, label]) => ({ status: "UNAVAILABLE", processes: [], rows: [], warnings: [], ...(snapshots.get(stage) || {}), stage, stage_rank: rank, stage_label: label }));
     const stageViews = stages.map(stage => ({ stage, rows: this.materialAIStageMaterialRows(stage, candidatesById) }));
     const sharedFields = new Set(stageViews.flatMap(view => view.rows.flatMap(row => Object.keys(row.field_candidates || {}))));
-    const sharedColumns = fieldColumnOrder.filter(([fieldname]) => sharedFields.has(fieldname));
+    const sharedColumns = [...fieldColumnOrder.filter(([fieldname]) => sharedFields.has(fieldname)),
+      ...[...sharedFields].filter(field => !Object.hasOwn(fieldLabels, field)).map(field => [field, field])];
     const actionable = view => view.rows.some(row => Object.values(row.field_candidates || {}).some(ids => ids.some(id => candidatesById.get(String(id))?.can_apply)));
     const openIndex = this.materialAIFirstActionableStageIndex(stageViews, actionable);
     const panels = stageViews.map((view, index) => {
       const { stage, rows } = view;
       const stageColumns = sharedColumns;
-      const selectedCount = rows.reduce((count, row) => count + Object.entries(row.field_candidates || {}).filter(([fieldname, candidateIds]) => {
+      const appliedCount = rows.reduce((count, row) => count + Object.entries(row.field_candidates || {}).filter(([fieldname, candidateIds]) => {
         const candidates = candidateIds.map(id => candidatesById.get(String(id))).filter(Boolean);
         const keyItem = candidates[0]?.item_name || row.item_name || "";
-        const selectedId = String(selection.fields.get(`${keyItem}:${fieldname}`) || "");
+        const applied = (results.get(`${keyItem}:${fieldname}`) || []).filter(result => result.status === "apply");
         return this.materialAIPresentationGroups(candidates, candidatesById)
-          .some(group => group.equivalentIds.has(selectedId));
+          .some(group => applied.some(result => group.equivalentIds.has(String(result.candidate_id))));
       }).length, 0);
       const matrixRows = rows.map(row => {
         const material = [row.material_code, row.product_name && String(row.product_name) !== String(row.material_code) ? row.product_name : ""].filter(Boolean).join(" · ") || itemLabel(row.item_name || row.material_stable_key);
@@ -3644,14 +3694,14 @@
           const keyItem = candidates[0]?.item_name || row.item_name || "";
           const key = `${keyItem}:${fieldname}`;
           const groups = this.materialAIPresentationGroups(candidates, candidatesById);
-          return `<td class="${groups.length > 1 ? "is-conflict" : ""}">${this.renderMaterialAIFieldChoice({ candidates, candidatesById, key, material, label: fieldLabels[fieldname] || fieldname, selection, value, busy })}</td>`;
+          return `<td class="${groups.length > 1 ? "is-conflict" : ""}">${this.renderMaterialAIFieldChoice({ candidates, candidatesById, key, material, label: fieldLabels[fieldname] || fieldname, selection, results, value, busy })}</td>`;
         }).join("");
         return `<tr data-mf-ai-material-row="${this.escape(row.materialKey)}"><th scope="row">${value(material)}</th>${fieldCells}</tr>`;
       }).join("");
       const empty = `<tr><td colspan="${stageColumns.length + 1}" class="is-empty">${ocTranslate("无可用资料")}</td></tr>`;
       const status = String(stage.status || "UNAVAILABLE").toUpperCase();
       const hasActionable = actionable(view);
-      return `<details class="ocw-mf-ai-stage-panel is-${this.escape(status.toLowerCase())}" data-mf-ai-packing-stage="${this.escape(stage.stage)}" ${index === openIndex ? "open" : ""}><summary><strong>${this.escape(stage.stage_label)}</strong><span><b>${hasActionable ? this.escape(this.materialAIStageStatusLabel(status)) : ocTranslate("无可用资料")}</b>${ocTranslate("已选 {0} 项", [selectedCount])}</span></summary>${this.materialAIStageSourceActions(stage)}${this.renderMaterialAIStageWarning(stage)}<div class="ocw-mf-ai-preview-table"><table class="ocw-mf-ai-stage-matrix"><thead><tr><th>${ocTranslate("物料")}</th>${stageColumns.map(([, label]) => `<th>${this.escape(ocTranslate(label))}</th>`).join("")}</tr></thead><tbody>${matrixRows || empty}</tbody></table></div></details>`;
+      return `<details class="ocw-mf-ai-stage-panel is-${this.escape(status.toLowerCase())}" data-mf-ai-packing-stage="${this.escape(stage.stage)}" ${index === openIndex ? "open" : ""}><summary><strong>${this.escape(stage.stage_label)}</strong><span><b>${hasActionable ? this.escape(this.materialAIStageStatusLabel(status)) : ocTranslate(rows.length ? "待核对" : "无可用资料")}</b>${ocTranslate("将采用 {0} 项", [appliedCount])}</span></summary>${this.materialAIStageSourceActions(stage)}${this.renderMaterialAIStageWarning(stage)}<div class="ocw-mf-ai-preview-table"><table class="ocw-mf-ai-stage-matrix"><thead><tr><th>${ocTranslate("物料")}</th>${stageColumns.map(([, label]) => `<th>${this.escape(ocTranslate(label))}</th>`).join("")}</tr></thead><tbody>${matrixRows || empty}</tbody></table></div></details>`;
     }).join("");
     const assignedIds = new Set(stages.flatMap(stage => (stage.rows || []).flatMap(row => Object.values(row.field_candidates || {}).flat().map(String))));
     const unclassified = (catalog.field_candidates || []).filter(candidate => !assignedIds.has(String(candidate.candidate_id)));
@@ -3664,11 +3714,12 @@
     const unclassifiedRows = [...unclassifiedGroups.values()].map(({ key, itemName, fieldname, candidates }) => {
       const source = candidates.map(candidate => candidate.source_label || candidate.priority_reason || "未分类资料").filter(Boolean).join(" / ");
       const candidateIds = candidates.map(candidate => String(candidate.candidate_id)).join(",");
-      const control = this.renderMaterialAIFieldChoice({ candidates, candidatesById, key, material: itemLabel(itemName), label: fieldLabels[fieldname] || fieldname, selection, value, busy });
+      const control = this.renderMaterialAIFieldChoice({ candidates, candidatesById, key, material: itemLabel(itemName), label: fieldLabels[fieldname] || fieldname, selection, results, value, busy });
       return `<tr data-mf-ai-unclassified-candidates="${this.escape(candidateIds)}"><td>${value(itemLabel(itemName))}</td><td>${this.escape(fieldLabels[fieldname] || fieldname)}</td><td>${control}</td><td>${this.escape(source)}</td></tr>`;
     }).join("");
     const unclassifiedSection = unclassified.length ? `<details class="ocw-mf-ai-unclassified" data-mf-ai-unclassified-packing="1"><summary>${ocTranslate("其他可选字段")} <span>${ocTranslate("{0} 个", [unclassified.length])}</span></summary><div class="ocw-mf-ai-preview-table"><table><thead><tr><th>${ocTranslate("物料")}</th><th>${ocTranslate("字段")}</th><th>${ocTranslate("候选值")}</th><th>${ocTranslate("资料来源")}</th></tr></thead><tbody>${unclassifiedRows}</tbody></table></div></details>` : "";
-    return `<section class="ocw-mf-ai-preview-section" data-mf-ai-field-candidates><h4>${ocTranslate("装箱资料")} <span>${ocTranslate("已选 {0}", [selection.fields.size])}</span></h4>${panels}${unclassifiedSection}</section>`;
+    const appliedCount = [...results.values()].filter(entries => entries.some(result => result.status === "apply")).length;
+    return `<section class="ocw-mf-ai-preview-section" data-mf-ai-field-candidates><h4>${ocTranslate("装箱资料")} <span>${ocTranslate("将采用 {0} 项", [appliedCount])}</span></h4>${panels}${unclassifiedSection}</section>`;
   }
 
   materialAIFeeScopes(fee) {
@@ -3744,15 +3795,39 @@
     const catalog = fill.row_review;
     const preview = selection.previewKey === this.materialAIRowSelectionKey(fill) ? selection.preview : null;
     const value = input => this.escape(input === null || input === undefined || input === "" ? "—" : input);
-    const columns = [["material_code", ocTranslate("物料编码")], ["product_name", ocTranslate("物料名称")], ["quantity", ocTranslate("采购数量")], ["actual_shipped_qty", ocTranslate("实发数量")], ["shipped_uom", ocTranslate("单位")], ["unit_price", ocTranslate("采购单价")], ["purchase_currency", ocTranslate("币种")], ["shipment_value_rmb", ocTranslate("本次发货货值 RMB")], ["package_count", ocTranslate("箱数")], ["net_weight_kg", ocTranslate("净重 kg")], ["gross_weight_kg", ocTranslate("毛重 kg")], ["volume_m3", ocTranslate("体积 m³")], ["supplier", ocTranslate("供应商")], ["project_collection", ocTranslate("项目归属")]];
+    const results = new Map();
+    (preview?.field_results || []).forEach(result => {
+      if (!result?.item_name || !result.fieldname) return;
+      const key = `${result.item_name}:${result.fieldname}`;
+      if (!results.has(key)) results.set(key, []);
+      results.get(key).push(result);
+    });
+    const columns = [["material_code", "物料编码"], ["product_name", "物料名称"], ["quantity", "采购数量"],
+      ["actual_shipped_qty", "实发数量"], ["shipped_uom", "单位"], ["purchase_original_currency", "采购原币"],
+      ["purchase_original_amount", "原币金额"], ["goods_value", "采购货值 RMB"], ["unit_price", "采购单价"],
+      ["shipment_value_rmb", "本次发货货值 RMB"], ["package_count", "箱数"], ["net_weight_kg", "净重 kg"],
+      ["gross_weight_kg", "毛重 kg"], ["volume_m3", "体积 m³"], ["spec_model", "规格型号"],
+      ["recipient", "收件人"], ["supplier", "供应商"], ["project_collection", "项目归属"]];
+    const missingPacking = (field, input) => (field === "package_count" || field === "volume_m3")
+      && (this.materialValueIsPlaceholder(field, input) || Number(input) === 0);
     const displayCell = (row, field) => {
-      if (field === "unit_price" && row.adopted_price?.value != null) {
-        const price = Number(row.adopted_price.value);
-        return `${Number.isFinite(price) ? value(price.toFixed(2)) : "—"}<small>${ocTranslate("按同来源货值÷数量计算")}</small>`;
+      const evidence = row.purchase_value_evidence;
+      const price = row.adopted_price;
+      if (field === "purchase_original_currency") return value(evidence?.currency || row.purchase_currency);
+      if (field === "purchase_original_amount") return value(evidence?.original_amount);
+      if (field === "goods_value") {
+        const needsReview = evidence?.status === "review";
+        const details = needsReview ? `<small class="ocw-mf-ai-field-reason">${this.escape(ocTranslate(evidence.message || "待核对"))}</small>` : "";
+        return `${value(needsReview ? ocTranslate("待核对") : evidence?.amount_rmb)}${details}`;
       }
-      if (field === "purchase_currency" && row.adopted_price?.currency) return value(row.adopted_price.currency);
-      if (field === "unit_price") return Number(row[field]) > 0 ? value(Number(row[field]).toFixed(2)) : "—";
-      if (field === "shipment_value_rmb" && row[field] != null && row[field] !== "") return value(Number(row[field]).toFixed(2));
+      if (field === "unit_price" && price?.value != null) {
+        const denomination = [price.currency, price.unit].filter(Boolean).join(" / ");
+        const note = price.source_type === "purchase_total_derived" ? ocTranslate("按同来源货值÷数量计算") : "";
+        const details = [denomination, note].filter(Boolean).join(" · ");
+        return `${value(price.value)}${details ? `<small>${this.escape(details)}</small>` : ""}`;
+      }
+      if (field === "unit_price" && this.materialValueIsPlaceholder(field, row[field], row)) return "—";
+      if (missingPacking(field, row[field])) return ocTranslate("待补");
       return value(row[field]);
     };
     const cells = row => columns.map(([field]) => `<td>${displayCell(row, field)}</td>`).join("");
@@ -3785,20 +3860,42 @@
         const total = field === "package_count"
           ? (shared.option.package_count_override ?? shared.group[field])
           : shared.group[field];
-        return `<td class="is-packing-group" rowspan="${Number(shared.size)}">${value(total)}<small>${ocTranslate("共享 1 箱总计 · {0} 个物料", [Number(shared.size)])}</small></td>`;
+        return `<td class="is-packing-group" rowspan="${Number(shared.size)}">${missingPacking(field, total) ? ocTranslate("待补") : value(total)}<small>${ocTranslate("共享 1 箱总计 · {0} 个物料", [Number(shared.size)])}</small></td>`;
       }).join("");
     };
-    const fieldLabels = Object.fromEntries(columns);
-    const fieldColumnOrder = [...columns, ["goods_value", "采购货值 RMB"], ["purchase_uom", "采购单位"], ["unit_price_uom", "单价单位"], ["volume_weight_kg", "体积重 kg"], ["chargeable_weight_kg", "计费重 kg"], ["weight_ratio", "重量占比"], ["packaging_type", "包装类型"]];
-    fieldColumnOrder.forEach(([fieldname, label]) => { fieldLabels[fieldname] = label; });
-    const currentItems = catalog.rows || [];
+    const fieldColumnOrder = [...columns.flatMap(([field, label]) => {
+      if (field === "purchase_original_currency") return [["purchase_currency", "币种"]];
+      return field === "purchase_original_amount" ? [] : [[field, label]];
+    }), ["purchase_uom", "采购单位"], ["unit_price_uom", "单价单位"], ["volume_weight_kg", "体积重 kg"],
+      ["chargeable_weight_kg", "计费重 kg"], ["weight_ratio", "重量占比"], ["packaging_type", "包装类型"]];
+    const fieldLabels = Object.fromEntries(fieldColumnOrder);
+    const currentItems = new Map();
+    (catalog.stage_snapshots || []).forEach(stage => (stage.rows || []).forEach(row => {
+      if (row.item_name && row.baseline_values && !currentItems.has(String(row.item_name))) {
+        currentItems.set(String(row.item_name), row.baseline_values);
+      }
+    }));
+    (catalog.rows || []).forEach(row => {
+      const name = row.target_item_name || row.values?.name;
+      if (name && row.origin === "current") currentItems.set(String(name), row.values);
+    });
     const itemLabel = itemName => {
-      const row = currentItems.find(candidate => candidate.origin === "current" && String(candidate.target_item_name || candidate.values?.name || "") === String(itemName || ""));
-      const code = row?.values?.material_code;
-      const name = row?.values?.product_name;
+      const row = currentItems.get(String(itemName || ""));
+      const code = row?.material_code;
+      const name = row?.product_name;
       return [code, name && String(name) !== String(code) ? name : ""].filter(Boolean).join(" · ") || itemName;
     };
-    const fieldChoiceSection = this.renderMaterialAIPackingStages(fill, selection, fieldColumnOrder, fieldLabels, value, busy, itemLabel);
+    const fieldChoiceSection = this.renderMaterialAIPackingStages(fill, selection, fieldColumnOrder, fieldLabels, value,
+      selection.mode === "add_selected" ? "disabled" : busy, itemLabel, results);
+    const reviewResults = [...results.values()].flat().filter(result => result.status === "review");
+    const reviewNotice = reviewResults.length ? `<details class="ocw-mf-ai-preview-unresolved" data-mf-ai-field-issues><summary>${ocTranslate("待核对 {0} 项", [reviewResults.length])}</summary><ul>${reviewResults.map(result => `<li>${value(itemLabel(result.item_name))} · ${this.escape(ocTranslate(fieldLabels[result.fieldname] || result.fieldname))}：${this.escape(ocTranslate(result.message || "待核对"))}</li>`).join("")}</ul></details>` : "";
+    const excludedItemNames = [...new Set((preview?.scope_excluded_item_names || []).filter(Boolean).map(String))];
+    const scopeExclusionNotice = excludedItemNames.length ? `<details class="ocw-mf-ai-preview-unresolved ocw-mf-ai-scope-exclusions" data-mf-ai-scope-exclusions open><summary>${ocTranslate("本票将排除 {0} 行", [excludedItemNames.length])}</summary><p>${ocTranslate("这些物料不在本次来源的货物清单内，确认后不参与本票计算，原记录仍保留在“已排除物料”。")}</p><ul>${excludedItemNames.map(name => `<li>${value(itemLabel(name))}</li>`).join("")}</ul></details>` : "";
+    const finalSummary = preview ? ocTranslate(excludedItemNames.length
+      ? "最终 {0} 行 · 新增 {1} · 排除 {2} · 补充 {3} · 缺项 {4}"
+      : "最终 {0} 行 · 新增 {1} · 移除 {2} · 补充 {3} · 缺项 {4}",
+    [preview.rows?.length || 0, Number(preview.added_count || 0), excludedItemNames.length || Number(preview.removed_count || 0),
+      Number(preview.updated_count || 0), missingCount]) : "";
     const addCandidateRows = (catalog.rows || []).filter(row => row.can_add).map(row => {
       const reason = row.blocked_reason || row.default_selection_reason || "";
       return `<tr><td><input type="checkbox" data-mf-ai-row-select="${this.escape(row.row_id)}" ${fill.applying ? "disabled" : ""} ${selection.rows.has(String(row.row_id)) ? "checked" : ""} aria-label="${this.escape(ocTranslate("选择 {0}", [row.values?.product_name || row.values?.material_code || row.row_id]))}"></td>${cells(row.values || {})}<td>${value(reason)}</td></tr>`;
@@ -3807,14 +3904,16 @@
     const hasAddCandidates = (catalog.rows || []).some(row => row.can_add);
     const feePolicy = this.materialAIReviewFeePolicy(fill);
     const feeSection = this.renderMaterialAIFeeStages(fill, selection, feePolicy, value);
-    const modeSummary = selection.mode === "update_selected" ? "将更新已选字段，不清空其他内容" : selection.mode === "add_selected" ? "仅新增已选物料，不同时更新费用" : "只补缺失字段，保留已有内容";
-    const modeHelp = selection.mode === "update_selected" ? "更新已选字段，未选字段与其他行保留。" : selection.mode === "add_selected" ? "仅新增明确勾选的未匹配物料；本次不同时更新现有行或费用。" : "只补真正缺失的字段；已填金额、数量和 0 值保留。";
+    const modeSummary = excludedItemNames.length ? ocTranslate("确认后将按下方清单调整本票物料范围")
+      : selection.mode === "update_selected" ? "将更新已选字段，不清空其他内容" : selection.mode === "add_selected" ? "仅新增已选物料，不同时更新费用" : "只补缺失字段，保留已有内容";
+    const modeHelp = excludedItemNames.length ? modeSummary
+      : selection.mode === "update_selected" ? "更新已选字段，未选字段与其他行保留。" : selection.mode === "add_selected" ? "仅新增明确勾选的未匹配物料；本次不同时更新现有行或费用。" : "只补真正缺失的字段；已填金额、数量和 0 值保留。";
     const scopeNotice = `<p class="ocw-mf-ai-scope-summary" data-mf-ai-material-scope>${ocTranslate("定行依据：国际物流/支付申请/采购支出")}</p>`;
     return `<div class="ocw-mf-ai-review-dialog" data-mf-ai-review-host="1"><header><div><strong>${ocTranslate("填充预览")}</strong><span>${modeSummary}</span></div></header>
       <main class="ocw-mf-ai-dialog-body"><details class="ocw-mf-ai-row-controls"><summary>${ocTranslate("更多设置")}</summary><div><label>${ocTranslate("填充方式")} <select data-mf-ai-row-mode ${busy}><option value="update_selected" ${selection.mode === "update_selected" ? "selected" : ""}>${ocTranslate("更新所选行（默认）")}</option><option value="fill_missing" ${selection.mode === "fill_missing" ? "selected" : ""}>${ocTranslate("只补缺失")}</option>${hasAddCandidates ? `<option value="add_selected" ${selection.mode === "add_selected" ? "selected" : ""}>${ocTranslate("单独确认新增")}</option>` : ""}</select></label><p>${modeHelp}</p></div></details>
       ${scopeNotice}${fieldChoiceSection}${selection.mode === "add_selected" ? `<section class="ocw-mf-ai-preview-section"><h4>${ocTranslate("待新增物料")} <span>${ocTranslate("已选 {0} / {1}", [selection.rows.size, addCandidateRows ? (catalog.rows || []).filter(row => row.can_add).length : 0])}</span></h4><div class="ocw-mf-ai-row-toolbar"><button type="button" class="ocw-outline-btn" data-action="mf-ai-row-all" ${busy}>${ocTranslate("全选可用行")}</button><button type="button" class="ocw-outline-btn" data-action="mf-ai-row-none" ${busy}>${ocTranslate("全不选")}</button></div>${addCandidateTable}</section>` : ""}
       ${feeSection}
-      ${mergedAmountSummary}${packingGroupSummary}<section class="ocw-mf-ai-preview-section" data-mf-ai-final-preview><h4>${ocTranslate("确认后物料清单")}</h4>${selection.loading ? `<p role="status">${ocTranslate("正在更新服务器预览…")}</p>` : preview ? `<p>${ocTranslate("最终 {0} 行 · 新增 {1} · 移除 {2} · 补充 {3} · 缺项 {4}", [preview.rows?.length || 0, Number(preview.added_count || 0), Number(preview.removed_count || 0), Number(preview.updated_count || 0), missingCount])}</p><div class="ocw-mf-ai-preview-table"><table class="ocw-mf-ai-final-table"><thead><tr>${columns.map(([, label]) => `<th>${ocTranslate(label)}</th>`).join("")}</tr></thead><tbody>${(preview.rows || []).map(row => `<tr>${finalCells(row)}</tr>`).join("")}</tbody></table></div>` : `<p>${ocTranslate("等待服务器预览。")}</p>`}${notices.length ? `<ul>${notices.map(row => `<li>${this.escape(typeof row === "string" ? row : row.message || row.reason || row.fieldname || ocTranslate("待核对"))}</li>`).join("")}</ul>` : ""}</section>
+      ${mergedAmountSummary}${packingGroupSummary}<section class="ocw-mf-ai-preview-section" data-mf-ai-final-preview><h4>${ocTranslate("确认后物料清单")}</h4>${reviewNotice}${scopeExclusionNotice}${selection.loading ? `<p role="status">${ocTranslate("正在更新服务器预览…")}</p>` : preview ? `<p>${finalSummary}</p><div class="ocw-mf-ai-preview-table"><table class="ocw-mf-ai-final-table"><thead><tr>${columns.map(([, label]) => `<th>${ocTranslate(label)}</th>`).join("")}</tr></thead><tbody>${(preview.rows || []).map(row => `<tr>${finalCells(row)}</tr>`).join("")}</tbody></table></div>` : `<p>${ocTranslate("等待服务器预览。")}</p>`}${notices.length ? `<ul>${notices.map(row => `<li>${this.escape(typeof row === "string" ? row : row.message || row.reason || row.fieldname || ocTranslate("待核对"))}</li>`).join("")}</ul>` : ""}</section>
       ${selection.error ? `<p class="ocw-mf-ai-review-error" role="alert">${this.escape(selection.error)}</p>` : ""}
       <details class="ocw-mf-ai-review-advanced" data-mf-ai-review-evidence><summary>${ocTranslate("查看依据与其他记录")}</summary>${this.renderMaterialAIReviewSources(fill)}<button class="ocw-outline-btn" type="button" data-action="mf-ai-change-sources" ${busy}>${ocTranslate("更换来源并重新生成")}</button></details></main>
       <footer class="ocw-mf-ai-dialog-footer"><span>${ocTranslate("确认前不会修改已保存数据")}</span><div><button class="ocw-outline-btn" type="button" data-action="mf-ai-review-cancel" ${busy}>${ocTranslate("取消")}</button><button class="ocw-outline-btn" type="button" data-action="mf-ai-discard" ${busy}>${ocTranslate("放弃草稿")}</button><button class="ocw-outline-btn" type="button" data-action="mf-ai-row-preview" ${selection.loading || fill.applying ? "disabled" : ""}>${ocTranslate("重新读取资料源")}</button><button class="ocw-primary-btn" type="button" data-action="mf-ai-apply" ${this.canConfirmMaterialAIRowSelection(fill) ? "" : "disabled"}>${fill.applying ? ocTranslate("正在填充…") : selection.mode === "add_selected" ? ocTranslate("确认新增") : ocTranslate("确认填充")}</button></div></footer></div>`;

@@ -17,13 +17,16 @@ from .effective_logistics_source import json_dict
 from .logistics_settlement.fee_policy import row_scopes
 from .logistics_settlement.model import digest
 from .material_value_semantics import is_effectively_missing
+from .purchase_value_evidence import PURCHASE_VALUE_REVIEW_MESSAGES
 from .shipment_cost_service import activate_shipment_valuation
 from overseas_costing.utils.field_mapper import normalize_unit
 
-POLICY = 'ai-field-review-7'
+POLICY = 'ai-field-review-8'
 PHYSICAL = ('gross_weight_kg','net_weight_kg','volume_m3','volume_weight_kg','chargeable_weight_kg','weight_ratio','package_count','packaging_type')
 IDENTITY = ('material_code','product_name','spec_model')
-FILL_FIELDS = (*PHYSICAL,'actual_shipped_qty','shipped_uom','project_collection','unit_price','purchase_currency','purchase_uom','unit_price_uom','goods_value','shipment_value_rmb')
+FILL_ONLY = frozenset({'product_name','spec_model','recipient','supplier'})
+FILL_FIELDS = (*PHYSICAL,'actual_shipped_qty','shipped_uom','project_collection','unit_price','purchase_currency','purchase_uom','unit_price_uom','goods_value','shipment_value_rmb',
+               'product_name','spec_model','recipient','supplier')
 VALUE_FIELDS = frozenset({'goods_value', 'shipment_value_rmb', 'unit_price'})
 PRICE_FIELDS = frozenset({'unit_price', 'purchase_currency', 'purchase_uom', 'unit_price_uom'})
 MISSING_LABELS = {'material_code':'SKU','actual_shipped_qty':'数量','shipped_uom':'单位','gross_weight_kg':'毛重','volume_m3':'体积'}
@@ -74,9 +77,28 @@ UNREADABLE_SOURCE_STATUSES = frozenset({
 
 
 def missing(row, field):
+    if field == 'supplier':
+        from .supplier_resolution_service import NO_SUPPLIER_MARKERS
+        if str(row.get(field) or '').strip() in NO_SUPPLIER_MARKERS:
+            return False
+    if field == 'shipment_value_rmb' and row.get('shipment_valuation_status') in {'automatic', 'manual'}:
+        from .purchase_value_evidence import number
+        if number(row.get(field)) == 0:
+            return False
     mask = json_dict(row.get('extra_json')).get('settlement_packing_missing') or []
     return (is_effectively_missing(field,row.get(field),row)
             or (field == 'actual_shipped_qty' and 'quantity' in mask))
+
+
+def _missing_candidate(row, field):
+    from .purchase_value_evidence import number
+    values = row.get('values') or {}
+    basis = _value_basis({'fieldname': field}, row)
+    if (isinstance(basis, dict) and not basis.get('error')
+            and number(values.get(field)) == 0 and number(basis.get('amount_rmb')) == 0
+            and (basis.get('source_refs') or basis.get('source'))):
+        return False
+    return missing(values, field)
 
 
 def _unit(row):
@@ -599,7 +621,7 @@ def _source_groups(catalog_rows, sources):
     return groups
 
 
-def _field_candidates(catalog_rows):
+def _field_candidates(catalog_rows, *, fx_rates=None):
     """Resolve fields inside each process, then fall through business stages."""
 
     result=[]
@@ -614,7 +636,7 @@ def _field_candidates(catalog_rows):
         confidence=float(row.get('confidence') or 0)
         for fieldname in row.get('fields') or []:
             value=(row.get('values') or {}).get(fieldname)
-            if missing(row.get('values') or {},fieldname):
+            if _missing_candidate(row, fieldname):
                 continue
             correction_evidence,field_mismatch=_matching_correction_evidence(
                 row,fieldname,value,identifier_counts,correction_clause_cache)
@@ -622,23 +644,29 @@ def _field_candidates(catalog_rows):
             process_conflict=bool(row.get('_review_process_conflict') or process_conflict_ids)
             candidate_id=digest(POLICY,'field-candidate',row.get('row_id'),row.get('target_item_name'),fieldname)
             can_apply=bool(row.get('candidate_can_apply'))
-            value_error = ''
-            if fieldname == 'goods_value' and row.get('proposal_type') == 'item_update' and not row.get('_purchase_value_fact'):
+            value_error = row.get('_review_unresolved_reason') or ''
+            if value_error:
                 can_apply = False
-                value_error = '货值缺少同一来源行的数量、单位或币种依据，请核对资料后重新分析。'
-            if fieldname in PRICE_FIELDS and row.get('_price_metadata') and not row.get('_review_price_valuation'):
+            if fieldname == 'goods_value' and not row.get('_purchase_value_fact'):
                 can_apply = False
-                value_error = '采购单价缺少同源数量、单位、币种或汇率依据，仅供核对。'
+                value_error = value_error or '货值缺少同一来源行的数量、单位或币种依据，请核对资料后重新分析。'
+            if fieldname == 'shipment_value_rmb' and not row.get('_shipment_valuation'):
+                can_apply = False
+                value_error = value_error or '发货货值缺少经核验的同一来源行依据。'
+            if fieldname in PRICE_FIELDS and not row.get('_review_price_valuation'):
+                can_apply = False
+                value_error = value_error or '采购单价缺少同源数量、单位、币种或汇率依据，仅供核对。'
             current = current_by_item.get(row.get('target_item_name'), {})
             from .purchase_value_evidence import number
             current_meta = json_dict(current.get('extra_json'))
             protected_value = (number(current.get('unit_price')) is not None and number(current['unit_price']) > 0
-                or current_meta.get('manual_shipment_valuation')
+                or _manual_shipment_value(current_meta)
                 or current.get('shipment_value_rmb') is not None)
+            verified_field = (row.get('_review_verified_fields') or {}).get(fieldname) or {}
             result.append({
                 'candidate_id':candidate_id,'item_name':row.get('target_item_name'),'fieldname':fieldname,
                 'suggested_value':deepcopy(value),'row_id':row.get('row_id'),'source_group_id':row.get('source_group_id'),
-                'source_label':row.get('source_label'),'source_refs':deepcopy(row.get('source_refs') or []),
+                'source_label':row.get('source_label'),'source_refs':deepcopy(verified_field.get('source_refs') or row.get('source_refs') or []),
                 'source_priority':int(row.get('source_priority') or 999999),
                 'workflow_stage':row.get('workflow_stage') or 'other','workflow_rank':int(row.get('workflow_rank') or 0),
                 'evidence_kind':('comment' if correction_evidence else row.get('evidence_kind') or 'other'),
@@ -648,6 +676,8 @@ def _field_candidates(catalog_rows):
                     not process_conflict
                     and not field_mismatch
                     and not (fieldname in VALUE_FIELDS | PRICE_FIELDS and protected_value)
+                    and not (fieldname in FILL_ONLY and not missing(current, fieldname))
+                    and not (fieldname in ('actual_shipped_qty', 'shipped_uom') and _manual_shipping(current))
                     and fieldname not in set(row.get('existing_value_conflict_fields') or [])),
                 'stage_snapshot_id':(
                     (row.get('stage_snapshot_id') or _stage_snapshot_id(row.get('workflow_stage')))
@@ -677,6 +707,7 @@ def _field_candidates(catalog_rows):
                 '_review_primary_source_id':str(
                     (correction_evidence or {}).get('source_id')
                     or row.get('_review_primary_source_id') or ''),
+                'value_basis': _public_value_basis(fieldname, row),
             })
     # A trusted parser result and the semantic pass may independently report
     # the same field from the same exact evidence row.  That is corroboration,
@@ -697,6 +728,7 @@ def _field_candidates(catalog_rows):
             candidate.get('workflow_stage'),candidate.get('process_instance_id'),
             evidence_id,candidate.get('correction_kind'),
             candidate.get('_review_occurred_at'),
+            _candidate_evidence_key(candidate, rows_by_id[candidate['row_id']]),
         )
         existing=equivalent.get(key)
         if not existing:
@@ -801,7 +833,7 @@ def _field_candidates(catalog_rows):
                     '来源未分类，仅保留为审计候选，不参与默认裁决。'
                     if candidate['workflow_stage'] not in default_stages else
                     '未作为默认值，保留为本字段可改选候选。')
-    _resolve_value_basis_defaults(result, rows_by_id)
+    _resolve_value_basis_defaults(result, rows_by_id, fx_rates=fx_rates)
     _decorate_candidate_presentation_groups(
         result,
         namespace='field-candidate',
@@ -811,6 +843,8 @@ def _field_candidates(catalog_rows):
             candidate.get('workflow_stage'),
             _canonical_field_candidate(
                 candidate.get('fieldname'),candidate.get('suggested_value')),
+            (_candidate_evidence_key(candidate, rows_by_id[candidate['row_id']])
+             if candidate['fieldname'] in VALUE_FIELDS | PRICE_FIELDS else ''),
         ),
         rank_key=lambda candidate: (
             not candidate.get('can_apply'),
@@ -850,37 +884,87 @@ def _value_basis(candidate, row):
     return None
 
 
-def _resolve_value_basis_defaults(candidates, rows_by_id):
+def _public_value_basis(field, row):
+    basis = _value_basis({'fieldname': field}, row)
+    return ({key: basis[key] for key in ('original_amount', 'currency', 'amount_rmb', 'quantity', 'uom')
+             if key in basis} if isinstance(basis, dict) else {})
+
+
+def _candidate_evidence_key(candidate, row):
+    """Equal numbers from different rows or denominators are not corroboration."""
+    field = candidate['fieldname']
+    if field not in VALUE_FIELDS | PRICE_FIELDS:
+        return ''
+    basis = _value_basis(candidate, row) or (row.get('_review_price_valuation') if field in PRICE_FIELDS else None)
+    refs = (basis or {}).get('source_refs') or candidate.get('source_refs') or []
+    exact_refs = sorted({(*_source_line_locator(ref), str(ref.get('cell') or ''))
+                         for ref in refs if isinstance(ref, dict)})
+    return digest('value-evidence', bool(basis), bool(candidate['can_apply']), exact_refs,
+                  {key: (basis or {}).get(key) for key in
+                   ('original_amount', 'amount_rmb', 'currency', 'quantity', 'uom', 'material_code', 'spec_model',
+                    'unit_price', 'rate_to_rmb', 'method', 'input_fingerprint')})
+
+
+def _source_line_locator(ref):
+    return tuple(str(ref.get(key) or '') for key in (
+        'source_id', 'document_id', 'source_hash', 'field', 'sheet', 'sheet_name', 'row', 'source_row_id', 'page'))
+
+
+def _resolve_value_basis_defaults(candidates, rows_by_id, *, fx_rates=None):
     """A total, unit-price tuple, and shipment total compete for one valuation."""
     by_item = {}
     current = {row['target_item_name']: row['values'] for row in rows_by_id.values()
                if row.get('origin') == 'current'}
-    from .purchase_value_evidence import number, shipment_valuation
+    from .purchase_value_evidence import number
+    from .shipment_cost_service import shipment_value
+
+    final_input_defaults, monetary_by_item = {}, {}
+    for value in candidates:
+        field = value['fieldname']
+        if value['default_selected'] and field in ('actual_shipped_qty', 'shipped_uom', 'spec_model'):
+            final_input_defaults.setdefault(value['item_name'], []).append(value)
+        if field in VALUE_FIELDS | PRICE_FIELDS:
+            monetary_by_item.setdefault(value['item_name'], []).append(value)
+
     def basis_amount(candidate):
-        basis = _value_basis(candidate, rows_by_id[candidate['row_id']])
-        if candidate['fieldname'] == 'goods_value':
-            basis = shipment_valuation(current[candidate['item_name']], basis)
-        return None if basis.get('error') else number(basis.get('amount_rmb'))
+        item_name, field = candidate['item_name'], candidate['fieldname']
+        choice = rows_by_id[candidate['row_id']]
+        initial = current[item_name]
+        row = deepcopy(initial)
+        defaults = final_input_defaults.get(item_name, [])
+        if _shipping_tuple_requires_review(initial, defaults, rows_by_id):
+            return None
+        inputs = {value['fieldname']: value['suggested_value'] for value in defaults}
+        row.update(inputs)
+        _project_shipping(row, set(inputs), fx_rates)
+        row[field] = candidate['suggested_value']
+        if _finalize_selected_basis(row, choice, field, {'_review_fx_rates': fx_rates}):
+            return None
+        valuation = shipment_value(row)
+        return None if valuation.get('error') else number(valuation.get('amount_rmb'))
     for candidate in candidates:
         if candidate['fieldname'] in VALUE_FIELDS and _value_basis(candidate, rows_by_id[candidate['row_id']]):
             by_item.setdefault(candidate['item_name'], []).append(candidate)
     for item_name, values in by_item.items():
+        amounts_by_id = {candidate['candidate_id']: basis_amount(candidate) for candidate in values}
         eligible = [candidate for candidate in values if candidate['can_apply']
                     and candidate['default_eligible'] and candidate['effective_in_stage']
-                    and candidate['confidence'] >= .9 and basis_amount(candidate) is not None]
+                    and candidate['confidence'] >= .9 and amounts_by_id[candidate['candidate_id']] is not None]
         if not eligible:
+            for candidate in monetary_by_item[item_name]:
+                if candidate['default_selected']:
+                    candidate['resolution_reason'] = '当前实发数量、单位或物料身份与货值依据未对齐，请核对后改选。'
+                candidate['default_selected'] = False
             continue
         winner = None
         for rank in sorted({candidate['workflow_rank'] for candidate in eligible}):
             stage = [candidate for candidate in eligible if candidate['workflow_rank'] == rank]
-            amounts = {basis_amount(candidate) for candidate in stage}
+            amounts = {amounts_by_id[candidate['candidate_id']] for candidate in stage}
             if len(amounts) != 1:
                 continue
             winner = min(stage, key=lambda candidate: (candidate['source_priority'], candidate['candidate_id']))
             break
-        for candidate in candidates:
-            if candidate['item_name'] != item_name or candidate['fieldname'] not in VALUE_FIELDS | PRICE_FIELDS:
-                continue
+        for candidate in monetary_by_item[item_name]:
             keep = candidate is winner or (winner and winner['fieldname'] == 'unit_price'
                 and candidate['row_id'] == winner['row_id'] and candidate['fieldname'] in PRICE_FIELDS)
             candidate['default_selected'] = bool(keep and candidate['can_apply'] and candidate['default_eligible'])
@@ -894,21 +978,34 @@ def _coherent_value_choices(selected, candidates, rows_by_id):
         if _value_basis(candidate, rows_by_id[candidate['row_id']]):
             by_item.setdefault(candidate['item_name'], []).append(candidate)
     result = list(selected)
+    outcomes = {}
     for item_name, bases in by_item.items():
         explicit = [candidate for candidate in bases if not candidate.get('default_selected')]
         if len(explicit) > 1:
-            raise ValueError(_('同一物料只能选择一套采购价或货值依据，请保留一项。'))
+            for candidate in result:
+                if candidate['item_name'] == item_name and candidate['fieldname'] in VALUE_FIELDS | PRICE_FIELDS:
+                    outcomes[candidate['candidate_id']] = ('review', 'VALUE_BASIS_CONFLICT',
+                        _('同一物料只能选择一套采购价或货值依据，请保留一项。'))
+            result = [candidate for candidate in result if candidate['candidate_id'] not in outcomes]
+            continue
         winner = explicit[0] if explicit else min(bases, key=lambda candidate:(candidate['workflow_rank'], candidate['source_priority']))
-        result = [candidate for candidate in result if candidate['item_name'] != item_name
-                  or candidate['fieldname'] not in VALUE_FIELDS | PRICE_FIELDS
-                  or candidate is winner
-                  or winner['fieldname']=='unit_price' and candidate['row_id']==winner['row_id'] and candidate['fieldname'] in PRICE_FIELDS]
+        remaining = []
+        for candidate in result:
+            if (candidate['item_name'] != item_name or candidate['fieldname'] not in VALUE_FIELDS | PRICE_FIELDS
+                    or candidate is winner or (winner['fieldname'] == 'unit_price'
+                        and candidate['row_id'] == winner['row_id'] and candidate['fieldname'] in PRICE_FIELDS)):
+                remaining.append(candidate)
+            else:
+                outcomes[candidate['candidate_id']] = ('retain', 'VALUE_BASIS_NOT_SELECTED',
+                    _('该字段随已选货值或单价依据处理，不单独更新。'))
+        result = remaining
         if winner['fieldname']=='unit_price':
             for candidate in candidates:
                 if (candidate['row_id']==winner['row_id'] and candidate['fieldname'] in PRICE_FIELDS
                         and candidate['can_apply'] and candidate not in result):
                     result.append(candidate)
-    return result
+                    outcomes.pop(candidate['candidate_id'], None)
+    return result, outcomes
 
 
 def _canonical_field_candidate(fieldname,value):
@@ -1625,7 +1722,10 @@ def catalog(items, proposals, fees, context, *, run_id, sources=None, fx_rates=N
         except (InvalidOperation,ValueError):valid=False;reason='数量格式无法识别。'
         if proposal.get('blocked'):
             valid=False;reason=proposal.get('reason') or '来源资料待核对。'
-        fill_fields=list(fields if fields is not None else FILL_FIELDS)
+        verified = proposal.get('_review_verified_fields') if proposal.get('result_origin') == 'SYSTEM' else {}
+        verified = verified if isinstance(verified, dict) else {}
+        fill_fields=[field for field in (fields if fields is not None else FILL_FIELDS)
+                     if field not in FILL_ONLY or field in verified]
         if origin=='source' and target and not any(not missing(values,f) and missing(original[target],f) for f in fill_fields):
             fillable=False
             reason=reason or '当前物料已有明确值，本行没有可补的空缺。'
@@ -1652,6 +1752,10 @@ def catalog(items, proposals, fees, context, *, run_id, sources=None, fx_rates=N
                      'existing_value_conflict_fields':deepcopy(proposal.get('existing_value_conflict_fields') or []),
                      'candidate_can_apply':bool(valid and len(matches)==1 and target and not proposal.get('blocked')),
                      'proposal_id':proposal.get('proposal_id'),'proposal_type':proposal.get('proposal_type'),'fields':fill_fields})
+        if verified:
+            rows[-1]['_review_verified_fields'] = deepcopy(verified)
+        if proposal.get('_review_unresolved_reason'):
+            rows[-1]['_review_unresolved_reason'] = str(proposal['_review_unresolved_reason'])
         if price_metadata is not None:
             rows[-1]['_price_metadata']=deepcopy(price_metadata)
             from .purchase_value_evidence import price_valuation
@@ -1722,7 +1826,9 @@ def catalog(items, proposals, fees, context, *, run_id, sources=None, fx_rates=N
                     stable=row.get('stable_line_key') or row.get('package_identity'))
         elif kind=='item_update':
             target=str(proposal.get('target_item_name') or payload.get('item_name') or '')
-            fields={k:v for k,v in (payload.get('fields') or {}).items() if k in FILL_FIELDS}
+            verified = proposal.get('_review_verified_fields') if proposal.get('result_origin') == 'SYSTEM' else {}
+            fields={k:v for k,v in (payload.get('fields') or {}).items()
+                    if k in FILL_FIELDS and (k not in FILL_ONLY or isinstance(verified, dict) and k in verified)}
             if not fields:continue
             existing=original.get(target)
             if not existing:
@@ -1730,6 +1836,14 @@ def catalog(items, proposals, fees, context, *, run_id, sources=None, fx_rates=N
                 if matched:
                     target=matched['target_item_name']
                     existing=original.get(target)
+                    if not existing and matched.get('can_add'):
+                        # Adding a new row and binding procurement evidence to
+                        # an existing target are separate confirmations.
+                        pending = {key for key in fields if key in VALUE_FIELDS | PRICE_FIELDS
+                                   or key in (proposal.get('_review_verified_fields') or {})}
+                        pending = {key for key in pending if matched['values'].get(key) != fields.get(key)}
+                        if pending:
+                            matched['pending_add_fields'] = sorted(set(matched.get('pending_add_fields') or ()) | pending)
             if not existing:continue
             values={k:existing.get(k) for k in (*IDENTITY,'unit','shipped_uom','stable_line_key')}
             values.update(fields)
@@ -1758,7 +1872,7 @@ def catalog(items, proposals, fees, context, *, run_id, sources=None, fx_rates=N
     scope=_material_scope(rows,sources)
     scoped_rows=_rows_in_material_scope(
         rows,scope['item_names'],scope['source_row_ids'],constrained=scope['constrained'])
-    all_field_candidates=_field_candidates(rows)
+    all_field_candidates=_field_candidates(rows, fx_rates=fx_rates)
     scoped_row_ids={str(row.get('row_id') or '') for row in scoped_rows}
     field_candidates=[
         candidate for candidate in all_field_candidates
@@ -1797,6 +1911,164 @@ def catalog(items, proposals, fees, context, *, run_id, sources=None, fx_rates=N
                                  stage_snapshots,fee_stage_snapshots,scope)}
 
 
+def _manual_shipment_value(meta):
+    from .shipment_cost_service import legacy_manual_shipment_valuation
+
+    manual = meta.get('manual_shipment_valuation') or {}
+    return (bool(manual.get('confirmed') and manual.get('manual'))
+            or bool(legacy_manual_shipment_valuation(meta.get('shipment_valuation'))))
+
+
+def _manual_shipping(row):
+    return (str(row.get('actual_shipped_qty_mode') or '').upper() == 'MANUAL_CONFIRMED'
+            or _manual_shipment_value(json_dict(row.get('extra_json'))))
+
+
+def _shipping_tuple_requires_review(initial, candidates, rows_by_id):
+    """A changed unit may not reinterpret an independently stored quantity."""
+    from .purchase_value_evidence import number, same_uom
+    from .shipment_cost_service import shipment_input
+
+    unit_choice = next((choice for choice in candidates if choice['fieldname'] == 'shipped_uom'), None)
+    if not unit_choice:
+        return False
+    prior = shipment_input(initial)
+    quantity = number(prior['quantity'])
+    if quantity is None or quantity <= 0 or same_uom(prior['uom'], unit_choice['suggested_value']):
+        return False
+    quantity_choice = next((choice for choice in candidates if choice['fieldname'] == 'actual_shipped_qty'), None)
+    if not quantity_choice:
+        return True
+
+    def locators(candidate):
+        return {_source_line_locator(ref)
+                for ref in candidate.get('source_refs') or []
+                if isinstance(ref, dict) and (ref.get('source_id') or ref.get('document_id')) and ref.get('row')}
+
+    quantity_refs, unit_refs = locators(quantity_choice), locators(unit_choice)
+    if len(quantity_refs) == 1 and quantity_refs == unit_refs:
+        return False
+    return not (quantity_choice['row_id'] == unit_choice['row_id']
+                and rows_by_id[unit_choice['row_id']].get('proposal_type') == 'logistics_reconcile'
+                and not unit_choice.get('process_conflict'))
+
+
+def _project_shipping(row, changed_fields, fx_rates=None):
+    """Resolve the final shipping state before presenting or saving valuation."""
+    from .effective_source_values import PHYSICAL_FIELDS as overlay_fields
+    from .logistics_settlement.valuation import value_final_cargo
+    from .purchase_value_evidence import number
+
+    if not changed_fields:
+        return
+    metadata = json_dict(row.get('extra_json'))
+    if 'actual_shipped_qty' in changed_fields:
+        row['actual_shipped_qty_mode'] = 'EXPLICIT_SOURCE'
+        changed_fields = {*changed_fields, 'actual_shipped_qty_mode'}
+    cargo = metadata.get('settlement_cargo')
+    if cargo and changed_fields.intersection({'actual_shipped_qty', 'shipped_uom'}):
+        cargo = {**cargo}
+        if 'actual_shipped_qty' in changed_fields:
+            cargo['quantity'] = row.get('actual_shipped_qty')
+        if 'shipped_uom' in changed_fields:
+            cargo['unit'] = row.get('shipped_uom')
+        metadata['settlement_cargo'] = cargo
+        previous = metadata.get('settlement_valuation') or {}
+        if not previous.get('trusted_shipment_source'):
+            rates = {**(previous.get('fx_context') or {})}
+            if (fx_rates or {}).get('USD'):
+                rates['fx_usd_to_rmb'] = fx_rates['USD']
+            mxn = number((fx_rates or {}).get('MXN'))
+            if mxn is not None and mxn > 0:
+                rates['fx_rmb_to_mxn'] = str(Decimal(1) / mxn)
+            metadata['settlement_valuation'] = value_final_cargo({**row, 'extra_json': metadata}, cargo, rates)
+    physical = metadata.get('settlement_physical') or {}
+    if physical:
+        values = {**(physical.get('values') or {})}
+        values.update({field: deepcopy(row.get(field)) for field in changed_fields if field in overlay_fields})
+        metadata['settlement_physical'] = {**physical, 'values': values}
+    row['extra_json'] = metadata
+    row.pop('effective_shipping', None)
+
+
+def _field_result(candidate, status, code='', message=''):
+    return {**{key: candidate.get(key) for key in ('item_name', 'fieldname', 'candidate_id')},
+            'status': status, 'code': code, 'message': message}
+
+
+_VALUE_REVIEW_MESSAGES = {
+    **PURCHASE_VALUE_REVIEW_MESSAGES,
+    'PURCHASE_VALUE_EVIDENCE_REQUIRED': '货值缺少同一来源行的数量、单位或币种依据，请核对资料后重新分析。',
+    'SHIPMENT_VALUATION_STALE': '货值依据的数量或单位与最终发货明细不一致，请重新核对。',
+    'PURCHASE_PRICE_EVIDENCE_REQUIRED': '采购单价缺少同源数量、单位、币种或汇率依据，请重新核对。',
+}
+
+
+def _finalize_selected_basis(row, choice, field, catalog):
+    """Activate a single selected basis only if it values the final row."""
+    from .purchase_value_evidence import bind_purchase_value, number, same_uom, shipment_valuation
+    from .shipment_cost_service import shipment_input
+    from .logistics_settlement.model import currency
+
+    meta = json_dict(row.get('extra_json'))
+    if field == 'goods_value':
+        fact = choice.get('_purchase_value_fact')
+        if not fact:
+            return 'PURCHASE_VALUE_EVIDENCE_REQUIRED'
+        if number(row.get('goods_value')) != number(fact.get('amount_rmb')):
+            return 'PURCHASE_VALUE_EVIDENCE_REQUIRED'
+        bound = bind_purchase_value(row, fact)
+        if bound is None:
+            return 'PURCHASE_VALUE_IDENTITY_MISMATCH'
+        valuation = shipment_valuation(row, bound)
+        if valuation.get('error'):
+            return valuation['error']
+        _activate_purchase_value(row, meta, bound)
+        row['extra_json'] = meta
+    elif field == 'shipment_value_rmb':
+        valuation = choice.get('_shipment_valuation') or {}
+        inputs = shipment_input(row)
+        amount = number(valuation.get('amount_rmb'))
+        if (valuation.get('error') or amount is None or amount < 0 or currency(valuation.get('currency')) != 'RMB'
+                or number(inputs['quantity']) != number(valuation.get('quantity'))
+                or not same_uom(inputs['uom'], valuation.get('uom'))):
+            return 'SHIPMENT_VALUATION_STALE'
+        row['_shipment_valuation'] = deepcopy(valuation)
+        activate_shipment_valuation(meta, valuation)
+        row['extra_json'] = meta
+    elif field == 'unit_price':
+        if not choice.get('_review_price_valuation'):
+            return 'PURCHASE_PRICE_EVIDENCE_REQUIRED'
+        try:
+            _activate_selected_price(row, choice, catalog)
+        except ValueError:
+            return 'PURCHASE_PRICE_EVIDENCE_REQUIRED'
+    return ''
+
+
+def _write_field_proof(row, field, candidate):
+    meta = json_dict(row.get('extra_json'))
+    meta.setdefault('ai_row_fields', {})[field] = {
+        'candidate_id': candidate['candidate_id'], 'row_id': candidate['row_id'],
+        'source_refs': deepcopy(candidate.get('source_refs') or [])}
+    mask = set(meta.get('settlement_packing_missing') or [])
+    mask.discard(field)
+    if field == 'actual_shipped_qty':
+        mask.discard('quantity')
+    meta['settlement_packing_missing'] = sorted(mask)
+    row['extra_json'] = meta
+    row['_row_action'] = 'source'
+
+
+def _spec_would_activate_legacy_value(initial, row):
+    from .shipment_cost_service import shipment_value
+
+    old_fact = json_dict(initial.get('extra_json')).get('adopted_purchase_value')
+    return (isinstance(old_fact, dict) and 'target_identity' not in old_fact
+            and shipment_value(initial).get('error') == 'PURCHASE_VALUE_IDENTITY_MISMATCH'
+            and shipment_value(row).get('amount_rmb') is not None)
+
+
 def project(items, catalog, row_ids, fee_ids, mode, *, field_choices=None):
     if mode not in ('fill_missing','update_selected','add_selected','replace_all'):raise ValueError(_('请选择补充空缺、更新所选行、单独新增或替换整票。'))
     if not isinstance(row_ids,list) or not isinstance(fee_ids,list):raise ValueError(_('请选择有效的物料行和费用。'))
@@ -1809,8 +2081,21 @@ def project(items, catalog, row_ids, fee_ids, mode, *, field_choices=None):
     chosen=[r for r in catalog['rows'] if r['row_id'] in row_ids]
     if mode=='update_selected':
         chosen.sort(key=lambda row:(int(row.get('source_priority') or 999999),str(row.get('row_id') or '')))
+    if field_choices is None and chosen and mode in ('update_selected', 'fill_missing'):
+        # Older clients selected a row wholesale. Resolve that request through
+        # the same field guards, value basis and projection used by today's UI.
+        candidates_by_row = {}
+        for candidate in catalog.get('field_candidates') or []:
+            candidates_by_row.setdefault(candidate['row_id'], []).append(candidate)
+        field_choices = {}
+        for row in chosen:
+            for candidate in candidates_by_row.get(row['row_id'], []):
+                key = f"{candidate['item_name']}:{candidate['fieldname']}"
+                field_choices.setdefault(key, candidate['candidate_id'])
     selected_fees=[r for r in catalog['fees'] if r['proposal_id'] in fee_ids]
     selected_field_candidates=[]
+    selection_outcomes={}
+    requested_field_candidates=[]
     if field_choices is not None:
         if not isinstance(field_choices,dict) or any(not isinstance(key,str) or not isinstance(value,str) for key,value in field_choices.items()):
             raise ValueError(_('逐字段选择格式不正确。'))
@@ -1822,14 +2107,20 @@ def project(items, catalog, row_ids, fee_ids, mode, *, field_choices=None):
             actual_key=f"{candidate['item_name']}:{candidate['fieldname']}"
             if expected_key!=actual_key:
                 raise ValueError(_('逐字段选择与物料不匹配。'))
-            if not candidate.get('can_apply'):
-                raise ValueError(candidate.get('resolution_reason') or '本字段候选不可采用。')
-            selected_field_candidates.append(candidate)
-        selected_field_candidates = _coherent_value_choices(
+            requested_field_candidates.append(candidate)
+            if candidate.get('can_apply'):
+                selected_field_candidates.append(candidate)
+            else:
+                selection_outcomes[candidate_id] = ('review', 'FIELD_EVIDENCE_REQUIRED',
+                    candidate.get('resolution_reason') or _('本字段候选不可采用。'))
+        selected_field_candidates, dispositions = _coherent_value_choices(
             selected_field_candidates, catalog.get('field_candidates') or [], rows_by_id)
+        selection_outcomes.update(dispositions)
     for row in chosen:
         allowed_key=('can_fill' if mode=='fill_missing' else 'can_update' if mode=='update_selected'
                      else 'can_add' if mode=='add_selected' else 'can_replace')
+        if row.get('_review_unresolved_reason'):
+            raise ValueError(row['_review_unresolved_reason'])
         if not row.get(allowed_key):raise ValueError(row['blocked_reason'] or '本行不可采用。')
     for fee in selected_fees:
         if not fee['can_apply']:raise ValueError(fee['blocked_reason'])
@@ -1852,54 +2143,131 @@ def project(items, catalog, row_ids, fee_ids, mode, *, field_choices=None):
     result=[{**deepcopy(i),'_row_action':'retain'} for i in items] if mode in ('fill_missing','update_selected','add_selected') else []
     original={i['name']:i for i in items};used=set();used_choices={};changes=[];added=0
     if field_choices is not None and mode in ('fill_missing','update_selected'):
+        candidates_by_item = {}
         for candidate in sorted(selected_field_candidates,key=lambda value:(value['item_name'],value['fieldname'],value['candidate_id'])):
-            row=next((value for value in result if value.get('name')==candidate['item_name']),None)
-            if row is None:raise ValueError(_('逐字段候选的目标物料已变化，请刷新。'))
-            field=candidate['fieldname']
-            if mode=='fill_missing' and field in PRICE_FIELDS and not missing(original[candidate['item_name']], 'unit_price'):
-                continue
-            if mode=='fill_missing' and not missing(row,field):
-                continue
-            before=row.get(field);row[field]=deepcopy(candidate['suggested_value'])
-            meta=json_dict(row.get('extra_json'));field_refs=meta.setdefault('ai_row_fields',{})
-            choice=rows_by_id[candidate['row_id']]
-            if field=='goods_value' and choice.get('_purchase_value_fact'):
-                _activate_purchase_value(row, meta, choice['_purchase_value_fact'])
-            if field=='shipment_value_rmb' and choice.get('_shipment_valuation'):
-                row['_shipment_valuation']=deepcopy(choice['_shipment_valuation'])
-                activate_shipment_valuation(meta, choice['_shipment_valuation'])
-            if field in ('unit_price','purchase_currency','purchase_uom','unit_price_uom') and choice.get('_price_metadata'):
-                row['_price_metadata']=deepcopy(choice['_price_metadata'])
-            field_refs[field]={'candidate_id':candidate['candidate_id'],'row_id':candidate['row_id'],
-                               'source_refs':deepcopy(candidate.get('source_refs') or [])}
-            mask=set(meta.get('settlement_packing_missing') or []);mask.discard(field)
-            if field=='actual_shipped_qty':mask.discard('quantity')
-            meta['settlement_packing_missing']=sorted(mask);row['extra_json']=meta;row['_row_action']='source'
-            changes.append({'candidate_id':candidate['candidate_id'],'row_id':candidate['row_id'],
-                'item_name':candidate['item_name'],'fieldname':field,'previous_value':before,'value':row[field],
-                'source_refs':deepcopy(candidate.get('source_refs') or []),'source_group_id':candidate.get('source_group_id'),
-                'source_priority':candidate.get('workflow_rank'),'workflow_stage':candidate.get('workflow_stage'),
-                'evidence_kind':candidate.get('evidence_kind'),'conflict_override':not candidate.get('default_selected')})
+            candidates_by_item.setdefault(candidate['item_name'], []).append(candidate)
+        if candidates_by_item.keys() - original.keys():
+            raise ValueError(_('逐字段候选的目标物料已变化，请刷新。'))
         for row in result:
-            price_choices=[change for change in changes
-                           if change['item_name']==row.get('name') and change['fieldname']=='unit_price']
-            if price_choices:
-                _activate_selected_price(row, rows_by_id[price_choices[0]['row_id']], catalog)
+            initial = original[row['name']]
+            accepted, monetary = [], []
+            for candidate in candidates_by_item.get(row['name'], []):
+                field = candidate['fieldname']
+                manual_value = _manual_shipment_value(json_dict(initial.get('extra_json')))
+                if ((field in ('actual_shipped_qty', 'shipped_uom') and _manual_shipping(initial))
+                        or (field in VALUE_FIELDS | PRICE_FIELDS and manual_value)):
+                    selection_outcomes[candidate['candidate_id']] = ('retain', 'MANUAL_VALUE_RETAINED',
+                        _('保留人工确认的发货资料或货值。'))
+                elif ((field in FILL_ONLY and not missing(initial, field))
+                      or (mode == 'fill_missing' and (not missing(initial, field)
+                        or field in PRICE_FIELDS and not missing(initial, 'unit_price')))):
+                    selection_outcomes[candidate['candidate_id']] = ('retain', 'EXISTING_VALUE_RETAINED', _('保留当前已有值。'))
+                elif field in VALUE_FIELDS | PRICE_FIELDS:
+                    monetary.append(candidate)
+                else:
+                    row[field] = deepcopy(candidate['suggested_value'])
+                    _write_field_proof(row, field, candidate)
+                    accepted.append(candidate)
+            if _shipping_tuple_requires_review(initial, accepted, rows_by_id):
+                row.clear()
+                row.update({**deepcopy(initial), '_row_action': 'retain'})
+                remaining = []
+                for candidate in accepted:
+                    field = candidate['fieldname']
+                    if field in ('actual_shipped_qty', 'shipped_uom'):
+                        selection_outcomes[candidate['candidate_id']] = ('review', 'SHIPPING_UNIT_QUANTITY_REQUIRED',
+                            _('发货单位有变化，须同时采用同一来源行的实发数量和单位。'))
+                    else:
+                        row[field] = deepcopy(candidate['suggested_value'])
+                        _write_field_proof(row, field, candidate)
+                        remaining.append(candidate)
+                accepted = remaining
+            _project_shipping(row, {candidate['fieldname'] for candidate in accepted}, catalog.get('_review_fx_rates'))
+            if monetary:
+                attempt = deepcopy(row)
+                for candidate in monetary:
+                    field = candidate['fieldname']
+                    attempt[field] = deepcopy(candidate['suggested_value'])
+                    _write_field_proof(attempt, field, candidate)
+                basis = next((candidate for candidate in monetary if candidate['fieldname'] in VALUE_FIELDS), None)
+                error = (_finalize_selected_basis(attempt, rows_by_id[basis['row_id']], basis['fieldname'], catalog)
+                         if basis else 'PURCHASE_PRICE_EVIDENCE_REQUIRED')
+                if error:
+                    for candidate in monetary:
+                        selection_outcomes[candidate['candidate_id']] = ('review', error,
+                            _(_VALUE_REVIEW_MESSAGES.get(error) or '最终货值依据无法验证，请核对。'))
+                else:
+                    row.update(attempt)
+                    accepted.extend(monetary)
+            spec = next((candidate for candidate in accepted if candidate['fieldname'] == 'spec_model'), None)
+            if (spec and not any(candidate['fieldname'] in VALUE_FIELDS for candidate in accepted)
+                    and _spec_would_activate_legacy_value(initial, row)):
+                accepted.remove(spec)
+                selection_outcomes[spec['candidate_id']] = ('review', 'LEGACY_PURCHASE_VALUE_REVIEW_REQUIRED',
+                    _('填写该规格会使历史采购货值生效，请同时确认一项有效货值依据，或取消选择规格。'))
+                if not accepted:
+                    row.clear()
+                    row.update({**deepcopy(initial), '_row_action': 'retain'})
+                else:
+                    if 'spec_model' in initial:
+                        row['spec_model'] = deepcopy(initial['spec_model'])
+                    else:
+                        row.pop('spec_model', None)
+                    metadata = json_dict(row.get('extra_json'))
+                    proofs = metadata.get('ai_row_fields') or {}
+                    previous = (json_dict(initial.get('extra_json')).get('ai_row_fields') or {}).get('spec_model')
+                    if previous is not None:
+                        proofs['spec_model'] = deepcopy(previous)
+                    else:
+                        proofs.pop('spec_model', None)
+                    row['extra_json'] = metadata
+            for candidate in accepted:
+                field = candidate['fieldname']
+                choice = rows_by_id[candidate['row_id']]
+                selection_outcomes[candidate['candidate_id']] = ('apply', '', '')
+                changes.append({'candidate_id':candidate['candidate_id'],'row_id':candidate['row_id'],
+                    'item_name':candidate['item_name'],'fieldname':field,'previous_value':initial.get(field),'value':row[field],
+                    'source_refs':deepcopy(candidate.get('source_refs') or []),'source_group_id':candidate.get('source_group_id'),
+                    'source_priority':candidate.get('workflow_rank'),'workflow_stage':candidate.get('workflow_stage'),
+                    'evidence_kind':candidate.get('evidence_kind'),'conflict_override':not candidate.get('default_selected'),
+                    **({'_review_verified_field': deepcopy(choice['_review_verified_fields'][field])}
+                       if field in (choice.get('_review_verified_fields') or {}) else {})})
         for index,row in enumerate(result,1):row['row_no']=index
-        _present_purchase_values(result)
+        _present_purchase_values(result, {change['item_name'] for change in changes if change['fieldname'] == 'goods_value'})
+        shipping_changed = {change['item_name'] for change in changes
+                            if change['fieldname'] in ('actual_shipped_qty', 'shipped_uom')}
+        for row in result:
+            meta = json_dict(row.get('extra_json'))
+            if (row.get('name') in shipping_changed and meta.get('settlement_cargo')
+                    and not meta.get('adopted_purchase_value')):
+                # This raw compatibility column mirrors settlement valuation.
+                # Compute it from the same final inputs that the preview shows.
+                amount = row.get('shipment_value_rmb')
+                row['goods_value'] = 0 if amount is None else amount
         actual_by_field={(change['item_name'],change['fieldname']):{
             key:deepcopy(change.get(key)) for key in ('item_name','fieldname','candidate_id','row_id','source_refs','source_group_id','source_priority','workflow_stage','evidence_kind','conflict_override')
         } for change in changes}
         missing_fields=sorted({label for row in result for field,label in MISSING_LABELS.items() if missing(row,field)})
-        return {'policy':POLICY,'mode':mode,'rows':result,'fees':selected_fees,'changes':changes,
+        field_results = sorted((_field_result(candidate, *selection_outcomes[candidate['candidate_id']])
+                         for candidate in {c['candidate_id']: c for c in requested_field_candidates + selected_field_candidates}.values()
+                         if candidate['candidate_id'] in selection_outcomes),
+                         key=lambda outcome: (outcome['item_name'], outcome['fieldname'], outcome['candidate_id']))
+        blocked = any(outcome['status'] == 'review' for outcome in field_results)
+        return {'policy':POLICY,'mode':mode,'rows':result,'fees':selected_fees,'changes':changes,'field_results':field_results,
                 'selected_row_ids':row_ids,'selected_fee_ids':fee_ids,'selected_field_choices':deepcopy(field_choices),
                 'added_count':0,'removed_count':0,'updated_count':len({change['item_name'] for change in changes}),
                 'actual_sources':list(actual_by_field.values()),'missing_fields':missing_fields,'unresolved':[],
-                'can_apply':bool(changes or selected_fees or scope_excluded),
+                'can_apply':not blocked and bool(changes or selected_fees or scope_excluded),
                 'scope_excluded_item_names':sorted(scope_excluded),
                 'catalog_fingerprint':catalog['fingerprint']}
+    pending_add = []
     for choice in chosen:
         incoming=choice['values'];target=choice['target_item_name'];refs=choice['source_refs']
+        if mode == 'add_selected' and choice.get('pending_add_fields'):
+            pending_add.append({'code': 'NEW_MATERIAL_FIELDS_REQUIRE_REVIEW',
+                'material_code': incoming.get('material_code'),
+                'fields': deepcopy(choice['pending_add_fields']),
+                'message': _('新物料仅新增已核实的基础行；其余识别字段未采用，新增后请重新核对。')})
         duplicate_target=False
         if mode=='replace_all' and target and target in used:
             previous=used_choices[target]
@@ -1961,7 +2329,7 @@ def project(items, catalog, row_ids, fee_ids, mode, *, field_choices=None):
         if duplicate_target:added+=1
         if target:used.add(target);used_choices[target]=choice
     for index,row in enumerate(result,1):row['row_no']=index
-    _present_purchase_values(result)
+    _present_purchase_values(result, legacy_rows=True)
     removed=len(items)-len(used) if mode=='replace_all' else 0
     actual_by_field={}
     for change in changes:
@@ -1974,7 +2342,7 @@ def project(items, catalog, row_ids, fee_ids, mode, *, field_choices=None):
             'selected_row_ids':row_ids,'selected_fee_ids':fee_ids,'added_count':added,'removed_count':removed,
             'updated_count':len({c['item_name'] for c in changes if c['item_name']}),
             'actual_sources':list(actual_by_field.values()),
-            'missing_fields':missing_fields,'unresolved':(['来源完整性未确认，缺失资料请继续补充。'] if mode=='replace_all' else []),
+            'missing_fields':missing_fields,'unresolved':(['来源完整性未确认，缺失资料请继续补充。'] if mode=='replace_all' else pending_add),
             'can_apply':bool(chosen or selected_fees or scope_excluded),
             'scope_excluded_item_names':sorted(scope_excluded),
             'catalog_fingerprint':catalog['fingerprint']}
@@ -2009,18 +2377,24 @@ def _activate_selected_price(row, choice, catalog):
     row['extra_json'] = meta
 
 
-def _present_purchase_values(result):
+def _present_purchase_values(result, selected_items=(), *, legacy_rows=False):
     """Return adopted totals/prices for previews without backfilling raw fields."""
     from .material_input_service import present_material_row
     for row in result:
-        if row.get('_shipment_valuation', {}).get('method') != 'settlement_purchase_unit_price':
+        if legacy_rows and row.get('_shipment_valuation', {}).get('method') != 'settlement_purchase_unit_price':
             if row.get('_shipment_valuation'):
                 row.pop('adopted_price', None)
-                continue
-            if not json_dict(row.get('extra_json')).get('adopted_purchase_value'):
                 continue
         presented=present_material_row(row)
         row.pop('adopted_price', None)
         for field in ('adopted_price','shipment_value_rmb','shipment_valuation'):
             if field in presented:
                 row[field]=deepcopy(presented[field])
+        valuation = presented.get('shipment_valuation') or {}
+        row['shipment_valuation_status'] = valuation.get('status')
+        row['shipment_value_source'] = deepcopy((valuation.get('source_refs') or [valuation.get('source') or {}])[0])
+        evidence = presented.get('purchase_value_evidence')
+        if evidence:
+            row['purchase_value_evidence'] = deepcopy(evidence)
+            if evidence['status'] == 'retain' and row.get('name') in selected_items:
+                row['purchase_value_evidence']['status'] = 'apply'

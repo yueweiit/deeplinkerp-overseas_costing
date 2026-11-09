@@ -118,7 +118,8 @@ def test_fill_missing_persists_goods_value_for_automatic_manual_and_error_result
         proposal = {"proposal_id": "P", "proposal_type": "item_update",
                     "target_item_name": item["name"], "payload": {"fields": {fieldname: value}}}
         selected = preview([item], [proposal], batch, version, mode="fill_missing")
-        write_rows(store, ledger, selected, {})
+        if selected["can_apply"]:
+            write_rows(store, ledger, selected, {})
         return ledger.get("item", item["name"])
 
     automatic = apply_case(
@@ -143,7 +144,8 @@ def test_fill_missing_persists_goods_value_for_automatic_manual_and_error_result
     assert shipment_value(automatic)["status"] == "automatic"
     assert str(manual["goods_value"]) == "25"
     assert shipment_value(manual)["status"] == "manual"
-    assert invalid["goods_value"] == 0
+    assert invalid["goods_value"] == 99  # an unverified unit price may not replace any existing value
+    assert invalid.get("unit_price") is None
     assert shipment_value(invalid)["status"] == "missing"
 
 
@@ -369,6 +371,7 @@ def test_forced_second_source_review_uses_latest_version_and_refreshed_purchase_
             {"label": "物品编码Código", "value": "A"}, {"label": "数量Cantidad", "value": 2},
             {"label": "总金额Monto Total", "value": 20}, {"label": "单价Precio", "value": 10},
             {"label": "单位Unidad", "value": "件"},
+            {"label": "物品规格Especificacion", "value": "S1"},
         ]}]},
     }
 
@@ -469,6 +472,11 @@ def test_forced_second_source_review_uses_latest_version_and_refreshed_purchase_
             receipt = run["draft_json"]["row_previews"][prepared["id"]]
             assert "rows" not in receipt
             assert "purchase_fact" not in json.dumps(receipt, ensure_ascii=False)
+            assert any(candidate["fieldname"] == "unit_price" and float(candidate["suggested_value"]) == 12
+                       for candidate in catalog["field_candidates"])
+            assert any(result["code"] == "MANUAL_VALUE_RETAINED" for result in prepared["field_results"])
+            assert not prepared["can_apply"]
+            return {"version_name": run["version"], "status": "REVIEW_REQUIRED"}
         return selection.confirm(batch["name"], run_id, prepared["id"], prepared["revision"],
                                  "TOKEN", "M", repository=repo)
 
@@ -543,7 +551,8 @@ def test_forced_second_source_review_uses_latest_version_and_refreshed_purchase_
 
     assert ledger.get("batch", batch["name"])["current_version"] == second_version
     assert second_version == first_version
-    assert ledger.rows("item", version=first_version) != first_before_second
+    assert second_result["status"] == "REVIEW_REQUIRED"
+    assert ledger.rows("item", version=first_version) == first_before_second
     assert shipment_value(final)["status"] == "manual"
     assert shipment_value(final)["amount_rmb"] == "25"
     assert float(final["goods_value"]) == 25
@@ -552,9 +561,8 @@ def test_forced_second_source_review_uses_latest_version_and_refreshed_purchase_
     cleared_meta.pop("manual_shipment_valuation")
     cleared["extra_json"] = json.dumps(cleared_meta)
     fallback = shipment_value(cleared)
-    assert fallback["status"] == "conflict", fallback
-    assert float(fallback["prior_amount_rmb"]) == 20
-    assert float(fallback["calculated_amount_rmb"]) == 24
+    assert fallback["status"] == "automatic", fallback
+    assert float(fallback["amount_rmb"]) == 20
 
 
 def test_next_ai_input_preserves_both_selected_duplicate_sku_rows():

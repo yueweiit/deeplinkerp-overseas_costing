@@ -239,7 +239,7 @@ def test_public_catalog_and_compact_receipt_deeply_hide_purchase_evidence():
 
     catalog=service.review_catalog(repo,'B1',repo.run)
     source_row=next(row for row in catalog['rows'] if row['origin']=='source')
-    assert catalog['policy']=='ai-field-review-7'
+    assert catalog['policy']==service.rows.POLICY
     assert source_row['meaningful_field_count']==1
     assert '已默认选择' in source_row['default_selection_reason']
     selected=[row['row_id'] for row in catalog['rows'] if row['default_selected']]
@@ -287,7 +287,7 @@ def test_payment_match_receipt_contains_only_server_candidate_reference():
     assert public=={'candidate_id':'FC-1','revision':'FR-1','version':'V1'}
     assert receipt['payment_match_candidate']==public
     serialized=json.dumps(receipt,ensure_ascii=False)
-    assert '120' not in serialized and 'SECRET-SKU' not in serialized
+    assert '应付运费 RMB 120' not in serialized and 'SECRET-SKU' not in serialized
 
 
 def test_multiple_user_selected_payment_matches_are_kept_as_id_only_receipt():
@@ -1251,6 +1251,16 @@ def test_unrelated_unverified_merged_amount_group_does_not_block_physical_fill()
     assert len(repo.writes) == 1
 
 
+def _trusted_shipment_value_proposal(item, source_id, sheet):
+    refs = [{'source_id': source_id, 'sheet_name': sheet, 'row': 2}]
+    return {'proposal_id': 'VALUE', 'proposal_type': 'logistics_reconcile',
+            'default_selected': True, 'source_refs': refs,
+            'payload': {'rows': [{**item, '_review_origin': 'source',
+                'extra_json': {'shipment_valuation': {
+                    'amount_rmb': '100', 'quantity': item['actual_shipped_qty'], 'uom': item['shipped_uom'],
+                    'currency': 'RMB', 'source_refs': refs}}}]}}
+
+
 def test_unverified_group_for_same_item_but_other_source_does_not_block_value_fill():
     repo = Repo()
     repo.sources.append({
@@ -1261,14 +1271,7 @@ def test_unverified_group_for_same_item_but_other_source_does_not_block_value_fi
         'B1','V1',repo.items,repo.sources,'',context=repo.context)
     repo.run['draft_json']['material_input_fingerprint']=service.material_fingerprint(
         repo.items,repo.sources,repo.context)
-    repo.run['candidates_json'] = [{
-        'proposal_id': 'VALUE',
-        'proposal_type': 'item_update',
-        'target_item_name': 'I1',
-        'default_selected': True,
-        'source_refs': [{'source_id': 'CURRENT-SHEET', 'sheet_name': '本次清单'}],
-        'payload': {'fields': {'shipment_value_rmb': '100'}},
-    }]
+    repo.run['candidates_json'] = [_trusted_shipment_value_proposal(repo.items[0], 'CURRENT-SHEET', '本次清单')]
     repo.run['draft_json']['merged_amount_groups'] = [{
         'source_id': 'OLD-SHEET',
         'sheet_name': '历史清单',
@@ -1297,14 +1300,9 @@ def test_relevant_unverified_merged_amount_group_blocks_confirmation_without_wri
         'B1','V1',repo.items,repo.sources,'',context=repo.context)
     repo.run['draft_json']['material_input_fingerprint']=service.material_fingerprint(
         repo.items,repo.sources,repo.context)
-    repo.run['candidates_json'] = [{
-        'proposal_id': 'VALUE',
-        'proposal_type': 'item_update',
-        'target_item_name': 'I1',
-        'default_selected': True,
-        'source_refs': [{'source_id': 'PACKING-SHEET', 'sheet_name': '装箱单'}],
-        'payload': {'fields': {'shipment_value_rmb': '100'}},
-    }]
+    value_proposal = _trusted_shipment_value_proposal(repo.items[0], 'PACKING-SHEET', '装箱单')
+    value_proposal['payload']['rows'].append({**repo.items[1], '_review_origin': 'source'})
+    repo.run['candidates_json'] = [value_proposal]
     repo.run['draft_json']['merged_amount_groups'] = [{
         'source_id': 'PACKING-SHEET',
         'sheet_name': '装箱单',

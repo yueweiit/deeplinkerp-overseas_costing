@@ -106,9 +106,17 @@ def test_dedicated_explicit_zero_is_not_a_database_placeholder():
 def test_source_unit_mismatch_never_invents_conversion():
     items, source = evidence((800,), (4,))
     items[0].update(unit='箱', shipped_uom='箱', actual_shipped_qty_mode='MANUAL_CONFIRMED')
-    projected = project_defaults(items, review(items, source))['rows'][0]
+    catalog = review(items, source)
+    candidate = next(candidate for candidate in catalog['field_candidates'] if candidate['fieldname'] == 'goods_value')
+    assert not candidate['default_selected']
+    assert project_defaults(items, catalog)['can_apply']
+    preview = rows.project(items, catalog, [], [], 'update_selected',
+                           field_choices={'I1:goods_value': candidate['candidate_id']})
+    projected = preview['rows'][0]
     assert shipment_value(projected)['amount_rmb'] is None
-    assert 'UOM' in shipment_value(projected)['error']
+    assert not preview['can_apply']
+    assert projected['goods_value'] == 0
+    assert any(outcome['code'] == 'PURCHASE_VALUE_UOM_MISMATCH' for outcome in preview['field_results'])
 
 
 def test_worker_keeps_monetary_proposals_when_merging_logistics_reconciliation(monkeypatch):
