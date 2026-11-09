@@ -24,7 +24,8 @@ from overseas_costing.services.logistics_settlement.model import digest, dumps
 #: 3 → 4：其他费用改为独立实例，名称可选可填，常用名称增加海关查验费。
 #: 只靠这个常量并不安全 —— 改投影却忘了 +1，线上就会继续吃旧快照。所以指纹里另外并进了
 #: 发布号（见 ``projection_revision``），部署后由前端的新鲜度检查自动触发重建。
-SCHEMA_VERSION = 4
+#: 4 → 5：汇率阻塞作为只读试算状态，仍可展示资料与费用。
+SCHEMA_VERSION = 5
 RUN_LEASE = timedelta(minutes=5)
 DEFAULT_PAGE = 1
 DEFAULT_PAGE_LENGTH = 200
@@ -175,10 +176,21 @@ def sanitize_snapshot(value: dict) -> dict:
 
 def _validate_snapshot_data(data: dict) -> dict:
     for section in ("detail", "materials", "fees", "preview", "settlement"):
-        if section not in data or not isinstance(data.get(section), dict):
+        payload = data.get(section)
+        if not isinstance(payload, dict):
             raise ValueError(_("快照缺少有效 {0} 数据。").format(section))
-        if data[section].get("ok") is False and section != "settlement":
-            raise ValueError(data[section].get("message") or f"快照 {section} 数据读取失败。")
+        if payload.get("ok") is not False or section == "settlement":
+            continue
+        if section == "preview" and payload.get("read_only") is True:
+            fx = payload.get("fx_resolution")
+            errors = fx.get("blocking_errors") if isinstance(fx, dict) and fx.get("ok") is False else None
+            if isinstance(errors, list) and errors and all(
+                isinstance(error, dict)
+                and error.get("code") in {"FX_DATE_REQUIRED", "FX_RATE_UNAVAILABLE", "FX_HISTORICAL_RATE_TOO_OLD"}
+                for error in errors
+            ):
+                continue
+        raise ValueError(payload.get("message") or f"快照 {section} 数据读取失败。")
     return data
 
 

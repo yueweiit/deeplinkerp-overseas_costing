@@ -1303,10 +1303,10 @@ class FrappeCostTrialAIRepository:  # pragma: no cover - exercised in Frappe int
             raise RuntimeError("当前未连接 Frappe 数据库。")
 
     def prepare_fx_resolution(self, batch_name, version_name):
-        return cost_preview_service.FrappeCostRepository().prepare_fx_resolution(batch_name, version_name)
+        return cost_preview_service.FrappeCostRepository(allow_running_logistics=True).prepare_fx_resolution(batch_name, version_name)
 
     def persist_fx_resolution(self, inputs, resolution):
-        return cost_preview_service.FrappeCostRepository().persist_fx_resolution(inputs["context"], resolution)
+        return cost_preview_service.FrappeCostRepository(allow_running_logistics=True).persist_fx_resolution(inputs["context"], resolution)
 
     def load_trial_inputs(self, batch_name, version_name, *, edit_token="", expected_modified="",
                           write=False, trusted=False):

@@ -6928,6 +6928,9 @@
     const sourcePending = state.materials?.calculation_stale || state.fees?.summary?.source_pending;
     const staleCost = (header.status === "Dirty" || sourcePending) && Boolean(preview || hasLegacyTotal);
     const decisionSummary = preview ? this.materialFeeTrialDecisionSummary(preview) : "";
+    const fxResolution = state.preview?.fx_resolution || null;
+    const fxNotice = this.costTrialFxIsBlocked(fxResolution) || fxResolution?.date_source === "oa_logistics_started_at"
+      ? this.renderCostTrialFxResolution(fxResolution) : "";
     const packingGroupBlocked = this.hasBlockingPackingGroups(state);
     const trialDisabled = this.isMaterialFeeCalculationBusy(state) || state.aiFill?.applying || packingGroupBlocked;
     const trialActionLabel = preview || hasLegacyTotal ? ocTranslate("重新试算") : ocTranslate("开始试算");
@@ -6937,6 +6940,7 @@
     </div>`;
     if (!preview) {
       return `<section class="ocw-mf-section ocw-mf-cost-section">${sectionTitle}
+        ${fxNotice}
         ${packingGroupBlocked ? `<p class="ocw-mf-trial-note">${ocTranslate("装箱组成员已变化，请先重新确认装箱组，再开始试算。")}</p>` : ""}
         ${hasLegacyTotal ? `<div class="ocw-mf-cost-summary"><div class="ocw-mf-cost-total"><span>${ocTranslate("上次已保存成本 · 待重新试算")}</span><strong>RMB ${this.escape(Number(legacyTotal).toFixed(2))}</strong></div></div>` : ""}
         <div class="ocw-detail-empty"><strong>${hasLegacyTotal ? ocTranslate("当前费用尚未汇总到已保存成本") : ocTranslate("尚未保存试算结果")}</strong><p>${ocTranslate("点击“{0}”，按当前物料和费用更新总览、SKU 明细及本区结果。", [trialActionLabel])}</p></div>
@@ -6952,6 +6956,7 @@
     }).join("");
     return `<section class="ocw-mf-section ocw-mf-cost-section">
       ${sectionTitle}
+      ${fxNotice}
       ${staleCost ? `<p class="ocw-mf-trial-note">${ocTranslate("资料已更新，请点击重新试算。以下为历史结果。")}</p><details class="ocw-mf-cost-history"><summary>${ocTranslate("查看上次试算")}</summary>` : ""}
       ${this.renderShipmentProjectSummary(preview.project_summary || [])}
       <div class="ocw-mf-cost-summary">

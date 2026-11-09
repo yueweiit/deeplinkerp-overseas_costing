@@ -774,7 +774,7 @@ def preview_comprehensive_cost(batch_name: str, version_name: str | None = None)
         ["fx_usd_to_rmb", "fx_rmb_to_mxn", "extra_json"],
         as_dict=True,
     ) or {}
-    fx_resolution = FrappeCostRepository().prepare_fx_resolution(batch_name, version)
+    fx_resolution = FrappeCostRepository(allow_running_logistics=True).prepare_fx_resolution(batch_name, version)
     if not fx_resolution.get("ok"):
         return {
             "ok": False, "read_only": True, "batch_name": batch_name,
@@ -989,8 +989,11 @@ def assert_persistable_item_updates(result: dict) -> None:
 
 
 class FrappeCostRepository:
+    def __init__(self, *, allow_running_logistics=False):
+        self.allow_running_logistics = allow_running_logistics
+
     @staticmethod
-    def costing_fx_date_context(batch_name, version_name=None, *, lock=False):
+    def costing_fx_date_context(batch_name, version_name=None, *, lock=False, allow_running_logistics=False):
         def attachment_rows():
             if lock:
                 # 当前读可看到等待批次锁期间其他事务已提交的凭证。
@@ -1043,9 +1046,9 @@ class FrappeCostRepository:
         if payment_dates:
             return fx_rate_service.resolve_fx_rate_date(payment_date=next(iter(payment_dates)))
 
-        # 老批次可能只有未经来源核验的凭证日期。仅在来源审批可追溯且已完成时，
-        # 使用该审批的发起日暂估；不能将旧凭证日期或其他 OA 审批日期冒充真实付款日。
-        from overseas_costing.scripts.import_oa_logistics import is_completed_approval_status
+        # 已完成审批可按发起日暂估；进行中的审批只在工作台预览和人工试算中采用。
+        # 未核实的历史凭证日期不能当作真实付款日。
+        from overseas_costing.scripts.import_oa_logistics import is_completed_approval_status, is_hidden_approval_status
 
         batch = frappe.db.get_value(
             "Overseas Cost Batch", batch_name,
@@ -1053,16 +1056,27 @@ class FrappeCostRepository:
             as_dict=True, for_update=lock,
         ) or {}
         extra = object_json(batch.get("extra_json"))
-        if (
-            batch.get("source_type") == "oa_logistics"
-            and batch.get("source_instance_id")
-            and not extra.get("excluded")
-            and is_completed_approval_status(
-                batch.get("source_approval_status"), result=extra.get("approval_result"), allow_empty=False,
-            )
-        ):
+        status = str(batch.get("source_approval_status") or "").strip().upper()
+        approval_result = extra.get("approval_result")
+        if batch.get("source_type") == "oa_logistics" and batch.get("source_instance_id") and not extra.get("excluded"):
+            eligible = is_completed_approval_status(status, result=approval_result, allow_empty=False)
+            if allow_running_logistics and status == "RUNNING" and not is_hidden_approval_status(status, approval_result):
+                # V2 may have invalidated the source since the batch header was imported.
+                from overseas_costing.services.logistics_settlement import runtime
+
+                eligible = True
+                if runtime.installed():
+                    settlement = runtime.store()
+                    mappings = settlement.find("batch_map", batch=batch_name, limit=1)
+                    if mappings:
+                        source = settlement.get("source", mappings[0]["source_id"]) or {}
+                        eligible = (
+                            source.get("kind") == "logistics"
+                            and source.get("instance") == batch["source_instance_id"]
+                            and not source.get("invalid")
+                        )
             context = fx_rate_service.resolve_fx_rate_date(
-                oa_logistics_started_at=batch.get("source_created_at"),
+                oa_logistics_started_at=batch.get("source_created_at") if eligible else None,
             )
             if context.get("ok"):
                 context["date_source_ref"] = str(batch["source_instance_id"])
@@ -1078,7 +1092,7 @@ class FrappeCostRepository:
             }
         context = fx_rate_service.resolve_fx_rate_date()
         if not context.get("ok"):
-            context["message"] = _("缺少可核实的付款日或已完成国际物流审批发起时间，无法自动试算汇率。")
+            context["message"] = _("缺少可核实的付款日或有效国际物流审批发起时间，无法自动试算汇率。")
         return context
 
     def prepare_fx_resolution(self, batch_name, version_name=None):
@@ -1098,7 +1112,9 @@ class FrappeCostRepository:
         ) or {}
         if str(version_row.get("batch") or "") != str(name):
             raise ValueError(_("成本版本不属于当前批次。"))
-        date_context = self.costing_fx_date_context(name, version)
+        date_context = self.costing_fx_date_context(
+            name, version, allow_running_logistics=self.allow_running_logistics,
+        )
         if not date_context.get("ok"):
             resolution = {
                 "ok": False, "calculation_date": "", "rates": {},
@@ -1128,7 +1144,9 @@ class FrappeCostRepository:
             "SELECT name FROM `tabOverseas Cost Batch` WHERE name=%s FOR UPDATE",
             (context["batch"],),
         )
-        date_context = self.costing_fx_date_context(context["batch"], context["version"], lock=True)
+        date_context = self.costing_fx_date_context(
+            context["batch"], context["version"], lock=True, allow_running_logistics=self.allow_running_logistics,
+        )
         if not date_context.get("ok"):
             raise ValueError(date_context.get("message") or _("缺少汇率日期，无法保存试算。"))
         if str(date_context.get("date_source") or "") != str(resolution.get("date_source") or ""):
@@ -1253,7 +1271,7 @@ COST_INPUT_FIELDS = [
 def calculate_comprehensive_cost(batch_name, version_name=None, *, edit_token=None, expected_modified=None,
                                  repository=None, trusted=False, commit_after_calculate=True):
     """Save a trial atomically; never confirms a version or sends an ERP request."""
-    repo = repository or FrappeCostRepository()
+    repo = repository or FrappeCostRepository(allow_running_logistics=not trusted)
     try:
         preparer = getattr(repo, "prepare_fx_resolution", None)
         explicitly_supports_fx = (

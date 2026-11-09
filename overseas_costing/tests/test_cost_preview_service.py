@@ -852,15 +852,20 @@ def test_costing_fx_date_blocks_missing_and_conflicting_payment_dates(monkeypatc
     assert cost_preview_service.FrappeCostRepository.costing_fx_date_context("B1")["date_source"] == "unverified"
 
 
-def test_costing_fx_date_uses_completed_logistics_start_for_legacy_batch(monkeypatch) -> None:
+@pytest.mark.parametrize(("approval_status", "approval_result"), [
+    ("COMPLETED", "agree"),
+    ("RUNNING", "agree"),
+    ("RUNNING", ""),
+])
+def test_costing_fx_date_uses_valid_logistics_start_for_legacy_batch(monkeypatch, approval_status, approval_result) -> None:
     class FakeFrappe:
         rows = [{"parse_result_json": '{"header":{"payment_date":"2026-04-01"}}'}]
         batch = {
             "source_type": "oa_logistics",
             "source_created_at": "2026-01-29 10:20:00",
             "source_instance_id": "OA-INSTANCE-1",
-            "source_approval_status": "COMPLETED",
-            "extra_json": '{"approval_result":"agree","excluded":false}',
+            "source_approval_status": approval_status,
+            "extra_json": json.dumps({"approval_result": approval_result, "excluded": False}),
         }
 
         class db:
@@ -873,7 +878,10 @@ def test_costing_fx_date_uses_completed_logistics_start_for_legacy_batch(monkeyp
             return cls.rows
 
     monkeypatch.setattr(cost_preview_service, "frappe", FakeFrappe)
-    context = cost_preview_service.FrappeCostRepository.costing_fx_date_context("B1")
+    repo = cost_preview_service.FrappeCostRepository
+    if approval_status == "RUNNING":
+        assert repo.costing_fx_date_context("B1")["ok"] is False
+    context = repo.costing_fx_date_context("B1", allow_running_logistics=True)
     assert context["normalized_date"] == "2026-01-29"
     assert context["date_source"] == "oa_logistics_started_at"
     assert context["date_source_ref"] == "OA-INSTANCE-1"
@@ -881,13 +889,32 @@ def test_costing_fx_date_uses_completed_logistics_start_for_legacy_batch(monkeyp
     assert "未经核实" in context["date_warning"]
 
     FakeFrappe.rows = [{"parse_result_json": '{"header":{"payment_date":"2026-04-01","payment_date_source":"explicit_label"}}'}]
-    context = cost_preview_service.FrappeCostRepository.costing_fx_date_context("B1")
+    context = repo.costing_fx_date_context("B1", allow_running_logistics=True)
     assert context["normalized_date"] == "2026-04-01"
     assert context["date_source"] == "payment_date"
 
     FakeFrappe.rows = []
+    if approval_status == "RUNNING":
+        from types import SimpleNamespace
+        from overseas_costing.services.logistics_settlement import runtime
+        mapping = [{"source_id": "S1"}]
+        archive = {"kind": "logistics", "instance": "OA-INSTANCE-1", "invalid": True}
+        monkeypatch.setattr(runtime, "installed", lambda: True)
+        monkeypatch.setattr(runtime, "store", lambda: SimpleNamespace(
+            find=lambda *_a, **_kw: mapping,
+            get=lambda *_a, **_kw: archive,
+        ))
+        assert repo.costing_fx_date_context("B1", allow_running_logistics=True)["ok"] is False
+        archive["invalid"] = False
+        assert repo.costing_fx_date_context("B1", allow_running_logistics=True)["ok"] is True
     FakeFrappe.batch = {**FakeFrappe.batch, "source_approval_status": "REJECTED"}
-    assert cost_preview_service.FrappeCostRepository.costing_fx_date_context("B1")["ok"] is False
+    assert repo.costing_fx_date_context("B1", allow_running_logistics=True)["ok"] is False
+
+    FakeFrappe.batch = {
+        **FakeFrappe.batch, "source_approval_status": "RUNNING",
+        "extra_json": '{"approval_result":"refuse"}',
+    }
+    assert repo.costing_fx_date_context("B1", allow_running_logistics=True)["ok"] is False
 
 
 def test_costing_fx_date_uses_current_locked_approval_and_rejects_source_change(monkeypatch) -> None:

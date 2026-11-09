@@ -112,6 +112,21 @@ console.log(JSON.stringify(h.renderMaterialFeeCostTable()));
     assert "99999.00" not in result
 
 
+
+@pytest.mark.parametrize("saved", [False, True])
+def test_cost_table_shows_fx_block_without_replacing_saved_cost(saved):
+    snapshot = {"comprehensive_cost": {"summary": {"total_cost_rmb": "60.00"}, "items": []}} if saved else {}
+    html = _frontend_result(FRONTEND_SETUP + f"""
+h.escape=value=>String(value ?? '');
+h.detailState.header={{status:'Calculated',summary_snapshot:{json.dumps(snapshot)}}};
+state.preview={{ok:false,read_only:true,fx_resolution:{{ok:false,
+    blocking_errors:[{{code:'FX_RATE_UNAVAILABLE',message:'指定日期汇率未取得'}}]}}}};
+console.log(JSON.stringify(h.renderMaterialFeeCostTable()));
+""")
+    assert "汇率未就绪" in html and "指定日期汇率未取得" in html
+    assert ("RMB 60.00" in html) is saved
+
+
 def test_changed_source_hides_complete_saved_result_as_history():
     html = _frontend_result(FRONTEND_SETUP + """
 h.escape=value=>String(value ?? '');

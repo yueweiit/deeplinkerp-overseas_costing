@@ -392,6 +392,47 @@ def test_workspace_snapshot_stays_available_when_packing_group_is_blocked(monkey
     }]
 
 
+
+@pytest.mark.parametrize("code", ["FX_DATE_REQUIRED", "FX_RATE_UNAVAILABLE", "FX_HISTORICAL_RATE_TOO_OLD"])
+def test_workspace_snapshot_keeps_materials_and_fees_when_fx_preview_is_blocked(code):
+    from overseas_costing.services import material_fee_workspace_snapshot_service as service
+
+    store = _store()
+    build = _builder([])
+    def build_with_blocked_preview(*args):
+        data = build(*args)
+        data["preview"] = {
+            "ok": False, "read_only": True, "message": "汇率待核对",
+            "fx_resolution": {"ok": False, "blocking_errors": [{"code": code, "message": "汇率待核对"}]},
+        }
+        return data
+
+    options = dict(store=store, fingerprint_loader=lambda *_: "fx-blocked",
+                   snapshot_builder=build_with_blocked_preview, now="2026-11-09T09:00:00+00:00")
+    for from_cache in (False, True):
+        snapshot = service.get_snapshot("B1", "V1", **options)
+        assert snapshot["ok"] is True
+        assert snapshot["cache"]["served_from_cache"] is from_cache
+        assert snapshot["data"]["materials"]["items"][0]["name"] == "ITEM-1"
+        assert snapshot["data"]["fees"]["fees"] == []
+        assert snapshot["data"]["preview"]["ok"] is False
+        assert snapshot["data"]["preview"]["fx_resolution"]["blocking_errors"][0]["code"] == code
+
+
+def test_workspace_snapshot_still_rejects_an_unrelated_preview_failure():
+    from overseas_costing.services import material_fee_workspace_snapshot_service as service
+
+    build = _builder([])
+    def build_with_failed_preview(*args):
+        data = build(*args)
+        data["preview"] = {"ok": False, "read_only": True, "message": "试算数据损坏"}
+        return data
+
+    with pytest.raises(ValueError, match="试算数据损坏"):
+        service.get_snapshot("B1", "V1", store=_store(), fingerprint_loader=lambda *_: "bad-preview",
+                             snapshot_builder=build_with_failed_preview)
+
+
 def _rewrite_cached_schema(store, service, batch: str, version: str, schema_version: int) -> None:
     """把已缓存快照的项目口径版本改写成指定值，用来模拟旧代码写下的快照。"""
 
