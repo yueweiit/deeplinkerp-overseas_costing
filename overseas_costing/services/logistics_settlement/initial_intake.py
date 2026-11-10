@@ -9,6 +9,7 @@ from .. import purchase_value_evidence as value
 from ..material_value_semantics import is_effectively_missing, is_placeholder_token
 from ..shipment_cost_service import object_json, shipment_input
 from ..source_review_extract_service import _approval_goods_locations, _approval_row_details
+from ..supplier_resolution_service import NO_SUPPLIER_MARKERS
 from .model import decoded, digest
 
 ROLE = 'international_logistics'
@@ -88,8 +89,6 @@ def project_initial_logistics_items(source, *, fx_rates=None, supplier_rows=tupl
     lines = [(table, position, native_id, value.row_context(raw, document) if raw is not None else {}, legacy)
              for table, position, native_id, raw, legacy in _archive_lines(source, goods)]
     locator_counts = Counter((table, native_id or position) for table, position, native_id, _, _ in lines)
-    legacy_counts = Counter(line.get('line_key') for _, _, _, _, line in lines)
-    unidentified = Counter((table, digest(raw)) for table, _, native_id, raw, _ in lines if not native_id)
     rows, issues = [], []
     supplier_rows = lru_cache(maxsize=1)(supplier_rows)
     approved = bool(source.get('approved')) and not source.get('invalid')
@@ -110,9 +109,7 @@ def project_initial_logistics_items(source, *, fx_rates=None, supplier_rows=tupl
         material = {k: mapped.get(k) or legacy.get(k) for k in ('material_code', 'product_name', 'spec_model')}
         material.update({field: details[field] for field in SUPPLEMENT_FIELDS if field in details})
         legacy_line = legacy.get('line_key')
-        unique = (locator_counts[table, native_id or position] == 1
-                  and (native_id or (legacy_counts[legacy_line] <= 1 or not legacy_line)
-                       and unidentified[table, digest(cells)] == 1))
+        unique = locator_counts[table, native_id or position] == 1
         stable_key = digest('oa-initial-logistics-line-v1', source.get('id'), table, native_id or position)
         source_meta = {
             'approval_status': source.get('status') or '', 'provisional': running,
@@ -121,7 +118,7 @@ def project_initial_logistics_items(source, *, fx_rates=None, supplier_rows=tupl
         if 'package_count' in details:
             source_meta['package_count'] = details['package_count']
         metadata = {SOURCE_META: source_meta}
-        if legacy_line and legacy_counts[legacy_line] == 1:
+        if legacy_line:
             metadata['initial_logistics_line'] = legacy_line
         row = {
             **{field: content for field, content in material.items() if content not in (None, '')},
@@ -174,30 +171,53 @@ def project_initial_logistics_items(source, *, fx_rates=None, supplier_rows=tupl
     }
 
 
-def _same_item(left, right):
+def _same_item(left, right, *, anchored=False):
     code = str(left.get('material_code') or '').strip().casefold()
+    source_code = str(right.get('material_code') or '').strip().casefold()
     left_spec = str(left.get('spec_model') or '').strip().casefold()
     right_spec = str(right.get('spec_model') or '').strip().casefold()
     quantity = value.number(left.get('quantity'))
-    return bool(code and code == str(right.get('material_code') or '').strip().casefold()
+    return bool(not is_placeholder_token(source_code)
+                and (code == source_code or anchored and is_placeholder_token(code))
                 and (is_placeholder_token(left_spec) or is_placeholder_token(right_spec) or left_spec == right_spec)
                 and quantity is not None and quantity > 0 and quantity == value.number(right.get('quantity'))
                 and value.same_uom(left.get('purchase_uom') or left.get('unit'), right.get('unit')))
 
 
-def _item_matches(item, rows):
+def _item_matches(item, rows, verified_position):
     meta = object_json(item.get('extra_json'))
     source_line = meta.get('initial_logistics_line')
     if source_line:
-        return [row for row in rows if row['extra_json'].get('initial_logistics_line') == source_line and _same_item(item, row)]
+        matches = [row for row in rows if row['extra_json'].get('initial_logistics_line') == source_line
+                   and _same_item(item, row, anchored=True)]
+        if verified_position is not None:
+            matches = [row for row in matches if _source_position(row) == verified_position]
+        return matches
     return [row for row in rows if _same_item(item, row)]
 
 
-def plan_existing_initial_items(source, existing_items, *, fx_rates=None, supplier_rows=tuple):
+def _source_position(row):
+    ref = row['extra_json'][SOURCE_META]['source_ref']
+    return ref['field'], ref['row']
+
+
+def _supplement_values(item, row):
+    patch = {field: row[field] for field in SUPPLEMENT_FIELDS if field in row
+             and is_effectively_missing(field, item.get(field), item)}
+    if str(item.get('supplier') or '').strip() in NO_SUPPLIER_MARKERS:
+        patch.pop('supplier', None)
+    if is_placeholder_token(item.get('material_code')) and row.get('material_code'):
+        patch['material_code'] = row['material_code']
+    return patch
+
+
+def plan_existing_initial_items(source, existing_items, *, fx_rates=None, supplier_rows=tuple,
+                                verified_legacy_positions=None):
     """Plan missing amounts on uniquely matched initial rows. The caller guards draft eligibility."""
     plan = project_initial_logistics_items(source, fx_rates=fx_rates, supplier_rows=supplier_rows)
     patches, item_results = [], []
-    matches = [_item_matches(item, plan['rows']) for item in existing_items]
+    positions = verified_legacy_positions or {}
+    matches = [_item_matches(item, plan['rows'], positions.get(item.get('name'))) for item in existing_items]
     unique_targets = Counter(row['row_no'] for candidates in matches for row in candidates)
     for item, candidates in zip(existing_items, matches):
         name = item.get('name')
@@ -217,8 +237,7 @@ def plan_existing_initial_items(source, existing_items, *, fx_rates=None, suppli
         else:
             row = candidates[0]
             fact = row['extra_json'].get(value.META_KEY)
-            patch = {field: row[field] for field in SUPPLEMENT_FIELDS if field in row
-                     and is_effectively_missing(field, item.get(field), item)}
+            patch = _supplement_values(item, row)
             target = {**item, **patch}
             original_shipping, current_shipping = shipment_input(row), shipment_input(target)
             if (original_shipping['quantity'] != current_shipping['quantity']

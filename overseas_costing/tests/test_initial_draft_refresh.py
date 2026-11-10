@@ -42,7 +42,7 @@ def wire(monkeypatch, draft):
                     'source_snapshot': source['snapshot'], 'available': True,
                 }}
 
-    def plan(source, items, *, fx_rates, supplier_rows):
+    def plan(source, items, *, fx_rates, supplier_rows, verified_legacy_positions):
         assert source['id'] == 'S1'
         assert items and items[0]['name'] == item['name']
         return {'patches': [{'name': item['name'], 'values': {'goods_value': '12.30'}}]
@@ -97,3 +97,37 @@ def test_existing_refresh_rejects_source_change_after_preview(monkeypatch, draft
         with db.atomic():
             sync(*args, expected_plan_hash=preview['plan_hash'])
     assert not ledger.get('item', item['name'])['goods_value']
+
+
+@pytest.mark.parametrize("change", [None, "source_order", "erp_order", "amount", "count"])
+def test_legacy_positions_require_complete_original_goods_table_and_erp_order(change):
+    from copy import deepcopy
+
+    from overseas_costing.services.logistics_settlement.initial_draft_refresh import _verified_legacy_positions
+    from overseas_costing.services.logistics_settlement.model import dumps
+    from overseas_costing.scripts.import_oa_logistics import extract_form_fields
+
+    label = "货物信息Bienes"
+    raw_rows = [[{"name": "数量Cantidad", "value": str(qty)},
+                 {"name": "货值Valor de mercancía", "value": str(amount)}]
+                for qty, amount in [(2, 12), (2, 17)]]
+    raw = {"formComponentValues": [{"name": label, "componentType": "TableField", "value": raw_rows}]}
+    source = {"raw": deepcopy(raw), "goods": [
+        {"line_key": "same-legacy-key", "material_code": "SKU1", "quantity": "2", "unit": "套",
+         "source_table": label, "source_position": idx}
+        for idx in [1, 2]
+    ]}
+    batch = {"extra_json": dumps({"source": "dingtalk_oa_logistics", "form_fields": extract_form_fields(raw)})}
+    items = [{"name": f"I{idx}", "material_code": "SKU1", "quantity": 2, "unit": "套", "row_no": idx,
+              "extra_json": '{"initial_logistics_line":"same-legacy-key"}'}
+             for idx in [1, 2]]
+    if change == "source_order":
+        source["raw"]["formComponentValues"][0]["value"].reverse()
+    if change == "erp_order":
+        items[0]["row_no"] = 3
+    if change == "amount":
+        source["raw"]["formComponentValues"][0]["value"][0][1]["value"] = "18"
+    if change == "count":
+        items.pop()
+    expected = {} if change else {"I1": (label, 1), "I2": (label, 2)}
+    assert _verified_legacy_positions(batch, source, items) == expected

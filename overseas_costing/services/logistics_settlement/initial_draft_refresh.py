@@ -1,11 +1,56 @@
 """Reconcile missing fields on existing OA intake drafts using the archive sync."""
+from collections import Counter
+
 from overseas_costing.services.edit_session_service import lock_is_active
 from overseas_costing.services.effective_logistics_source import load_source_bundle
 from overseas_costing.services.purchase_value_evidence import number
 from overseas_costing.services.supplier_resolution_service import load_active_suppliers
+from overseas_costing.services.shipment_cost_service import object_json
 
 from .initial_intake import plan_existing_initial_items
-from .model import digest, dumps
+from .model import components, digest, dumps
+
+
+def _verified_legacy_positions(batch, source, items):
+    """Recover old repeated line keys only against the exact original table and row sequence."""
+    from overseas_costing.scripts.import_oa_logistics import extract_form_fields
+
+    metadata = object_json(batch.get('extra_json'))
+    saved_fields = metadata.get('form_fields') or {}
+    if metadata.get('source') != 'dingtalk_oa_logistics' or not isinstance(saved_fields, dict):
+        return {}
+    source_goods = source.get('goods') or []
+    key_counts = Counter(row.get('line_key') for row in source_goods)
+    if not any(count > 1 for key, count in key_counts.items() if key):
+        return {}
+
+    original_rows = [(index, row) for index, row in enumerate(source_goods, 1) if row.get('quantity') is not None]
+    if len(items) != len(original_rows):
+        return {}
+    tables = {row.get('source_table') for _, row in original_rows}
+    raw = source.get('raw') or {}
+    controls = Counter(control.get('name') or control.get('label')
+                       for control in components(raw) if isinstance(control, dict))
+    fields = extract_form_fields(raw)
+    if any(not table or controls[table] != 1 or table not in saved_fields
+           or fields.get(table) != saved_fields[table] for table in tables):
+        return {}
+
+    by_position = {row.get('row_no'): row for row in items}
+    if len(by_position) != len(items):
+        return {}
+    positions = {}
+    for index, origin in original_rows:
+        item = by_position.get(index) or {}
+        line_key = object_json(item.get('extra_json')).get('initial_logistics_line')
+        if (not line_key or line_key != origin.get('line_key')
+                or number(item.get('quantity')) != number(origin.get('quantity'))
+                or any(str(item.get(field) or '') != str(origin.get(field) or '')
+                       for field in ('material_code', 'product_name', 'spec_model', 'unit'))):
+            return {}
+        if key_counts[line_key] > 1:
+            positions[item['name']] = (origin['source_table'], origin['source_position'])
+    return positions
 
 
 def sync_initial_draft_items(db, ledger, batch_name, source_id, *,
@@ -45,7 +90,10 @@ def sync_initial_draft_items(db, ledger, batch_name, source_id, *,
         rates['USD'] = usd
     if mxn and mxn > 0:
         rates['MXN'] = 1 / mxn
-    plan = plan_existing_initial_items(source, items, fx_rates=rates, supplier_rows=load_active_suppliers)
+    plan = plan_existing_initial_items(
+        source, items, fx_rates=rates, supplier_rows=load_active_suppliers,
+        verified_legacy_positions=_verified_legacy_positions(batch, source, items),
+    )
     updates = plan['patches']
     fingerprint = digest('oa-initial-draft-refresh-1', batch_name, batch.get('modified'),
                          version['name'], version.get('modified'), source['snapshot'], updates)

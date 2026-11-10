@@ -119,7 +119,7 @@ def test_existing_initial_intake_plan_only_supplements_unique_unchanged_unvalued
     }}}])['patches'] == []
 
 
-def test_initial_intake_rejects_duplicate_unidentified_lines_without_merging_real_native_rows():
+def test_initial_intake_preserves_physical_rows_but_rejects_duplicate_native_ids():
     from overseas_costing.services.logistics_settlement.initial_intake import project_initial_logistics_items
 
     first = deepcopy(source()['raw']['formComponentValues'][1]['value'][0])
@@ -128,11 +128,81 @@ def test_initial_intake_rejects_duplicate_unidentified_lines_without_merging_rea
     assert separate['goods_value_summary']['valued_count'] == 2
     assert len({row['stable_line_key'] for row in separate['rows']}) == 2
 
-    first.pop('rowId')
-    second.pop('rowId')
-    duplicate = project_initial_logistics_items(source(rows=[first, second]))
+    duplicate = project_initial_logistics_items(source(rows=[first, {**second, 'rowId': 'line-1'}]))
     assert duplicate['goods_value_summary']['valued_count'] == 0
     assert {issue['code'] for issue in duplicate['issues']} == {'OA_INITIAL_SOURCE_LINE_UNVERIFIED'}
+
+    first.pop('rowId')
+    second.pop('rowId')
+    anonymous = project_initial_logistics_items(source(rows=[first, second]))
+    assert anonymous['goods_value_summary']['valued_count'] == 2
+    assert len({row['stable_line_key'] for row in anonymous['rows']}) == 2
+    assert len({row['extra_json']['initial_logistics_line'] for row in anonymous['rows']}) == 1
+
+
+def test_historical_duplicated_line_key_uses_independent_quantity_or_verified_locator():
+    from overseas_costing.services.logistics_settlement.initial_intake import plan_existing_initial_items
+
+    first = deepcopy(source()['raw']['formComponentValues'][1]['value'][0])
+    first.pop('rowId')
+    second = deepcopy(first)
+    second['rowValue'][5]['value'] = '900.00'
+    approval = source(rows=[first, second])
+    line, other_line = approval['goods']
+    assert line['line_key'] == other_line['line_key']
+    item = {'name': 'FIRST', 'source_type': 'oa_logistics', 'material_code': 'FIXTURE1', 'quantity': 2,
+            'unit': '套', 'goods_value': 0, 'row_no': 1,
+            'extra_json': {'initial_logistics_line': line['line_key']}}
+    other = {**item, 'name': 'SECOND', 'row_no': 2}
+    assert plan_existing_initial_items(approval, [item, other])['patches'] == []
+    table = line['source_table']
+    plan = plan_existing_initial_items(approval, [other, item], verified_legacy_positions={
+        'FIRST': (table, 1), 'SECOND': (table, 2),
+    })
+    assert {patch['name']: patch['values']['goods_value'] for patch in plan['patches']} == {
+        'FIRST': '2437.50', 'SECOND': '900.00',
+    }
+
+    second['rowValue'][3]['value'] = '3'
+    distinct_quantities = plan_existing_initial_items(source(rows=[first, second]), [item, {**other, 'quantity': 3}])
+    assert {patch['name']: patch['values']['goods_value'] for patch in distinct_quantities['patches']} == {
+        'FIRST': '2437.50', 'SECOND': '900.00',
+    }
+
+
+def test_historical_blank_code_can_be_filled_only_with_an_exact_legacy_source_anchor():
+    from overseas_costing.services.logistics_settlement.initial_intake import plan_existing_initial_items
+
+    raw = deepcopy(source()['raw']['formComponentValues'][1]['value'][0])
+    raw['rowValue'][0]['label'] = 'material_code'
+    approval = source(rows=[raw])
+    assert approval['goods'][0]['material_code'] == ''
+    item = {'name': 'EXISTING', 'source_type': 'oa_logistics', 'material_code': '', 'quantity': 2,
+            'unit': '套', 'goods_value': 0}
+    assert plan_existing_initial_items(approval, [item])['patches'] == []
+    item['extra_json'] = {'initial_logistics_line': approval['goods'][0]['line_key']}
+    patch, = plan_existing_initial_items(approval, [item])['patches']
+    assert patch['values']['material_code'] == 'FIXTURE1'
+    assert patch['values']['goods_value'] == '2437.50'
+
+
+def test_historical_intake_keeps_explicit_no_supplier_when_supplementing_value():
+    from overseas_costing.services.logistics_settlement.initial_intake import plan_existing_initial_items
+
+    raw = deepcopy(source()['raw']['formComponentValues'][1]['value'][0])
+    raw['rowValue'].append({'label': '供应商Proveedor', 'value': 'Fixture Supplier'})
+    approval = source(rows=[raw])
+    item = {'name': 'EXISTING', 'source_type': 'oa_logistics', 'material_code': 'FIXTURE1', 'quantity': 2,
+            'unit': '套', 'goods_value': 0,
+            'extra_json': {'initial_logistics_line': approval['goods'][0]['line_key']}}
+    suppliers = [{'name': 'SUP-TEST', 'supplier_name': 'Fixture Supplier', 'disabled': 0}]
+    blank, = plan_existing_initial_items(approval, [item], supplier_rows=lambda: suppliers)['patches']
+    assert blank['values']['supplier'] == 'SUP-TEST'
+
+    explicit_none = {**item, 'supplier': '/'}
+    supplement, = plan_existing_initial_items(approval, [explicit_none], supplier_rows=lambda: suppliers)['patches']
+    assert supplement['values']['goods_value'] == '2437.50'
+    assert 'supplier' not in supplement['values']
 
 
 def test_archive_ensure_batch_inserts_priced_items_once_without_calculation(monkeypatch):
