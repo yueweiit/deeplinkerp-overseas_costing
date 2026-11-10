@@ -133,7 +133,39 @@ def test_wrong_batch_version_pair_cannot_supply_readiness(monkeypatch):
     assert workbench_service.get_workbench_batches(task="cost")["total"] == 0
     pending = workbench_service.get_workbench_batches(task="pending")
     assert pending["items"][0]["result_is_current"] is False
+    assert pending["items"][0]["shipment_goods_value_rmb"] is None
     assert all("SECRET" not in str(kwargs["filters"]) for _doctype, kwargs in database.calls)
+
+
+def test_batch_list_uses_current_shipment_values_before_trial(monkeypatch):
+    from overseas_costing.services.shipment_cost_service import build_manual_shipment_valuation
+
+    applied, missing, free, invalid = [batch_context(name) for name in ("APPLIED", "MISSING", "FREE", "INVALID")]
+    for context in (applied, missing, free, invalid):
+        context["batch"].update(status="Dirty", total_goods_value=0, estimated_total_cost_rmb=0)
+        context["version"].update(calculated_at=None, summary_snapshot_json="{}")
+    missing["items"][0].update(goods_value=0, extra_json="{}")
+    missing["items"].append({
+        **deepcopy(applied["items"][0]),
+        "batch": "MISSING", "version": "V-MISSING", "name": "OTHER-MATERIAL",
+        "stable_line_key": "line-2", "row_no": 2,
+    })
+    free_item = free["items"][0]
+    free_item["goods_value"] = 0
+    free_item["extra_json"] = json.dumps({
+        "manual_shipment_valuation": build_manual_shipment_valuation(
+            free_item, "0", actor="tester@example.com", reason="确认免费样品",
+        )
+    })
+    invalid["batch"]["source_status"] = {"purchase_approval_sync_state": "invalid"}
+    install_rows(monkeypatch, [applied, missing, free, invalid])
+
+    rows = {row["name"]: row for row in workbench_service.get_workbench_batches(task="pending")["items"]}
+
+    assert {name: row["shipment_goods_value_rmb"] for name, row in rows.items()} == {
+        "APPLIED": "100.00", "MISSING": None, "FREE": "0.00", "INVALID": None,
+    }
+    assert all(row["result_is_current"] is False for row in rows.values())
 
 
 def test_empty_permission_population_does_not_query_cost_tables(monkeypatch):

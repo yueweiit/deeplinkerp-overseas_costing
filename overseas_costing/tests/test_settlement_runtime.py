@@ -595,3 +595,148 @@ def test_worker_fast_load_is_step_bounded_and_continues_to_completion(store, mon
     assert completed['status'] == 'completed' and completed['processed_count'] == 5
     assert len(prepared) == len(set(prepared)) == 5
     assert queued == [job['id']]
+
+
+def with_structured_waybill(store, fields, *, comment='DHL 3080665836'):
+    raw = source('L-WAYBILL', 'logistics', text='国际快递')
+    raw['updated_at'] = '2026-09-21T12:00:00+00:00'
+    raw['raw_payload']['operationRecords'] = [{'remark': comment}]
+    raw['raw_payload']['formComponentValues'].extend(
+        {'name': name, 'value': value} for name, value in fields.items()
+    )
+    return store.ingest(parse_source(raw, logistics_codes={'logistics'}))
+
+
+def test_existing_mapped_batch_uses_structured_waybill_before_comment(monkeypatch):
+    s, ledger, batch, _ = waybill_runtime_context()
+    attach_runtime(monkeypatch, s, ledger)
+    parsed = with_structured_waybill(s, {'柜号/单号Número DE Logística': '4104020185'})
+    with s.atomic():
+        runtime.ensure_batch(s, parsed)
+
+    saved = ledger.get('batch', batch['name'])
+    assert saved['waybill_no'] == '4104020185'
+    proof = json.loads(saved['extra_json'])['waybill_source']
+    assert proof['kind'] == 'form-derived'
+    assert proof['source_fields'] == ['柜号/单号Número DE Logística']
+    assert saved['status'] == 'Calculated'
+    assert s.count('audit', binding_id=parsed['id'], action='batch_waybill_synced') == 1
+
+
+@pytest.mark.parametrize(('fields', 'reason'), [
+    ({'运单号': '4104020185', '物流单号': '9988776655'}, 'ambiguous'),
+    ({'运单号': 'DHL 2,385.37 RMB'}, 'invalid_form'),
+])
+def test_structured_waybill_conflicts_or_invalid_values_do_not_fall_back(monkeypatch, fields, reason):
+    s, ledger, batch, _ = waybill_runtime_context()
+    attach_runtime(monkeypatch, s, ledger)
+    parsed = with_structured_waybill(s, fields)
+    preview = runtime.backfill_comment_waybills(batch_names=[batch['name']])
+    assert preview['summary'] == {reason: 1}
+
+    with s.atomic():
+        runtime.ensure_batch(s, parsed)
+    assert ledger.get('batch', batch['name'])['waybill_no'] == ''
+    assert s.count('audit') == 0
+
+
+@pytest.mark.parametrize('finalized', [{'confirm_status': 'Confirmed'}, {'writeback_status': 'Success'}])
+def test_mapped_waybill_sync_never_changes_finalized_batch(monkeypatch, finalized):
+    s, ledger, batch, _ = waybill_runtime_context()
+    attach_runtime(monkeypatch, s, ledger)
+    ledger.put('batch', batch['name'], finalized)
+    parsed = with_structured_waybill(s, {'Número de guía': '4104020185'})
+
+    with s.atomic():
+        runtime.ensure_batch(s, parsed)
+
+    saved = ledger.get('batch', batch['name'])
+    assert saved['waybill_no'] == '' and json.loads(saved['extra_json']) == {}
+    assert s.count('audit') == 0
+
+
+def test_targeted_waybill_preview_queries_requested_mapping_before_limit(monkeypatch):
+    s, ledger, batch, parsed = waybill_runtime_context()
+    attach_runtime(monkeypatch, s, ledger)
+    s.insert('batch_map', {'id': '000-other', 'source_id': '000-other', 'batch': 'OTHER', 'data': '{}'})
+
+    result = runtime.backfill_comment_waybills(batch_names=[batch['name'], 'UNMAPPED'], limit=1)
+
+    assert {row['batch_name']: row['status'] for row in result['rows']} == {
+        batch['name']: 'ready', 'UNMAPPED': 'mapping_missing',
+    }
+    assert next(row for row in result['rows'] if row['status'] == 'ready')['source_id'] == parsed['id']
+    assert ledger.get('batch', batch['name'])['waybill_no'] == ''
+    assert s.count('audit') == 0
+
+
+@pytest.mark.parametrize('changed', ['source_snapshot', 'finalized_batch'])
+def test_waybill_backfill_rechecks_locked_source_and_batch_before_apply(monkeypatch, changed):
+    s, ledger, batch, parsed = waybill_runtime_context()
+    attach_runtime(monkeypatch, s, ledger)
+    first = runtime.backfill_comment_waybills(batch_names=[batch['name']])
+    original_source_get = s.get
+    original_batch_get = ledger.get
+
+    def source_get(table, name, lock=False):
+        stored = original_source_get(table, name, lock=lock)
+        if changed == 'source_snapshot' and table == 'source' and name == parsed['id'] and lock:
+            return {**stored, 'snapshot': 'new-snapshot', 'raw': {'comments': ['DHL 4104020185']}}
+        return stored
+
+    def batch_get(kind, name, lock=False):
+        stored = original_batch_get(kind, name, lock=lock)
+        if changed == 'finalized_batch' and kind == 'batch' and name == batch['name'] and lock:
+            return {**stored, 'confirm_status': 'Confirmed'}
+        return stored
+
+    monkeypatch.setattr(s, 'get', source_get)
+    monkeypatch.setattr(ledger, 'get', batch_get)
+
+    result = runtime.backfill_comment_waybills(batch_names=[batch['name']], dry_run=False,
+                                              expected_plan_hash=first['plan_hash'])
+
+    assert result['summary'] == {'changed': 1}
+    assert ledger.get('batch', batch['name'])['waybill_no'] == ''
+    assert s.count('audit') == 0
+
+
+def test_duplicate_structured_control_names_do_not_hide_waybill_conflicts(monkeypatch):
+    s, ledger, batch, _ = waybill_runtime_context()
+    attach_runtime(monkeypatch, s, ledger)
+    raw = source('L-WAYBILL', 'logistics', text='国际快递')
+    raw['updated_at'] = '2026-09-21T12:00:00+00:00'
+    raw['raw_payload']['formComponentValues'].extend([
+        {'name': '运单号', 'value': '4104020185'},
+        {'name': '运单号', 'value': '9988776655'},
+    ])
+    parsed = s.ingest(parse_source(raw, logistics_codes={'logistics'}))
+
+    with s.atomic():
+        runtime.ensure_batch(s, parsed)
+
+    assert ledger.get('batch', batch['name'])['waybill_no'] == ''
+    assert s.count('audit') == 0
+    preview = runtime.backfill_comment_waybills(batch_names=[batch['name']])
+    assert preview['summary'] == {'ambiguous': 1}
+    assert preview['rows'][0]['candidates'] == ['4104020185', '9988776655']
+
+
+def test_existing_form_derived_waybill_is_not_replaced_by_a_later_comment(monkeypatch):
+    s, ledger, batch, _ = waybill_runtime_context()
+    attach_runtime(monkeypatch, s, ledger)
+    parsed = with_structured_waybill(s, {'运单号': '4104020185'})
+    with s.atomic():
+        runtime.ensure_batch(s, parsed)
+
+    raw = source('L-WAYBILL', 'logistics', text='国际快递')
+    raw['updated_at'] = '2026-09-22T12:00:00+00:00'
+    raw['raw_payload']['operationRecords'] = [{'remark': 'DHL 9988776655'}]
+    refreshed = s.ingest(parse_source(raw, logistics_codes={'logistics'}))
+    with s.atomic():
+        runtime.ensure_batch(s, refreshed)
+
+    saved = ledger.get('batch', batch['name'])
+    assert saved['waybill_no'] == '4104020185'
+    assert json.loads(saved['extra_json'])['waybill_source']['kind'] == 'form-derived'
+    assert s.count('audit', binding_id=parsed['id'], action='batch_waybill_conflict') == 1

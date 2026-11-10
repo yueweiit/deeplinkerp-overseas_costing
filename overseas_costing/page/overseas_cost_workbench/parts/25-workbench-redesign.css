@@ -456,10 +456,6 @@ body.ocw-workspace-sidebar-collapsed .body-sidebar-container {
   line-height: 1.35;
 }
 
-.ocw-result-summary-stack span + span {
-  margin-top: 2px;
-}
-
 .ocw-result-other-cost,
 .ocw-result-pending-note {
   margin: 10px 0 0;

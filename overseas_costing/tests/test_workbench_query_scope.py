@@ -77,6 +77,10 @@ def test_keyword_material_branch_keeps_dates_and_authorized_scope(monkeypatch):
         assert ['name', 'in', ['ALLOWED']] in query['filters']
         assert ['source_created_at', '>=', '2026-08-10 00:00:00'] in query['filters']
         assert ['source_created_at', '<=', '2026-09-08 23:59:59'] in query['filters']
+    keyword_query = batch_queries[0][1]
+    for field in ("waybill_no", "sea_bill_no", "container_no"):
+        assert field in keyword_query["fields"]
+        assert [field, "like", "%SKU%"] in keyword_query["or_filters"]
 
 
 def test_no_authorized_ids_means_no_internal_reads(monkeypatch):

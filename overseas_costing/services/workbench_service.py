@@ -22,6 +22,7 @@ FIELD_GROUPS = {
     "total": ("AK", "BE"),
 }
 FIXED_ITEM_FIELDS = ("material_code", "product_name")
+TRANSPORT_IDENTIFIER_FIELDS = ("waybill_no", "sea_bill_no", "container_no")
 SAFE_SORT_FIELDS = {
     "row_no",
     "material_code",
@@ -440,13 +441,18 @@ def build_batch_result_preview_payload(
     )
     total = len(result_items)
     offset = (page - 1) * page_length
+    identifiers = {
+        field: str(batch.get(field) or "").strip()
+        for field in (*TRANSPORT_IDENTIFIER_FIELDS, "customs_no")
+    }
     return {
         "ok": True,
         "batch_name": batch.get("name") or "",
         "version_name": version.get("name") or "",
         "summary": {
             "batch_no": batch.get("batch_no") or batch.get("name") or "",
-            "logistics_no": batch.get("waybill_no") or batch.get("customs_no") or "",
+            "logistics_no": next((identifiers[field] for field in TRANSPORT_IDENTIFIER_FIELDS if identifiers[field]), ""),
+            **identifiers,
             "purchase_totals": purchase_totals,
             "total_freight_rmb": result_totals["freight"],
             "total_tax_rmb": tax_total,
@@ -488,7 +494,7 @@ def get_batch_result_preview(batch_name: str, page=1, page_length=20) -> dict:
     batch_rows = frappe.get_all(
         "Overseas Cost Batch",
         filters={"name": batch_doc_name},
-        fields=["name", "batch_no", "waybill_no", "customs_no", "current_version", "status"],
+        fields=["name", "batch_no", *TRANSPORT_IDENTIFIER_FIELDS, "customs_no", "current_version", "status"],
         limit_page_length=1,
     )
     version_rows = frappe.get_all(

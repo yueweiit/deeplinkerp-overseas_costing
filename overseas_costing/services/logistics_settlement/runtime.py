@@ -478,22 +478,91 @@ def _comment_waybill_source_eligible(source):
     return status == 'COMPLETED' and source.get('approved') is True
 
 
-def _sync_comment_waybill(db, ledger, batch_name, source, actor='archive-sync'):
-    """Adopt one comment-derived waybill without claiming or replacing manual data."""
+_FORM_WAYBILL_LABELS = frozenset(map(norm, (
+    '柜号/单号Número DE Logística', '柜号/单号', 'Número DE Logística',
+    '物流单号', '运单号', '快递单号', '提单号', '柜号', '单号',
+    'waybill', 'air waybill', 'awb', 'tracking number', 'Número de guía',
+)))
+_FORM_WAYBILL_TOKEN = re.compile(r'[A-Z0-9][A-Z0-9-]{5,39}')
+
+
+def _form_waybill_token(raw, source):
+    """Validate only an explicitly labelled, single structured identifier."""
+    if not isinstance(raw, (str, int)) or isinstance(raw, bool):
+        return ''
+    value = str(raw).strip()
+    if _COMMENT_WAYBILL_FORBIDDEN.search(value):
+        return ''
+    for pattern in _COMMENT_WAYBILL_LINES:
+        match = pattern.fullmatch(value)
+        if match:
+            value = re.sub(r'\s+', '', match.group('token'))
+            break
+    token = value.upper()
+    if not _FORM_WAYBILL_TOKEN.fullmatch(token) or not any(char.isdigit() for char in token):
+        return ''
+    if token.isdigit() and not 8 <= len(token) <= 18:
+        return ''
+    if not token.isdigit() and not any(char.isalpha() for char in token):
+        return ''  # Dates and separator-delimited amounts are not identifiers.
+    excluded = {str(source.get(key) or '').strip().upper() for key in ('instance', 'approval_no', 'id')}
+    return token if token not in excluded else ''
+
+
+def _waybill_evidence(source):
+    from overseas_costing.services.material_value_semantics import is_placeholder_token
+    from .model import components, decoded
+
+    raw = source.get('raw') if isinstance(source.get('raw'), dict) else {}
+    raw_controls = components(raw)
+    fields = source.get('fields') if isinstance(source.get('fields'), dict) else {}
+    entries = ([(control.get('name') or control.get('label'), decoded(control.get('value')))
+                for control in raw_controls if isinstance(control, dict)]
+               if raw_controls else fields.items())
+    form_cells = [(str(label), value) for label, value in entries
+                  if norm(label) in _FORM_WAYBILL_LABELS and not is_placeholder_token(value)]
+    if form_cells:
+        tokens = [_form_waybill_token(value, source) for _, value in form_cells]
+        candidates = sorted(set(tokens) - {''})
+        status = 'invalid_form' if '' in tokens else 'ambiguous' if len(candidates) != 1 else 'ready'
+        return {'status': status, 'candidates': candidates, 'kind': 'form-derived',
+                'source_fields': sorted({label for label, _ in form_cells})}
+    candidates = _comment_waybills(source)
+    return {'status': 'ready' if len(candidates) == 1 else 'ambiguous' if candidates else 'missing',
+            'candidates': candidates, 'kind': 'comment-derived'}
+
+
+def _waybill_batch_blocker(batch):
+    if not batch:
+        return 'batch_missing'
+    if str(batch.get('confirm_status') or '').strip().lower() == 'confirmed':
+        return 'confirmed'
+    if str(batch.get('writeback_status') or '').strip().lower() == 'success':
+        return 'erp_success'
+    return ''
+
+
+def _sync_comment_waybill(db, ledger, batch_name, source, actor='archive-sync', *, locked_batch=None):
+    """Adopt one reliable waybill without claiming manual or finalized values."""
     if not _comment_waybill_source_eligible(source):
         return {'status': 'ineligible', 'candidates': []}
-    candidates = _comment_waybills(source)
-    if len(candidates) != 1:
-        return {'status': 'ambiguous' if candidates else 'missing', 'candidates': candidates}
+    evidence = _waybill_evidence(source)
+    candidates = evidence['candidates']
+    if evidence['status'] != 'ready':
+        return {'status': evidence['status'], 'candidates': candidates}
 
-    candidate = candidates[0]
-    batch = ledger.get('batch', batch_name, lock=True) or {}
+    candidate, = candidates
+    batch = locked_batch if locked_batch is not None else ledger.get('batch', batch_name, lock=True)
+    if blocker := _waybill_batch_blocker(batch):
+        return {'status': blocker, 'candidates': candidates}
     current = str(batch.get('waybill_no') or '').strip()
     metadata = _batch_metadata(batch.get('extra_json'))
     provenance = metadata.get('waybill_source') if isinstance(metadata.get('waybill_source'), dict) else {}
+    proof = {key: evidence[key] for key in ('kind', 'source_fields') if key in evidence}
     source_owned = bool(
         current
-        and provenance.get('kind') == 'comment-derived'
+        and provenance.get('kind') in {'form-derived', 'comment-derived'}
+        and (provenance.get('kind') != 'form-derived' or proof['kind'] == 'form-derived')
         and provenance.get('source_id') == source.get('id')
         and str(provenance.get('value') or '').strip() == current
     )
@@ -517,7 +586,7 @@ def _sync_comment_waybill(db, ledger, batch_name, source, actor='archive-sync'):
             'source_snapshot': source.get('snapshot'),
             'current_value': current,
             'candidate_values': candidates,
-            'kind': 'comment-derived',
+            **proof,
             'observed_at': utcnow(),
             'actor': actor,
         }
@@ -528,18 +597,17 @@ def _sync_comment_waybill(db, ledger, batch_name, source, actor='archive-sync'):
             current_value=current,
             candidate_values=candidates,
             source_snapshot=source.get('snapshot'),
-            kind='comment-derived',
+            **proof,
         )
         return {'status': 'conflict', 'value': current, 'candidates': candidates}
 
-    synced_at = utcnow()
     metadata.pop('waybill_conflict', None)
     metadata['waybill_source'] = {
         'source_id': source['id'],
         'source_snapshot': source.get('snapshot'),
         'value': candidate,
-        'kind': 'comment-derived',
-        'synced_at': synced_at,
+        **proof,
+        'synced_at': utcnow(),
         'actor': actor,
     }
     ledger.patch_batch_metadata(batch_name, {
@@ -552,61 +620,49 @@ def _sync_comment_waybill(db, ledger, batch_name, source, actor='archive-sync'):
         old_value=current,
         new_value=candidate,
         source_snapshot=source.get('snapshot'),
-        kind='comment-derived',
+        **proof,
     )
     return {'status': 'updated', 'value': candidate}
 
 
-def _comment_waybill_backfill_row(db, ledger, mapping):
+def _waybill_backfill_row(mapping, source, batch):
     batch_name = str(mapping.get('batch') or '')
     source_id = str(mapping.get('source_id') or '')
-    batch = ledger.get('batch', batch_name) or {}
-    source = db.get('source', source_id) or {}
     current = str(batch.get('waybill_no') or '').strip()
-    candidates = _comment_waybills(source) if source else []
-    row = {
+    eligible = source and _comment_waybill_source_eligible(source)
+    evidence = _waybill_evidence(source) if eligible else {'status': 'ineligible', 'candidates': []}
+    blocker = _waybill_batch_blocker(batch)
+    status = 'mapping_missing' if not source_id else (
+        'already_set' if current else blocker or evidence['status'])
+    return {
         'batch_name': batch_name,
         'source_id': source_id,
         'source_snapshot': source.get('snapshot'),
-        'status': 'ready',
+        'status': status,
         'current_value': current,
-        'candidates': candidates,
+        'candidates': evidence['candidates'],
+        **({'evidence_kind': evidence['kind'], 'source_fields': evidence['source_fields']}
+           if evidence.get('kind') == 'form-derived' else {}),
     }
-    if not batch:
-        row['status'] = 'batch_missing'
-    elif current:
-        row['status'] = 'already_set'
-    elif str(batch.get('confirm_status') or '').strip().lower() == 'confirmed':
-        row['status'] = 'confirmed'
-    elif str(batch.get('writeback_status') or '').strip().lower() == 'success':
-        row['status'] = 'erp_success'
-    elif not source or not _comment_waybill_source_eligible(source):
-        row['status'] = 'ineligible'
-    elif len(candidates) > 1:
-        row['status'] = 'ambiguous'
-    elif not candidates:
-        row['status'] = 'missing'
-    return row
 
 
 def _comment_waybill_backfill_preview(db, ledger, batch_names=None, limit=1000):
-    requested = {str(value) for value in (batch_names or []) if str(value)}
-    mappings = db.find('batch_map', limit=max(1, min(1000, int(limit or 1000))))
+    requested = sorted({str(value).strip() for value in (batch_names or []) if str(value).strip()})
+    if len(requested) > 1000:
+        raise ValueError(_i18n('一次最多核对 1000 个指定批次。'))
     if requested:
-        mappings = [row for row in mappings if str(row.get('batch') or '') in requested]
-    rows = [_comment_waybill_backfill_row(db, ledger, row) for row in mappings]
-    ready = [
-        {
-            'batch_name': row['batch_name'],
-            'source_id': row['source_id'],
-            'source_snapshot': row['source_snapshot'],
-            'candidate': row['candidates'][0],
-        }
-        for row in rows if row['status'] == 'ready'
-    ]
+        mappings = [next(iter(db.find('batch_map', batch=name, limit=1)), {'batch': name}) for name in requested]
+    else:
+        mappings = db.find('batch_map', limit=max(1, min(1000, int(limit or 1000))))
+    rows = []
+    for mapping in mappings:
+        source = (db.get('source', mapping['source_id']) or {}) if mapping.get('source_id') else {}
+        batch = ledger.get('batch', mapping['batch']) or {}
+        rows.append(_waybill_backfill_row(mapping, source, batch))
+    ready = [row for row in rows if row['status'] == 'ready']
     return {
         'rows': rows,
-        'plan_hash': digest('comment-waybill-backfill-1', ready),
+        'plan_hash': digest('waybill-backfill-2', requested, ready),
     }
 
 
@@ -614,7 +670,7 @@ def backfill_comment_waybills(
     batch_names=None, *, dry_run=True, expected_plan_hash='', limit=1000,
     actor='comment-waybill-backfill',
 ):
-    """Preview by default; apply only one-candidate blank waybills per transaction."""
+    """Preview structured/form and strict comment evidence; fill blank waybills only."""
     if not installed():
         return {
             'ok': False,
@@ -659,21 +715,19 @@ def backfill_comment_waybills(
             continue
         try:
             with db.atomic():
-                mapping = {'batch': planned['batch_name'], 'source_id': planned['source_id']}
-                current = _comment_waybill_backfill_row(db, ledger, mapping)
-                if (
-                    current['status'] != 'ready'
-                    or current['source_snapshot'] != planned['source_snapshot']
-                    or current['candidates'] != planned['candidates']
-                ):
-                    current['status'] = 'changed'
-                    applied.append(current)
-                    continue
-                source = db.get('source', planned['source_id'], lock=True)
-                result = _sync_comment_waybill(
-                    db, ledger, planned['batch_name'], source, actor=actor,
-                )
-                applied.append({**planned, **result})
+                # Use the archive's lock order and read every target again under lock.
+                db.get('state', 'match_lock', lock=True)
+                batch_name = planned['batch_name']
+                found = next(iter(db.find('batch_map', batch=batch_name, limit=1)), {})
+                mapping = (db.get('batch_map', found['id'], lock=True) or {}) if found else {}
+                source = (db.get('source', mapping['source_id'], lock=True) or {}) if mapping.get('source_id') else {}
+                batch = ledger.get('batch', batch_name, lock=True) or {}
+                current = _waybill_backfill_row(mapping or {'batch': batch_name}, source, batch)
+                if current != planned:
+                    applied.append({**current, 'status': 'changed'})
+                else:
+                    result = _sync_comment_waybill(db, ledger, batch_name, source, actor=actor, locked_batch=batch)
+                    applied.append({**planned, **result})
             db.commit()
         except Exception as exc:
             applied.append({**planned, 'status': 'error', 'message': str(exc)})
@@ -713,16 +767,20 @@ def ensure_batch(db, source):
         values = build_batch_values_from_approval(summary)
         values.update(source_corp_id=source['corp'], source_instance_id=source['instance'], source_type='oa_logistics', status='Draft', confirm_status='Pending')
         values['batch_no'] = values.get('batch_no') or source['approval_no'] or source['instance']
+        values['waybill_no'] = ''
+        values['import_remark'] = '从钉钉国际物流审批同步草稿。可核对的逐行货值已带入，缺项待补。'
         batch = ledger.create('batch', values)
         version = ledger.create('version', {'batch': batch['name'], 'version_code': '初始录入', 'version_type': 'Estimated',
                                'status': 'Active', 'is_current': 1, 'source_type': 'Import', 'fx_usd_to_rmb': None, 'fx_rmb_to_mxn': None})
-        ledger.put('batch', batch['name'], {'current_version': version['name'], 'version_count': 1})
-        for index, goods in enumerate(source['goods']):
-            if goods.get('quantity') is None:
-                continue
-            ledger.create('item', {**{k: goods.get(k) for k in ('material_code', 'product_name', 'spec_model', 'unit', 'quantity')},
-                                  'batch': batch['name'], 'version': version['name'], 'row_no': index+1, 'source_type': 'oa_logistics',
-                                  'extra_json': dumps({'initial_logistics_line': goods['line_key']})})
+        from .initial_intake import project_initial_logistics_items
+        from ..supplier_resolution_service import load_active_suppliers
+
+        items = project_initial_logistics_items(source, supplier_rows=load_active_suppliers)['rows']
+        for item in items:
+            ledger.create('item', {**item, 'batch': batch['name'], 'version': version['name'],
+                                  'extra_json': dumps(item['extra_json'])})
+        ledger.put('batch', batch['name'], {'current_version': version['name'], 'version_count': 1,
+                                          'item_count': len(items)})
         if source['amount'] is not None and source['currency']:
             ledger.create('rule', {'batch': batch['name'], 'version': version['name'], 'rule_code': 'oa_logistics_freight',
                                   'expense_category': '初始物流暂估', 'amount': source['amount'], 'currency': source['currency'],
@@ -763,7 +821,10 @@ def _apply_source_locked(db, source_id):
         if bindings:
             # Continue archiving Intl; its changes cannot adopt data into a bound batch.
             return
-        sync_logistics_documents(db, FrappeLedger(), source, batch_name, 'archive-sync')
+        from .initial_draft_refresh import sync_initial_draft_items
+        ledger = FrappeLedger()
+        sync_initial_draft_items(db, ledger, batch_name, source_id)
+        sync_logistics_documents(db, ledger, source, batch_name, 'archive-sync')
     else:
         bindings = db.find('binding', expense_id=source_id, limit=1)
     for binding in bindings:

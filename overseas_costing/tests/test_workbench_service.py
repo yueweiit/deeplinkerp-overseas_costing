@@ -751,6 +751,22 @@ def test_result_preview_groups_goods_value_by_currency_and_weights_unit_cost() -
     assert result["page_count"] == 1
 
 
+def test_result_preview_keeps_transport_identifiers_separate_from_customs() -> None:
+    batch = {"name": "B", "customs_no": "CUSTOMS", "sea_bill_no": "BILL", "container_no": "CONTAINER"}
+    result = workbench_service.build_batch_result_preview_payload(batch=batch, version={}, items=[])
+    summary = result["summary"]
+    assert summary["logistics_no"] == "BILL"
+    assert summary["sea_bill_no"] == "BILL"
+    assert summary["container_no"] == "CONTAINER"
+    assert summary["customs_no"] == "CUSTOMS"
+
+    result = workbench_service.build_batch_result_preview_payload(
+        batch={"name": "B", "customs_no": "CUSTOMS"}, version={}, items=[],
+    )
+    assert result["summary"]["logistics_no"] == ""
+    assert result["summary"]["customs_no"] == "CUSTOMS"
+
+
 def test_result_preview_does_not_guess_split_for_customs_total() -> None:
     item = {
         "name": "ITEM-1",

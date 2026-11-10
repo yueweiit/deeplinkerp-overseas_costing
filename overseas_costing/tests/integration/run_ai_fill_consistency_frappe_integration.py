@@ -162,6 +162,82 @@ def verify_oa_document_guard(tag):
     report("native_oa_source_controller", ok=True)
 
 
+def verify_oa_intake_and_refresh(tag):
+    from overseas_costing.services import workbench_service
+    from overseas_costing.services.logistics_settlement import runtime
+    from overseas_costing.services.logistics_settlement.initial_draft_refresh import sync_initial_draft_items
+    from overseas_costing.services.logistics_settlement.model import parse_source
+    from overseas_costing.services.logistics_settlement.store import Store
+
+    db, ledger = Store.frappe(), FrappeLedger()
+    row = {
+        "corp_id": tag, "process_instance_id": tag + "-OA", "business_id": tag + "-APPROVAL",
+        "process_code": "local-intl", "status": "RUNNING", "updated_at": "2026-01-15T00:00:00Z",
+        "raw_payload": {
+            "createTime": "2026-01-15T00:00:00Z", "businessId": tag + "-APPROVAL",
+            "formComponentValues": [
+                {"name": "物流方式Camino Envío", "value": "Express快递"},
+                {"name": "货物信息Bienes", "componentType": "TableField", "value": [
+                    {"rowId": "local-row", "rowValue": [
+                        {"name": "物料编码 Código de material", "value": "LOCAL-INTAKE-SKU"},
+                        {"name": "物料名称（中文）Nombre del material (chino)", "value": "本地货物"},
+                        {"name": "规格型号Especificación / Modelo", "value": "LOCAL-SPEC"},
+                        {"name": "数量Cantidad", "value": "2"},
+                        {"name": "单位Unidad", "value": "套"},
+                        {"name": "货值Valor de mercancía", "value": "125.32"},
+                        {"name": "币种Moneda", "value": "人民币RMB"},
+                    ]},
+                ]},
+            ],
+        },
+    }
+    with db.atomic():
+        source = db.ingest(parse_source(row, logistics_codes={"local-intl"}))
+        batch_name = runtime.ensure_batch(db, source)
+    batch = ledger.get("batch", batch_name)
+    version = ledger.get("version", batch["current_version"])
+    item, = ledger.rows("item", batch=batch_name, version=version["name"])
+    assert batch["item_count"] == 1
+    assert batch["source_approval_status"] == "RUNNING"
+    assert version["calculated_at"] is None
+    assert Decimal(present_material_row(item)["shipment_value_rmb"]) == Decimal("125.32")
+    assert item["product_name"] == "本地货物" and not batch["waybill_no"]
+
+    # Reproduce pre-upgrade bare rows, with their original source line link.
+    import json
+    old_meta = json.loads(item["extra_json"])
+    ledger.put("item", item["name"], {
+        "extra_json": dumps({"initial_logistics_line": old_meta["initial_logistics_line"]}),
+        "goods_value": 0, "unit_price": 0, "purchase_currency": "", "product_name": "", "spec_model": "",
+    })
+    ledger.put("batch", batch_name, {"item_count": 0})
+    row["raw_payload"]["formComponentValues"].append({"name": "运单号", "value": "1234567890"})
+    row["updated_at"] = "2026-01-16T00:00:00Z"
+    with db.atomic():
+        refreshed = db.ingest(parse_source(row, logistics_codes={"local-intl"}))
+        preview = sync_initial_draft_items(db, ledger, batch_name, refreshed["id"], dry_run=True)
+        assert preview["status"] == "ready" and preview["update_count"] == 1, preview
+        assert ledger.get("item", item["name"])["goods_value"] == 0
+        runtime.apply_source(refreshed["id"])
+    reread = ledger.get("item", item["name"])
+    assert Decimal(present_material_row(reread)["shipment_value_rmb"]) == Decimal("125.32")
+    batch = ledger.get("batch", batch_name)
+    assert batch["item_count"] == 1 and batch["waybill_no"] == "1234567890"
+    assert batch["confirm_status"] == "Pending" and batch["writeback_status"] == "Not Started"
+    assert ledger.get("version", version["name"])["calculated_at"] is None
+    results = workbench_service.get_workbench_batches({
+        "keyword": batch["batch_no"], "start_date": "2026-01-01", "end_date": "2026-01-31",
+    }, task="pending")
+    matching = next(r for r in results["items"] if r["name"] == batch_name)
+    assert Decimal(matching["shipment_goods_value_rmb"]) == Decimal("125.32")
+    assert matching["waybill_no"] == "1234567890"
+    runtime.apply_source(refreshed["id"])
+    assert db.count("audit", action="initial_logistics_draft_synced", binding_id=refreshed["id"]) == 1
+    assert ledger.rows("item", batch=batch_name, version=version["name"]) == [reread]
+    frappe.db.rollback()
+    report("native_oa_intake_and_existing_draft_refresh", ok=True, rows=1, idempotent=True)
+
+
 def main():
     connect()
     try:
@@ -232,6 +308,7 @@ def main():
         assert FixtureRepository(source).get_run(args[1]).status == "READY"
         report("ai_fill_rejects_changes_after_preview", ok=True, persisted_changes=0)
         verify_oa_document_guard(tag + "-GUARD")
+        verify_oa_intake_and_refresh(tag + "-INTAKE")
     finally:
         frappe.db.rollback()
         frappe.destroy()

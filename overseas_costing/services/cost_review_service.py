@@ -330,10 +330,20 @@ def evaluate_review_readiness(*, batch: dict, version: dict, items: list[dict], 
         action = "supplement_allocation"
     else:
         action = "recalculate"
+    shipment_goods_value_rmb = None
+    if (
+        cost_review_eligible
+        and version.get("name")
+        and version["name"] == batch.get("current_version")
+        and version.get("batch") == batch.get("name")
+        and not {"SOURCE_ADOPTION_PENDING", "PURCHASE_SOURCE_INVALID", "STABLE_ITEM_KEY_DUPLICATED"}.intersection(blockers)
+    ):
+        shipment_goods_value_rmb = expected["summary"]["purchase_goods_value_rmb"]
     return {"review_state": state, "review_blockers": list(blockers.values()),
             "review_warnings": list(warnings.values()), "result_is_current": result_current,
             "cost_review_started": cost_review_started,
             "cost_review_eligible": cost_review_eligible,
+            "shipment_goods_value_rmb": shipment_goods_value_rmb,
             "issue_codes": [code for code in ISSUE_ORDER if code in issues], "primary_issue": primary,
             "primary_action": action, "reviewed_at": version.get("reviewed_at") or version.get("confirmed_at") if confirmed else None,
             "reviewed_version": version.get("name") if confirmed else None,

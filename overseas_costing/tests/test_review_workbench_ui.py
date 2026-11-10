@@ -215,6 +215,55 @@ result_is_current:false,calculated_at:'2026-09-08',estimated_total_cost_rmb:100,
     assert '费用已变化，请重新试算' not in text
 
 
+def test_list_separates_current_shipment_goods_and_saved_cost_and_preserves_zero():
+    result=run_js("""
+global.window={requestAnimationFrame:()=>{}};
+const v=makeView('pending');v.batches=[];v.workbenchTotal=0;v.renderWorkbenchBatchList();
+v.hasText=x=>String(x||'').trim().length>0;
+const base={name:'B',primary_issue:'purchase',review_state:'processing',result_is_current:false};
+const missing=v.renderWorkbenchBatchRow({...base,total_goods_value:999,actual_total_cost_rmb:0,estimated_total_cost_rmb:0});
+const applied=v.renderWorkbenchBatchRow({...base,shipment_goods_value_rmb:'14500.00',total_goods_value:0});
+const zero=v.renderWorkbenchBatchRow({...base,shipment_goods_value_rmb:0,
+  summary_snapshot:{calculation_schema:2,total_cost_rmb:0}});
+const stale=v.renderWorkbenchBatchRow({...base,shipment_goods_value_rmb:14500,
+  actual_total_cost_rmb:'0.00',estimated_total_cost_rmb:'320.00'});
+console.log(JSON.stringify({missing,applied,zero,stale,header:Object.values(v.html).join('')}));
+""")
+    assert '本次发货货值' in result['header']
+    assert '<strong>待补</strong>' in result['missing']
+    assert '<strong>待试算</strong>' in result['missing']
+    assert '<strong>999</strong>' not in result['missing']
+    assert '<strong>14500.00</strong><span>RMB</span>' in result['applied']
+    assert '<strong>待试算</strong>' in result['applied']
+    assert '<strong>0</strong><span>RMB</span>' in result['zero']
+    assert result['zero'].count('<strong>0</strong><span>RMB') == 2
+    assert '<strong>320.00</strong><span>RMB' in result['stale']
+    assert '上次结果，待更新' in result['stale']
+
+
+def test_list_and_inline_preview_use_real_transport_fields_and_same_shipment_goods():
+    result=run_js("""
+const v=makeView('pending');v.formatNumber=String;
+const base={name:'B',primary_issue:'purchase',review_state:'processing',result_is_current:false,customs_no:'CUSTOMS'};
+const customs=v.renderWorkbenchBatchRow(base);
+const container=v.renderWorkbenchBatchRow({...base,container_no:'CONTAINER'});
+const sea=v.renderWorkbenchBatchRow({...base,sea_bill_no:'BILL',container_no:'CONTAINER'});
+v.resultPreviewState={batchName:'B',data:{summary:{
+  waybill_no:'WAYBILL',sea_bill_no:'BILL',customs_no:'CUSTOMS',
+  purchase_totals:[{currency:'USD',amount:666}],
+}}};
+const expanded=v.renderWorkbenchBatchRow({...base,waybill_no:'WAYBILL',shipment_goods_value_rmb:'14500.00'});
+console.log(JSON.stringify({customs,container,sea,expanded}));
+""")
+    assert '>报关单号 CUSTOMS<' in result['customs']
+    assert '>CONTAINER<' in result['container']
+    assert '>BILL<' in result['sea']
+    assert '物流单号</span><strong>CUSTOMS' not in result['expanded']
+    assert '<span>运单号</span><strong>WAYBILL</strong>' in result['expanded']
+    assert '<span>本次发货货值</span><strong>14500.00 RMB</strong>' in result['expanded']
+    assert '666 USD' not in result['expanded']
+
+
 def test_processing_row_limits_short_tags_and_hides_raw_messages():
     text=run_js("""const v=makeView('pending');console.log(JSON.stringify(v.renderWorkbenchBatchRow({
 name:'B',batch_no:'B',primary_issue:'logistics',primary_action:'supplement_fees',review_state:'processing',

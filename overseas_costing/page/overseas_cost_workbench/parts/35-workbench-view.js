@@ -702,13 +702,31 @@
     }
   }
 
+  hasWorkbenchAmount(value) {
+    return value !== null && value !== undefined && value !== "";
+  }
+
   formatResultPreviewMoney(value, currency = "RMB") {
-    if (value === null || value === undefined || value === "") return "未计算";
+    if (!this.hasWorkbenchAmount(value)) return "未计算";
     const amount = this.formatMoney(value);
     return `${amount}${currency ? ` ${currency}` : ""}`;
   }
 
-  renderBatchResultPreviewState() {
+  workbenchLogisticsReference(batch) {
+    const identifiers = [
+      ["waybill_no", "运单号"],
+      ["sea_bill_no", "海运提单号"],
+      ["container_no", "柜号"],
+      ["customs_no", "报关单号"],
+    ];
+    for (const [field, label] of identifiers) {
+      const value = String(batch[field] ?? "").trim();
+      if (value) return { field, label: ocTranslate(label), value };
+    }
+    return { label: ocTranslate("物流单号"), value: "" };
+  }
+
+  renderBatchResultPreviewState(batch) {
     const state = this.resultPreviewState;
     if (state.loading) {
       return `
@@ -726,15 +744,21 @@
         </section>
       `;
     }
-    return this.renderBatchResultPreview(state.data || {});
+    return this.renderBatchResultPreview({
+      ...state.data,
+      summary: {
+        ...state.data?.summary,
+        shipment_goods_value_rmb: batch.shipment_goods_value_rmb,
+      },
+    });
   }
 
   renderBatchResultPreview(data) {
     const summary = data.summary || {};
-    const purchaseTotals = Array.isArray(summary.purchase_totals) ? summary.purchase_totals : [];
-    const purchaseTotalHtml = purchaseTotals.length
-      ? purchaseTotals.map((row) => `<span>${this.escape(this.formatResultPreviewMoney(row.amount, row.currency || ""))}</span>`).join("")
-      : `<span>${ocTranslate("未计算")}</span>`;
+    const logistics = this.workbenchLogisticsReference(summary);
+    const shipmentGoodsValue = this.hasWorkbenchAmount(summary.shipment_goods_value_rmb)
+      ? this.formatResultPreviewMoney(summary.shipment_goods_value_rmb)
+      : ocTranslate("待补");
     const calculationPending = summary.calculation_status === "pending";
     const otherCost = Number(summary.unlisted_other_cost_rmb || 0);
     const items = Array.isArray(data.items) ? data.items : [];
@@ -796,8 +820,8 @@
           <div class="ocw-result-sticky-dock" data-role="result-preview-sticky-dock">
             <div class="ocw-result-summary">
               <div><span>${ocTranslate("批次号")}</span><strong>${this.escape(summary.batch_no || "—")}</strong></div>
-              <div><span>${ocTranslate("物流单号")}</span><strong>${this.escape(summary.logistics_no || ocTranslate("未填写"))}</strong></div>
-              <div><span>${ocTranslate("批次总货值")}</span><strong class="ocw-result-summary-stack">${purchaseTotalHtml}</strong></div>
+              <div><span>${this.escape(logistics.label)}</span><strong>${this.escape(logistics.value || ocTranslate("未填写"))}</strong></div>
+              <div><span>${ocTranslate("本次发货货值")}</span><strong>${this.escape(shipmentGoodsValue)}</strong></div>
               <div><span>${ocTranslate("总运费")}</span><strong>${moneyCell(summary.total_freight_rmb)}</strong></div>
               <div><span>${ocTranslate("总关税/税费")}</span><strong>${moneyCell(summary.total_tax_rmb)}</strong></div>
               <div><span>${ocTranslate("总清关费")}</span><strong>${moneyCell(summary.total_clearance_rmb)}</strong></div>
@@ -868,7 +892,7 @@
         <span>${isReview ? ocTranslate("暂估与待补凭证仅作提示；最终确认仍须通过校验") : ocTranslate("点击批次号查看详情，按下一步处理阻断项")}</span>
       </div>
       <div class="ocw-batch-grid ocw-batch-grid-head" aria-hidden="true">
-        <span></span><span>${ocTranslate("批次 / 物流单号")}</span><span>${ocTranslate("业务类型 / SKU")}</span><span>${isReview ? ocTranslate("核对状态") : ocTranslate("当前问题")}</span><span>${ocTranslate("采购货值")}</span><span>${ocTranslate("综合成本")}</span><span>${ocTranslate("流程发起时间")}</span><span>${ocTranslate("下一步")}</span>
+        <span></span><span>${ocTranslate("批次 / 物流单号")}</span><span>${ocTranslate("业务类型 / SKU")}</span><span>${isReview ? ocTranslate("核对状态") : ocTranslate("当前问题")}</span><span>${ocTranslate("本次发货货值")}</span><span>${ocTranslate("综合成本")}</span><span>${ocTranslate("流程发起时间")}</span><span>${ocTranslate("下一步")}</span>
       </div>
       <div class="ocw-batch-grid-body">
         ${rows || `<div class="ocw-state-panel"><strong>${ocTranslate("当前条件下没有{0}", [title])}</strong><span>${isReview && !isHistory ? ocTranslate("请先在待处理中补齐计算所需资料并完成试算；旧结果不会进入待核对。") : ocTranslate("可调整日期、清空筛选或切换任务视图。")}</span></div>`}
@@ -884,7 +908,9 @@
 
   renderWorkbenchBatchRow(batch) {
     const reference = batch.batch_no || batch.source_approval_no || batch.name;
-    const logisticsNo = batch.waybill_no || batch.customs_no || ocTranslate("未填写物流单号");
+    const logistics = this.workbenchLogisticsReference(batch);
+    const logisticsTitle = logistics.value ? `${logistics.label} ${logistics.value}` : ocTranslate("未填写物流单号");
+    const logisticsDisplay = logistics.field === "customs_no" ? logisticsTitle : logistics.value || logisticsTitle;
     const remediationState = String(batch.remediation_state || "").toLowerCase();
     let action;
     if (remediationState === "returned") {
@@ -901,10 +927,18 @@
     } else {
       action = {action: "supplement", label: ocTranslate("继续处理")};
     }
-    const totalCost = batch.summary_snapshot?.calculation_schema === 2 ? batch.summary_snapshot.total_cost_rmb : batch.actual_total_cost_rmb || batch.estimated_total_cost_rmb;
+    const snapshot = batch.summary_snapshot || {};
+    const legacyTotal = Number(batch.actual_total_cost_rmb) || !this.hasWorkbenchAmount(batch.estimated_total_cost_rmb)
+      ? batch.actual_total_cost_rmb
+      : batch.estimated_total_cost_rmb;
+    const hasSnapshotAmount = this.hasWorkbenchAmount(snapshot.total_cost_rmb);
+    const totalCost = snapshot.calculation_schema === 2 || hasSnapshotAmount ? snapshot.total_cost_rmb : legacyTotal;
     const rowStatus = this.workbenchRowStatusLabel(batch);
     const reviewTags = this.renderWorkbenchReviewTags(batch);
-    const hasSavedResult = Boolean(batch.calculated_at || Number(totalCost || 0) > 0);
+    const hasSavedResult = this.hasWorkbenchAmount(totalCost)
+      && Boolean(batch.calculated_at || hasSnapshotAmount || Number(totalCost) > 0);
+    const shipmentGoodsValue = batch.shipment_goods_value_rmb;
+    const hasShipmentGoodsValue = this.hasWorkbenchAmount(shipmentGoodsValue);
     const expanded = this.resultPreviewState?.batchName === batch.name;
     return `
       <div class="ocw-workbench-record ${expanded ? "is-expanded" : ""}" data-batch-name="${this.escape(batch.name)}">
@@ -914,18 +948,18 @@
           </button>
           <div class="ocw-batch-identity">
             <button type="button" class="ocw-batch-link" data-action="open-batch-detail" data-batch-name="${this.escape(batch.name)}">${this.escape(reference)}</button>
-            <span>${this.escape(logisticsNo)}</span>
+            <span title="${this.escape(logisticsTitle)}">${this.escape(logisticsDisplay)}</span>
           </div>
           <div><strong>${this.escape(this.businessTypeLabel(batch.business_type) || batch.transport_mode || "-")}</strong><span>${ocTranslate("{0} 个 SKU", [Number(batch.item_count || 0)])}</span></div>
           <div><strong class="ocw-issue is-${this.escape(batch.primary_issue)}">${this.escape(rowStatus)}</strong>${reviewTags}</div>
-          <div><strong>${this.escape(this.formatMoney(batch.total_goods_value || 0))}</strong><span>RMB</span></div>
-          <div><strong>${this.escape(this.formatMoney(totalCost || 0))}</strong><span>RMB${batch.result_is_current === false && hasSavedResult ? ocTranslate(" · 上次结果，待更新") : ""}</span></div>
+          <div><strong>${this.escape(hasShipmentGoodsValue ? this.formatMoney(shipmentGoodsValue) : ocTranslate("待补"))}</strong>${hasShipmentGoodsValue ? "<span>RMB</span>" : ""}</div>
+          <div><strong>${this.escape(hasSavedResult ? this.formatMoney(totalCost) : ocTranslate("待试算"))}</strong>${hasSavedResult ? `<span>RMB${batch.result_is_current === false ? ocTranslate(" · 上次结果，待更新") : ""}</span>` : ""}</div>
           <div><strong>${this.escape(this.formatDateTimeMinute(batch.source_created_at) || "—")}</strong><span>${this.escape(batch.review_state === "confirmed" ? ocTranslate("确认版本 {0}", [batch.reviewed_version || batch.current_version || "—"]) : batch.result_is_current === false ? ocTranslate("待重新试算") : ocTranslate(batch.status || ""))}</span></div>
           <div class="ocw-row-actions">
             <button class="ocw-primary-btn" type="button" data-action="workbench-primary" data-primary-action="${action.action}" data-batch-name="${this.escape(batch.name)}">${action.label}</button>
           </div>
         </article>
-        ${expanded ? this.renderBatchResultPreviewState() : ""}
+        ${expanded ? this.renderBatchResultPreviewState(batch) : ""}
       </div>
     `;
   }
