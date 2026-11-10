@@ -422,16 +422,21 @@ def preview_source_ai_selection(batch_name,run_id,row_ids_json,fee_ids_json,mode
 
 @frappe.whitelist(methods=['POST'])
 def confirm_source_ai_selection(batch_name,run_id,preview_id,preview_revision,edit_token,expected_modified):
+    from overseas_costing.services.edit_session_service import EditSessionPermissionError, EditSessionRevisionError
     from overseas_costing.services.material_ai_selection_service import confirm
 
     for attempt in range(2):
         try:
             authorized_batch = require_batch_permission(batch_name, 'write')
             try:
-                return confirm(authorized_batch,str(run_id),str(preview_id),str(preview_revision),str(edit_token),str(expected_modified))
-            except ValueError as error:
+                return confirm(authorized_batch, str(run_id), str(preview_id), str(preview_revision),
+                               str(edit_token or ''), str(expected_modified or ''))
+            except (EditSessionPermissionError, EditSessionRevisionError, ValueError) as error:
                 frappe.db.rollback()
-                return {'ok':False,'code':'REVIEW_REQUIRED','message':str(error)}
+                code = ('EDIT_SESSION_REQUIRED' if isinstance(error, EditSessionPermissionError)
+                        else 'BATCH_REVISION_CHANGED' if isinstance(error, EditSessionRevisionError)
+                        else 'REVIEW_REQUIRED')
+                return {'ok': False, 'code': code, 'message': str(error)}
         except Exception as error:
             if type(error).__name__ != 'QueryDeadlockError':
                 raise
@@ -439,7 +444,8 @@ def confirm_source_ai_selection(batch_name,run_id,preview_id,preview_revision,ed
             # This POST owns the transaction; restart once with the same receipt.
             frappe.db.rollback()
             if attempt:
-                raise
+                return {'ok': False, 'code': 'REVIEW_CONFLICT',
+                        'message': _('当前批次正在更新，本次未保存。请稍后重试或重新预览。')}
 
 
 @frappe.whitelist(methods=['POST'])

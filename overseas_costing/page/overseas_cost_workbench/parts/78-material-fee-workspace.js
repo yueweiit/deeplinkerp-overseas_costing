@@ -2955,6 +2955,8 @@
           this.changeMaterialAIRowSelection("rows", "all", action === "mf-ai-row-all");
         } else if (action === "mf-ai-row-preview") {
           this.restartMaterialAIFromCurrentSources();
+        } else if (action === "mf-ai-preview-again") {
+          this.previewMaterialAIRowSelection();
         } else if (action === "mf-ai-progress-retry") {
           this.retryMaterialAIProgress();
         } else if (action === "mf-ai-payment-continue") {
@@ -3433,6 +3435,7 @@
     clearTimeout(selection.timer);
     selection.request += 1;
     selection.preview = null;
+    selection.previewNeedsRefresh = false;
     selection.loading = true;
     selection.error = "";
     this.renderMaterialAIReviewDialog();
@@ -3461,7 +3464,7 @@
     let release;
     const inFlight = new Promise(resolve => { release = resolve; });
     selection.inFlight = inFlight;
-    selection.preview = null; selection.loading = true; selection.error = "";
+    selection.preview = null; selection.previewNeedsRefresh = false; selection.loading = true; selection.error = "";
     this.renderMaterialAIReviewDialog();
     try {
       // Preserve server ordering. Intermediate queued selections exit before making a request.
@@ -3475,6 +3478,7 @@
         mode: selection.mode, expected_version: this.detailState.versionName || null,
       }, false);
       if (!current()) return;
+      if (result?.ok === false) throw result;
       if (!result?.ok || !result.preview) throw new Error(result?.message || "未取得有效预览，请重新预览。");
       if (result.row_review) fill.row_review = result.row_review;
       // The server owns the final rows, counts and eligibility; never merge business values here.
@@ -3616,11 +3620,11 @@
     const selectedGroup = groups.find(group => group.equivalentIds.has(selectedId));
     const resultFor = group => (results.get(key) || []).find(row => group.equivalentIds.has(String(row.candidate_id)));
     const reason = message => message ? `<small class="ocw-mf-ai-field-reason">${this.escape(ocTranslate(message))}</small>` : "";
-    const resultReason = result => result?.status === "apply" ? "" : reason(result?.message);
     const state = (result, selected) => {
       if (result?.status === "apply") return `<b class="is-apply" aria-label="${this.escape(ocTranslate("将采用"))}">✓</b>`;
       if (result?.status === "retain" || result?.status === "review") {
-        return `<small class="ocw-mf-ai-field-outcome is-${result.status}">${ocTranslate(result.status === "retain" ? "保留原值" : "待核对")}</small>`;
+        const title = result.status === "retain" && result.message ? ` title="${this.escape(ocTranslate(result.message))}"` : "";
+        return `<small class="ocw-mf-ai-field-outcome is-${result.status}"${title}>${ocTranslate(result.status === "retain" ? "保留原值" : "待核对")}</small>`;
       }
       return selected ? `<small class="ocw-mf-ai-field-outcome">${ocTranslate("已选，待预览")}</small>` : "";
     };
@@ -3647,18 +3651,18 @@
       const display = value(group.representative?.suggested_value);
       const selected = selectedGroup === group;
       const result = resultFor(group);
-      const deselect = selected ? `<button type="button" class="ocw-link-btn" data-action="mf-ai-adopt-field" data-mf-ai-field-key="${this.escape(key)}" data-mf-ai-candidate-id="" aria-label="${this.escape(ocTranslate("不采用 {0}", [`${material} ${label}`]))}" ${busy}>${ocTranslate("不采用")}</button>` : "";
       const control = selected || result
-        ? `<span class="ocw-mf-ai-field-selected" ${selected ? `data-mf-ai-field-selected="${this.escape(group.groupId)}"` : ""}><span>${display}</span>${state(result, selected)}${deselect}</span>${resultReason(result)}`
+        ? `<span class="ocw-mf-ai-field-selected" ${selected ? `data-mf-ai-field-selected="${this.escape(group.groupId)}"` : ""}><span>${display}</span>${state(result, selected)}</span>`
         : `<button type="button" class="ocw-outline-btn ocw-mini-btn ocw-mf-ai-field-adopt" data-action="mf-ai-adopt-field" data-mf-ai-field-key="${this.escape(key)}" data-mf-ai-candidate-id="${this.escape(group.representativeId)}" ${busy}>${ocTranslate("采用 {0}", [display])}</button>`;
       return `${control}${readonly}${conflict}`;
     }
-    const options = [`<option value="" ${applicableGroups.includes(selectedGroup) ? "" : "selected"}>${ocTranslate("不采用")}</option>`, ...applicableGroups.map(group => `<option value="${this.escape(group.representativeId)}" ${selectedGroup === group ? "selected" : ""}>${optionLabel(group.representative)}</option>`)].join("");
+    const placeholder = applicableGroups.includes(selectedGroup) ? "" : `<option value="" disabled selected>${ocTranslate("请选择来源")}</option>`;
+    const options = placeholder + applicableGroups.map(group => `<option value="${this.escape(group.representativeId)}" ${selectedGroup === group ? "selected" : ""}>${optionLabel(group.representative)}</option>`).join("");
     const outcomes = applicableGroups.map(group => {
       const result = resultFor(group);
       const selected = selectedGroup === group;
       const display = selected ? "" : `<span>${value(group.representative?.suggested_value)}</span>`;
-      return selected || result ? `<span class="ocw-mf-ai-field-selected">${display}${state(result, selected)}</span>${resultReason(result)}` : "";
+      return selected || result ? `<span class="ocw-mf-ai-field-selected">${display}${state(result, selected)}</span>` : "";
     }).join("");
     return `<select data-mf-ai-field-select="${this.escape(key)}" aria-label="${this.escape(material)} ${this.escape(ocTranslate(label))}" ${busy}>${options}</select>${outcomes}${readonly}${conflict}`;
   }
@@ -3888,7 +3892,8 @@
     const fieldChoiceSection = this.renderMaterialAIPackingStages(fill, selection, fieldColumnOrder, fieldLabels, value,
       selection.mode === "add_selected" ? "disabled" : busy, itemLabel, results);
     const reviewResults = [...results.values()].flat().filter(result => result.status === "review");
-    const reviewNotice = reviewResults.length ? `<details class="ocw-mf-ai-preview-unresolved" data-mf-ai-field-issues><summary>${ocTranslate("待核对 {0} 项", [reviewResults.length])}</summary><ul>${reviewResults.map(result => `<li>${value(itemLabel(result.item_name))} · ${this.escape(ocTranslate(fieldLabels[result.fieldname] || result.fieldname))}：${this.escape(ocTranslate(result.message || "待核对"))}</li>`).join("")}</ul></details>` : "";
+    const reviewSummary = preview?.can_apply ? "另有 {0} 项待核对，本次保留原值" : "待核对 {0} 项";
+    const reviewNotice = reviewResults.length ? `<details class="ocw-mf-ai-preview-unresolved" data-mf-ai-field-issues ${preview?.can_apply ? "" : "open"}><summary>${ocTranslate(reviewSummary, [reviewResults.length])}</summary><ul>${reviewResults.map(result => `<li>${value(itemLabel(result.item_name))} · ${this.escape(ocTranslate(fieldLabels[result.fieldname] || result.fieldname))}：${this.escape(ocTranslate(result.message || "待核对"))}</li>`).join("")}</ul></details>` : "";
     const excludedItemNames = [...new Set((preview?.scope_excluded_item_names || []).filter(Boolean).map(String))];
     const scopeExclusionNotice = excludedItemNames.length ? `<details class="ocw-mf-ai-preview-unresolved ocw-mf-ai-scope-exclusions" data-mf-ai-scope-exclusions open><summary>${ocTranslate("本票将排除 {0} 行", [excludedItemNames.length])}</summary><p>${ocTranslate("这些物料不在本次来源的货物清单内，确认后不参与本票计算，原记录仍保留在“已排除物料”。")}</p><ul>${excludedItemNames.map(name => `<li>${value(itemLabel(name))}</li>`).join("")}</ul></details>` : "";
     const finalSummary = preview ? ocTranslate(excludedItemNames.length
@@ -3909,14 +3914,15 @@
     const modeHelp = excludedItemNames.length ? modeSummary
       : selection.mode === "update_selected" ? "更新已选字段，未选字段与其他行保留。" : selection.mode === "add_selected" ? "仅新增明确勾选的未匹配物料；本次不同时更新现有行或费用。" : "只补真正缺失的字段；已填金额、数量和 0 值保留。";
     const scopeNotice = `<p class="ocw-mf-ai-scope-summary" data-mf-ai-material-scope>${ocTranslate("定行依据：国际物流/支付申请/采购支出")}</p>`;
+    const refreshPreview = selection.previewNeedsRefresh ? `<button class="ocw-outline-btn" type="button" data-action="mf-ai-preview-again" ${busy}>${ocTranslate("重新预览")}</button>` : "";
     return `<div class="ocw-mf-ai-review-dialog" data-mf-ai-review-host="1"><header><div><strong>${ocTranslate("填充预览")}</strong><span>${modeSummary}</span></div></header>
       <main class="ocw-mf-ai-dialog-body"><details class="ocw-mf-ai-row-controls"><summary>${ocTranslate("更多设置")}</summary><div><label>${ocTranslate("填充方式")} <select data-mf-ai-row-mode ${busy}><option value="update_selected" ${selection.mode === "update_selected" ? "selected" : ""}>${ocTranslate("更新所选行（默认）")}</option><option value="fill_missing" ${selection.mode === "fill_missing" ? "selected" : ""}>${ocTranslate("只补缺失")}</option>${hasAddCandidates ? `<option value="add_selected" ${selection.mode === "add_selected" ? "selected" : ""}>${ocTranslate("单独确认新增")}</option>` : ""}</select></label><p>${modeHelp}</p></div></details>
       ${scopeNotice}${fieldChoiceSection}${selection.mode === "add_selected" ? `<section class="ocw-mf-ai-preview-section"><h4>${ocTranslate("待新增物料")} <span>${ocTranslate("已选 {0} / {1}", [selection.rows.size, addCandidateRows ? (catalog.rows || []).filter(row => row.can_add).length : 0])}</span></h4><div class="ocw-mf-ai-row-toolbar"><button type="button" class="ocw-outline-btn" data-action="mf-ai-row-all" ${busy}>${ocTranslate("全选可用行")}</button><button type="button" class="ocw-outline-btn" data-action="mf-ai-row-none" ${busy}>${ocTranslate("全不选")}</button></div>${addCandidateTable}</section>` : ""}
       ${feeSection}
       ${mergedAmountSummary}${packingGroupSummary}<section class="ocw-mf-ai-preview-section" data-mf-ai-final-preview><h4>${ocTranslate("确认后物料清单")}</h4>${reviewNotice}${scopeExclusionNotice}${selection.loading ? `<p role="status">${ocTranslate("正在更新服务器预览…")}</p>` : preview ? `<p>${finalSummary}</p><div class="ocw-mf-ai-preview-table"><table class="ocw-mf-ai-final-table"><thead><tr>${columns.map(([, label]) => `<th>${ocTranslate(label)}</th>`).join("")}</tr></thead><tbody>${(preview.rows || []).map(row => `<tr>${finalCells(row)}</tr>`).join("")}</tbody></table></div>` : `<p>${ocTranslate("等待服务器预览。")}</p>`}${notices.length ? `<ul>${notices.map(row => `<li>${this.escape(typeof row === "string" ? row : row.message || row.reason || row.fieldname || ocTranslate("待核对"))}</li>`).join("")}</ul>` : ""}</section>
-      ${selection.error ? `<p class="ocw-mf-ai-review-error" role="alert">${this.escape(selection.error)}</p>` : ""}
       <details class="ocw-mf-ai-review-advanced" data-mf-ai-review-evidence><summary>${ocTranslate("查看依据与其他记录")}</summary>${this.renderMaterialAIReviewSources(fill)}<button class="ocw-outline-btn" type="button" data-action="mf-ai-change-sources" ${busy}>${ocTranslate("更换来源并重新生成")}</button></details></main>
-      <footer class="ocw-mf-ai-dialog-footer"><span>${ocTranslate("确认前不会修改已保存数据")}</span><div><button class="ocw-outline-btn" type="button" data-action="mf-ai-review-cancel" ${busy}>${ocTranslate("取消")}</button><button class="ocw-outline-btn" type="button" data-action="mf-ai-discard" ${busy}>${ocTranslate("放弃草稿")}</button><button class="ocw-outline-btn" type="button" data-action="mf-ai-row-preview" ${selection.loading || fill.applying ? "disabled" : ""}>${ocTranslate("重新读取资料源")}</button><button class="ocw-primary-btn" type="button" data-action="mf-ai-apply" ${this.canConfirmMaterialAIRowSelection(fill) ? "" : "disabled"}>${fill.applying ? ocTranslate("正在填充…") : selection.mode === "add_selected" ? ocTranslate("确认新增") : ocTranslate("确认填充")}</button></div></footer></div>`;
+      ${selection.error ? `<p class="ocw-mf-ai-review-error" role="alert">${this.escape(selection.error)}</p>` : ""}
+      <footer class="ocw-mf-ai-dialog-footer"><span>${ocTranslate("确认前不会修改已保存数据")}</span><div><button class="ocw-outline-btn" type="button" data-action="mf-ai-review-cancel" ${busy}>${ocTranslate("取消")}</button><button class="ocw-outline-btn" type="button" data-action="mf-ai-discard" ${busy}>${ocTranslate("放弃草稿")}</button><button class="ocw-outline-btn" type="button" data-action="mf-ai-row-preview" ${selection.loading || fill.applying ? "disabled" : ""}>${ocTranslate("重新读取资料源")}</button>${refreshPreview}<button class="ocw-primary-btn" type="button" data-action="mf-ai-apply" ${this.canConfirmMaterialAIRowSelection(fill) ? "" : "disabled"}>${fill.applying ? ocTranslate("正在填充…") : selection.mode === "add_selected" ? ocTranslate("确认新增") : ocTranslate("确认填充")}</button></div></footer></div>`;
   }
 
   async confirmMaterialAIRowSelection() {
@@ -3924,17 +3930,22 @@
     const fill = state.aiFill;
     if (!fill?.row_review || !this.canConfirmMaterialAIRowSelection(fill)) return;
     const selection = fill.rowSelection;
+    const preview = selection.preview;
     const key = this.materialAIRowSelectionKey(fill);
-    const current = () => this.materialFeeState === state && state.aiFill === fill && key === this.materialAIRowSelectionKey(fill) && this.detailState.tab === "documents";
+    const sameSelection = () => this.materialFeeState === state && state.aiFill === fill && key === this.materialAIRowSelectionKey(fill) && this.detailState.tab === "documents";
+    const current = () => sameSelection() && selection.preview === preview;
+    let submittedToken;
     fill.applying = true; selection.error = ""; this.updateMaterialFeeWriteControls(state); this.renderMaterialAIReviewDialog();
     try {
-      if (!(await this.ensureEditSession()) || !current()) return;
+      if (!(await this.ensureMaterialFeeEditSession()) || !current()) return;
+      submittedToken = this.detailState.editToken;
       const result = await this.call("overseas_costing.api.materials.confirm_source_ai_selection", {
         batch_name: state.batchName, run_id: fill.runId || fill.run_id,
-        preview_id: selection.preview.id, preview_revision: selection.preview.revision,
-        edit_token: this.detailState.editToken, expected_modified: this.detailState.expectedModified,
+        preview_id: preview.id, preview_revision: preview.revision,
+        edit_token: submittedToken, expected_modified: preview.batch_modified || this.detailState.expectedModified,
       }, false);
       if (!current()) return;
+      if (result?.ok === false) throw result;
       if (!result?.ok) throw new Error(result?.message || "填充未保存，请核对后重试。");
       this.updateMaterialFeeExpectedModified(result);
       if (result.version_name) this.detailState.versionName = result.version_name;
@@ -3944,8 +3955,17 @@
       frappe.show_alert({ message: result.message || ocTranslate("所选资料已填充，请重新试算"), indicator: "green" });
       await this.loadMaterialFeeWorkspace({ quiet: true });
     } catch (error) {
-      if (current()) selection.error = this.materialAIErrorMessage(error, "填充未保存，请重试。");
-    } finally { fill.applying = false; this.updateMaterialFeeWriteControls(state); if (current()) this.renderMaterialAIReviewDialog(); }
+      if (current()) {
+        const payload = this.materialAIErrorPayload(error);
+        const code = payload?.code || payload?.error?.code;
+        if (code === "EDIT_SESSION_REQUIRED" && submittedToken === this.detailState.editToken) this.clearMaterialFeeEditSession();
+        if (["BATCH_REVISION_CHANGED", "REVIEW_CONFLICT"].includes(code)) {
+          selection.preview = null;
+          selection.previewNeedsRefresh = true;
+        }
+        selection.error = this.materialAIErrorMessage(error, "填充未保存，请重试。");
+      }
+    } finally { fill.applying = false; this.updateMaterialFeeWriteControls(state); if (sameSelection()) this.renderMaterialAIReviewDialog(); }
   }
 
   materialAIAutofillPreview(fill) {

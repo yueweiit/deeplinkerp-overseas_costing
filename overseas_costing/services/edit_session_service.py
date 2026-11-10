@@ -29,6 +29,14 @@ except Exception:  # pragma: no cover - 纯函数测试时保持可导入
 LEASE_MINUTES = 5
 
 
+class EditSessionPermissionError(PermissionError):
+    """The requested edit lease has expired or no longer belongs to this request."""
+
+
+class EditSessionRevisionError(RuntimeError):
+    """The write request does not identify the current batch revision."""
+
+
 def lock_is_active(batch: dict, now: datetime | None = None) -> bool:
     expires_at = batch.get("edit_lock_expires_at")
     return bool(expires_at and get_datetime(expires_at) > (now or now_datetime()))
@@ -42,11 +50,11 @@ def assert_editable(
     now: datetime | None = None,
 ) -> None:
     if not lock_is_active(batch, now=now):
-        raise PermissionError(_("编辑会话已过期，请重新进入编辑。"))
+        raise EditSessionPermissionError(_("编辑会话已过期，请重新进入编辑。"))
     if batch.get("edit_lock_owner") != user or batch.get("edit_lock_token") != token:
-        raise PermissionError(_("当前批次正在被{0}编辑。").format(batch.get('edit_lock_owner') or '其他用户'))
+        raise EditSessionPermissionError(_("当前批次正在被{0}编辑。").format(batch.get('edit_lock_owner') or '其他用户'))
     if expected_modified and get_datetime(batch.get("modified")) != get_datetime(expected_modified):
-        raise RuntimeError("批次数据已被更新，请刷新后重新确认本次修改。")
+        raise EditSessionRevisionError(_("批次数据已被更新，请刷新后重新确认本次修改。"))
 
 
 def _lock_row(batch_name: str) -> dict:
@@ -141,7 +149,7 @@ def assert_batch_write(
     """对已解析到批次的写操作进行统一校验。"""
 
     if expected_modified in (None, ""):
-        raise RuntimeError("缺少数据版本，请刷新批次详情后重新修改。")
+        raise EditSessionRevisionError(_("缺少数据版本，请刷新批次详情后重新修改。"))
     row = _lock_row(batch_name)
     assert_editable(
         row,

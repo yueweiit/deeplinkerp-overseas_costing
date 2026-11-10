@@ -1,5 +1,5 @@
 """Server preview fences, idempotence and fee-only reuse without an AI call."""
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from copy import deepcopy
 import json
 import re
@@ -1451,3 +1451,44 @@ def test_legacy_fee_only_proposal_cannot_bypass_controlled_selection_preview():
     with pytest.raises(ValueError,match='预览'):
         ai.apply_source_ai_review('B1',repo.run['name'],['F1'],{},'TOKEN','M1',repository=repo)
     assert not repo.writes
+
+
+def test_confirm_uses_revision_bound_to_preview_instead_of_stale_detail():
+    repo = Repo()
+    repo.context['batch_modified'] = 'NEW-DETAIL'
+    checked = []
+    repo.assert_write = lambda batch, token, expected: checked.append((batch, token, expected))
+    preview = prepare(repo)
+    assert preview['batch_modified'] == 'NEW-DETAIL'
+    assert confirm(repo, preview)['ok']
+    assert checked == [('B1', 'TOKEN', 'NEW-DETAIL')]
+
+
+@pytest.mark.parametrize('pending_payment_match', [False, True])
+def test_partial_field_confirmation_preserves_payment_matching_boundary(pending_payment_match):
+    repo = Repo()
+    if pending_payment_match:
+        payment_match_preview(repo)
+    repo.run['candidates_json'][0]['payload']['fields']['goods_value'] = 85
+    catalog = service.review_catalog(repo, 'B1', repo.run)
+    choices = {f"{c['item_name']}:{c['fieldname']}": c['candidate_id']
+               for c in catalog['field_candidates']}
+    assert set(choices) == {'I1:gross_weight_kg', 'I1:goods_value'}
+
+    preview = service.prepare('B1', repo.run['name'], [], [], 'update_selected', 'V1',
+                              field_choices=choices, repository=repo)['preview']
+    assert {r['fieldname']: r['status'] for r in preview['field_results']} == {
+        'goods_value': 'review', 'gross_weight_kg': 'apply',
+    }
+    if pending_payment_match:
+        repo.payment_match_confirmation_scope = nullcontext
+        assert not preview['can_apply']
+        assert preview['unresolved'][0]['code'] == 'PAYMENT_MATCH_FIELDS_NEED_REVIEW'
+        with pytest.raises(ValueError, match='付款申请'):
+            confirm(repo, preview)
+        assert not repo.writes
+        return
+    assert preview['can_apply']
+    assert confirm(repo, preview)['ok']
+    assert {c['fieldname'] for c in repo.writes[0]['changes']} == {'gross_weight_kg'}
+    assert not repo.writes[0]['rows'][0].get('goods_value')

@@ -2252,12 +2252,12 @@ def project(items, catalog, row_ids, fee_ids, mode, *, field_choices=None):
                          for candidate in {c['candidate_id']: c for c in requested_field_candidates + selected_field_candidates}.values()
                          if candidate['candidate_id'] in selection_outcomes),
                          key=lambda outcome: (outcome['item_name'], outcome['fieldname'], outcome['candidate_id']))
-        blocked = any(outcome['status'] == 'review' for outcome in field_results)
+        # Fields needing review never reach changes. Independent fields can still be saved.
         return {'policy':POLICY,'mode':mode,'rows':result,'fees':selected_fees,'changes':changes,'field_results':field_results,
                 'selected_row_ids':row_ids,'selected_fee_ids':fee_ids,'selected_field_choices':deepcopy(field_choices),
                 'added_count':0,'removed_count':0,'updated_count':len({change['item_name'] for change in changes}),
                 'actual_sources':list(actual_by_field.values()),'missing_fields':missing_fields,'unresolved':[],
-                'can_apply':not blocked and bool(changes or selected_fees or scope_excluded),
+                'can_apply':bool(changes or selected_fees or scope_excluded),
                 'scope_excluded_item_names':sorted(scope_excluded),
                 'catalog_fingerprint':catalog['fingerprint']}
     pending_add = []

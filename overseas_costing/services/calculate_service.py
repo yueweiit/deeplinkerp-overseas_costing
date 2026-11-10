@@ -74,6 +74,8 @@ SHIPMENT_VALUE_INPUT_FIELDS = frozenset({
 SERVER_ITEM_METADATA_FIELDS = frozenset({
     "shipment_valuation",
     "manual_shipment_valuation",
+    "adopted_purchase_value",
+    "purchase_value_history",
     "logistics_row",
     "autofill_review",
     "supplier_raw_value",

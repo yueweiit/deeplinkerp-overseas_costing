@@ -437,12 +437,65 @@ def test_confirm_selection_retries_once_from_fresh_request_transaction(monkeypat
     monkeypatch.setattr(selection, 'confirm', confirm)
     args = ('BATCH', 'RUN', 'PREVIEW', 'REV', 'TOKEN', 'MOD')
     if always_conflicts:
-        with pytest.raises(QueryDeadlockError):
-            api.confirm_source_ai_selection(*args)
+        result = api.confirm_source_ai_selection(*args)
+        assert result['ok'] is False and result['code'] == 'REVIEW_CONFLICT'
     else:
         assert api.confirm_source_ai_selection(*args) == {'ok': True, 'idempotent': True}
     attempt = [('permission', 'BATCH', 'write'), ('confirm', 'BATCH-DOC', *args[1:])]
     assert calls == [*attempt, ('rollback',), *attempt, *([('rollback',)] if always_conflicts else [])]
+
+
+@pytest.mark.parametrize('problem,code', [
+    ('stale_revision', 'BATCH_REVISION_CHANGED'),
+    ('missing_revision', 'BATCH_REVISION_CHANGED'),
+    ('expired_lease', 'EDIT_SESSION_REQUIRED'),
+    ('replaced_lease', 'EDIT_SESSION_REQUIRED'),
+])
+def test_confirm_selection_returns_real_lease_guard_errors_without_retry(monkeypatch, problem, code):
+    from datetime import datetime, timedelta
+    from overseas_costing.services import edit_session_service, material_ai_selection_service as selection
+
+    api = _load_api(monkeypatch)
+    calls = []
+    now = datetime(2030, 1, 1, 10)
+    row = {'modified': now, 'edit_lock_owner': 'fixture-user', 'edit_lock_token': 'VALID',
+           'edit_lock_expires_at': now + timedelta(minutes=5)}
+    if problem == 'expired_lease':
+        row['edit_lock_expires_at'] = now
+    token = 'REPLACED' if problem == 'replaced_lease' else row['edit_lock_token']
+    modified = (None if problem == 'missing_revision'
+                else str(now - timedelta(seconds=1)) if problem == 'stale_revision'
+                else str(now))
+    api.frappe.db = SimpleNamespace(rollback=lambda: calls.append('rollback'))
+    monkeypatch.setattr(edit_session_service, 'frappe', SimpleNamespace(session=SimpleNamespace(user='fixture-user')))
+    monkeypatch.setattr(edit_session_service, '_lock_row', lambda batch: row)
+    monkeypatch.setattr(edit_session_service, 'now_datetime', lambda: now)
+    monkeypatch.setattr(api, 'require_batch_permission', lambda batch, permission: calls.append(permission) or 'B')
+
+    def confirm(batch, _run, _preview, _revision, edit_token, expected_modified):
+        calls.append('confirm')
+        edit_session_service.assert_batch_write(batch, edit_token=edit_token, expected_modified=expected_modified)
+        pytest.fail('the conflicting lease must fail before any write')
+
+    monkeypatch.setattr(selection, 'confirm', confirm)
+    result = api.confirm_source_ai_selection('BATCH', 'RUN', 'PREVIEW', 'REV', token, modified)
+    assert result['ok'] is False and result['code'] == code
+    assert result['message']
+    assert calls == ['write', 'confirm', 'rollback']
+
+
+def test_confirm_selection_does_not_swallow_unexpected_runtime_error(monkeypatch):
+    from overseas_costing.services import material_ai_selection_service as selection
+
+    api = _load_api(monkeypatch)
+    monkeypatch.setattr(api, 'require_batch_permission', lambda batch, permission: batch)
+
+    def confirm(*_args):
+        raise RuntimeError('unexpected writer failure')
+
+    monkeypatch.setattr(selection, 'confirm', confirm)
+    with pytest.raises(RuntimeError, match='unexpected writer failure'):
+        api.confirm_source_ai_selection('BATCH', 'RUN', 'PREVIEW', 'REV', 'TOKEN', 'MOD')
 
 
 def test_payment_selection_is_returned_by_the_unified_start_endpoint(monkeypatch):

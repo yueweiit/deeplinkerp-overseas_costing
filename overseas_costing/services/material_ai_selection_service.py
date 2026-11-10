@@ -13,7 +13,7 @@ from . import material_ai_row_selection as rows, material_ai_fee_policy as fees
 from .logistics_settlement.model import digest
 
 
-RECEIPT_POLICY = 'ai-field-preview-receipt-8'
+RECEIPT_POLICY = 'ai-field-preview-receipt-9'
 
 _SKIPPED_PROGRESS_STATUSES = frozenset({
     'FAILED', 'SKIPPED', 'UNREADABLE', 'TIMEOUT', 'FORBIDDEN', 'MISSING',
@@ -359,17 +359,15 @@ def _attach_control_metadata(projection, merged_amount_groups, packing_group_can
             'code':'MERGED_AMOUNT_ALLOCATION_REQUIRED',
             'message':'合并金额组缺少独立单价或合计不一致，请完成人工分摊后重新预览。',
         })
-    if any(result['status'] == 'review' for result in projection.get('field_results') or []):
-        projection['can_apply'] = False
-    elif not blocking and any(candidate.get('default_selected') and candidate.get('can_apply')
-                              for candidate in packing_group_candidates):
+    if not blocking and any(candidate.get('default_selected') and candidate.get('can_apply')
+                            for candidate in packing_group_candidates):
         projection['can_apply']=True
     return projection
 
 
 def _preview_revision(context,items,sources,current_fees,catalog,selection,dependencies):
     return digest(
-        rows.POLICY,context,items,sources,current_fees,catalog['fingerprint'],
+        RECEIPT_POLICY,rows.POLICY,context,items,sources,current_fees,catalog['fingerprint'],
         selection['selected_row_ids'],selection['selected_fee_ids'],selection.get('selected_field_choices'),selection['mode'],dependencies,
         selection.get('merged_amount_groups') or [],selection.get('selected_packing_group_ids') or [],
         selection.get('selected_packing_assignments') or {},
@@ -398,17 +396,26 @@ def _payment_match_references(sources, version):
     ]
 
 
-def _payment_match_reference(sources, version):
+def _attach_payment_match_metadata(projection, sources, version):
     references = _payment_match_references(sources, version)
-    if len(references) != 1:
-        return None
-    return {key: references[0][key] for key in ('candidate_id', 'revision', 'version')}
+    projection['payment_match_candidates'] = references
+    projection['payment_match_candidate'] = (
+        {key: references[0][key] for key in ('candidate_id', 'revision', 'version')}
+        if len(references) == 1 else None
+    )
+    # Partial field confirmation must not also create a new payment relation.
+    if references and any(field['status'] == 'review' for field in projection.get('field_results') or []):
+        projection['can_apply'] = False
+        projection.setdefault('unresolved', []).append({
+            'code': 'PAYMENT_MATCH_FIELDS_NEED_REVIEW',
+            'message': _('此预览还会关联付款申请。请先核对待处理字段，或调整资料来源后重新预览。'),
+        })
 
 
 def _preview_receipt(preview):
     """Persist only the inputs needed to authenticate and reconstruct a preview."""
     keys=(
-        'id','revision','run_id','batch','version','mode','selected_row_ids','selected_fee_ids',
+        'id','revision','run_id','batch','version','batch_modified','mode','selected_row_ids','selected_fee_ids',
         'selected_field_choices',
         'dependencies','input_fingerprint','fee_fingerprint','catalog_fingerprint',
         'selected_packing_group_ids','selected_packing_assignments','payment_match_candidate',
@@ -688,11 +695,11 @@ def prepare(batch_name,run_id,row_ids,fee_ids,mode,expected_version,*,field_choi
         projection,draft.get('merged_amount_groups') or [],selected_packing_groups)
     projection['selected_packing_group_ids']=selected_packing_group_ids
     projection['selected_packing_assignments']=validated_assignments
-    projection['payment_match_candidates']=_payment_match_references(sources,context['version'])
-    projection['payment_match_candidate']=_payment_match_reference(sources,context['version'])
+    _attach_payment_match_metadata(projection, sources, context['version'])
     revision=_preview_revision(context,items,sources,current_fees,catalog,projection,dependencies)
     preview={**projection,'id':digest(run_id,revision),'revision':revision,'run_id':run_id,'batch':batch_name,
-             'version':context['version'],'source_context':context.get('effective_source') or {},
+             'version':context['version'],'batch_modified':str(context.get('batch_modified') or ''),
+             'source_context':context.get('effective_source') or {},
              'original_source_reanalysis':ai._run_uses_original_sources(run),
              'input_fingerprint':ai._record_value(run,'input_fingerprint'),
              'fee_fingerprint':digest(current_fees),'sources':deepcopy(sources),'dependencies':dependencies}
@@ -766,8 +773,7 @@ def _reconstruct_locked_preview(repo,batch_name,run,receipt,draft):
         current,draft.get('merged_amount_groups') or receipt.get('merged_amount_groups') or [],selected_packing_groups)
     current['selected_packing_group_ids']=validated_group_ids
     current['selected_packing_assignments']=validated_assignments
-    current['payment_match_candidates']=_payment_match_references(sources,context['version'])
-    current['payment_match_candidate']=_payment_match_reference(sources,context['version'])
+    _attach_payment_match_metadata(current, sources, context['version'])
     if current.get('payment_match_candidates') != receipt.get('payment_match_candidates'):
         raise ValueError(_('实际付款流程匹配已变化，请刷新预览；本次未保存。'))
     if current.get('payment_match_candidate') != receipt.get('payment_match_candidate'):
@@ -787,11 +793,15 @@ def _reconstruct_locked_preview(repo,batch_name,run,receipt,draft):
     elif callable(getattr(repo,'assert_row_dependencies',None)):
         repo.assert_row_dependencies(batch_name,dependencies,lock=True,purpose='estimate')
     if not current['can_apply']:
+        for issue in current.get('unresolved') or []:
+            if isinstance(issue, dict) and issue.get('code') == 'PAYMENT_MATCH_FIELDS_NEED_REVIEW':
+                raise ValueError(issue['message'])
         raise ValueError(_('请选择需要填充的物料或费用。'))
     _assert_supplier_choices(current['changes'])
     fees.assert_allowed(current['fees'],current_fees,context.get('effective_source') or {})
     verified={**current,'id':receipt['id'],'revision':revision,'run_id':receipt['run_id'],'batch':batch_name,
-              'version':context['version'],'source_context':context.get('effective_source') or {},
+              'version':context['version'],'batch_modified':str(context.get('batch_modified') or ''),
+              'source_context':context.get('effective_source') or {},
               'original_source_reanalysis':ai._run_uses_original_sources(run),
               'input_fingerprint':ai._record_value(run,'input_fingerprint'),
               'fee_fingerprint':digest(current_fees),'sources':deepcopy(sources),
@@ -821,7 +831,7 @@ def _confirm_locked(batch_name,run_id,preview_id,preview_revision,edit_token,exp
     if not receipt or receipt.get('revision')!=preview_revision:
         raise ValueError(_('所选预览已变化，请刷新预览并使用最新预览后确认。'))
     if receipt.get('receipt_policy')!=RECEIPT_POLICY:
-        raise ValueError(_('AI 预览规则已升级，请重新分析资料。'))
+        raise ValueError(_('AI 预览规则已升级，请重新读取填充预览。'))
     if (receipt.get('payment_match_candidates') or receipt.get('payment_match_candidate')) and not payment_match_lock_held:
         raise ValueError(_('实际付款流程匹配已变化，请刷新预览；本次未保存。'))
     if receipt.get('mode') == 'replace_all':
@@ -832,7 +842,9 @@ def _confirm_locked(batch_name,run_id,preview_id,preview_revision,edit_token,exp
     if (receipt.get('id')!=preview_id or receipt.get('run_id')!=run_id
             or receipt.get('batch')!=batch_name):
         raise ValueError(_('所选预览与当前分析不一致，请刷新预览后确认。'))
-    repo.assert_write(batch_name,edit_token,expected_modified)
+    # The preview is authoritative for what the user saw. A stale detail
+    # tab may submit an older timestamp even when its preview is fresh.
+    repo.assert_write(batch_name,edit_token,receipt.get('batch_modified') or expected_modified)
     repo.lock_review_inputs(batch_name,receipt['version'])
     verified,context=_reconstruct_locked_preview(repo,batch_name,run,receipt,draft)
     cleaned_draft=_clean_preview_draft(draft)

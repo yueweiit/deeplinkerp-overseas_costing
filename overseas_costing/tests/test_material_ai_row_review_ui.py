@@ -77,7 +77,7 @@ def test_field_choice_indicators_and_counts_follow_current_server_preview():
     run_ui(r"""
 const fill=ready();const candidates=[['V','goods_value','7365'],['N','product_name','Name'],['U','shipped_uom','套']]
  .map(([id,field,value])=>({candidate_id:id,item_name:'I1',fieldname:field,suggested_value:value,
-  workflow_stage:'international_logistics',can_apply:true,default_selected:true,presentation_group_id:`G-${id}`,
+  workflow_stage:'international_logistics',result_origin:'AI',can_apply:true,default_selected:true,presentation_group_id:`G-${id}`,
   presentation_representative_candidate_id:id,presentation_equivalent_candidate_ids:[id]}));
 fill.row_review={...fill.row_review,field_candidates:candidates,stage_snapshots:[
  {stage:'international_logistics',status:'AVAILABLE',rows:[{item_name:'I1',material_code:'SKU',
@@ -86,21 +86,30 @@ fill.row_review={...fill.row_review,field_candidates:candidates,stage_snapshots:
 let html=w.renderMaterialAIReviewDialogContent();
 assert(!html.includes('✓'),'a locally selected field has not been accepted by the server');
 assert(html.includes('已选，待预览'));
-selection.previewKey=w.materialAIRowSelectionKey(fill);
-selection.preview={id:'P',revision:'R',rows:[],can_apply:false,field_results:[
+assert(!html.includes('不采用'),'recommended fields do not have per-cell opt-out controls');
+const preview={id:'P',revision:'R',rows:[],can_apply:true,field_results:[
  {item_name:'I1',fieldname:'goods_value',candidate_id:'V',status:'review',code:'UNIT',message:'单位冲突 <source>'},
  {item_name:'I1',fieldname:'product_name',candidate_id:'N',status:'retain',code:'MANUAL',message:'已有人工名称'},
  {item_name:'I1',fieldname:'shipped_uom',candidate_id:'U',status:'apply'},
 ]};
+w.call=async(method,args)=>{calls.push({method,args});return {ok:true,preview}};
+await w.previewMaterialAIRowSelection();
+assert.deepEqual(JSON.parse(calls[0].args.field_choices_json),{
+ 'I1:goods_value':'V','I1:product_name':'N','I1:shipped_uom':'U',
+});
 html=w.renderMaterialAIReviewDialogContent();
 assert.equal((html.match(/✓/g)||[]).length,1);
-for(const text of ['将采用 1 项','保留原值','待核对 1 项','单位冲突 &lt;source>','已有人工名称',
-  'data-mf-ai-field-key="I1:goods_value" data-mf-ai-candidate-id=""','data-action="mf-ai-apply" disabled'])assert(html.includes(text),text);
-w.scheduleMaterialAIRowPreview=()=>{};
-w.changeMaterialAIRowSelection('fields','I1:goods_value','');
-assert(!selection.fields.has('I1:goods_value'));
+for(const text of ['将采用 1 项','保留原值','另有 1 项待核对，本次保留原值','单位冲突 &lt;source>','已有人工名称'])assert(html.includes(text),text);
+assert(!html.includes('不采用'));assert(!html.includes('data-action="mf-ai-apply" disabled'));
+assert.equal((html.match(/单位冲突/g)||[]).length,1,'review reason is shown in one place');
+w.call=async(method,args)=>{calls.push({method,args});return {ok:true,status:'APPLIED',batch_modified:REV_NEW}};
+await w.confirmMaterialAIRowSelection();
+assert.equal(calls[1].method,'overseas_costing.api.materials.confirm_source_ai_selection');
+assert.deepEqual(calls[1].args,{batch_name:'B',run_id:'run',preview_id:'P',preview_revision:'R',edit_token:'token',expected_modified:REV_OLD});
+assert.equal(state.aiFill,null);
+state.aiFill=fill;selection.preview={...preview,can_apply:false};
 html=w.renderMaterialAIReviewDialogContent();
-assert(!html.includes('✓'));assert(!html.includes('单位冲突'));assert(html.includes('采用 7365'));
+assert(html.includes('待核对 1 项'));assert(html.includes('data-action="mf-ai-apply" disabled'));
 """)
 
 
@@ -166,6 +175,7 @@ fill.row_review={...fill.row_review,field_candidates:candidates,stage_snapshots:
 const html=w.renderMaterialAIReviewDialogContent();
 const options=[...html.matchAll(/<option value="[AB]"[^>]*>([^<]*)<\/option>/g)].map(m=>m[1]);
 assert.equal(options.length,2);assert.notEqual(options[0],options[1]);
+assert(!html.includes('不采用'));
 for(const [i,option] of options.entries()){assert(option.includes('7365'));assert(option.includes(`${i+1} 套`));}
 """)
 
@@ -894,6 +904,22 @@ release({ok:true,preview:{id:'wrong',revision:1,can_apply:true}});await request;
 """)
 
 
+def test_structured_review_rejections_keep_backend_reason_without_enabling_confirmation():
+    run_ui(r"""
+const fill=ready();
+w.call=async()=>({ok:false,error:{reason:'请核对当前物料与来源单位'}});
+await w.previewMaterialAIRowSelection();
+assert.equal(fill.rowSelection.error,'请核对当前物料与来源单位');
+assert(!w.canConfirmMaterialAIRowSelection(fill));
+w.call=async()=>({ok:true,preview:{id:'P',revision:'R',can_apply:true,rows:[]}});
+await w.previewMaterialAIRowSelection();
+w.call=async()=>({ok:false,error:{reason:'当前费用已变化，请重新预览'}});
+await w.confirmMaterialAIRowSelection();
+assert.equal(fill.rowSelection.error,'当前费用已变化，请重新预览');
+assert.equal(state.aiFill,fill);
+""")
+
+
 def test_preview_queue_coalesces_intermediate_choices_and_replace_requires_one_row():
     run_ui(r"""
 const fill=ready();const pending=[];w.call=(method,args)=>{calls.push({method,args});return new Promise(resolve=>pending.push(resolve))};
@@ -936,6 +962,31 @@ assert.equal(calls[0].method,'overseas_costing.api.materials.confirm_source_ai_s
 assert.deepEqual(calls[0].args,{batch_name:'B',run_id:'run',preview_id:'p',preview_revision:7,edit_token:'token',expected_modified:REV_OLD});
 w.call=async()=>({ok:true,status:'APPLIED',version_name:'V2',batch_modified:REV_NEW});await w.applyMaterialAIFill();
 assert.equal(state.aiFill,null);assert.equal(w.detailState.versionName,'V2');assert.equal(w.detailState.expectedModified,REV_NEW);
+""")
+
+
+def test_confirmation_pins_preview_revision_and_reacquires_an_expired_edit_lease():
+    run_ui(r"""
+const fill=ready();const leaseRevision='2026-09-24 14:00:00.000000';
+w.call=async()=>({ok:true,preview:{id:'P',revision:'R',batch_modified:REV_NEW,can_apply:true,rows:[]}});
+await w.previewMaterialAIRowSelection();
+assert.equal(w.detailState.expectedModified,REV_OLD);
+w.detailState.editExpiresAt='2000-01-01T00:00:00Z';
+let leases=0;
+w.ensureEditSession=async()=>{assert.equal(w.detailState.editToken,'');leases++;w.detailState.editToken=`new-lease-${leases}`;w.detailState.expectedModified=leaseRevision;return true};
+w.call=async(method,args)=>{calls.push({method,args});return {ok:false,code:'EDIT_SESSION_REQUIRED',message:'租约已过期'}};
+await w.confirmMaterialAIRowSelection();
+assert.equal(leases,1);assert.equal(calls[0].args.edit_token,'new-lease-1');
+assert.equal(calls[0].args.expected_modified,REV_NEW,'lease revision must not replace the locked preview revision');
+assert.equal(w.detailState.editToken,'');assert.equal(fill.rowSelection.preview.id,'P');
+w.call=async(method,args)=>{calls.push({method,args});return {ok:false,code:'BATCH_REVISION_CHANGED',message:'当前批次已变化，请重新预览'}};
+await w.confirmMaterialAIRowSelection();
+assert.equal(leases,2);assert.equal(calls[1].args.expected_modified,REV_NEW);
+assert(!w.canConfirmMaterialAIRowSelection(fill));
+const html=w.renderMaterialAIReviewDialogContent();
+assert(html.includes('当前批次已变化，请重新预览'));
+assert(html.includes('data-action="mf-ai-preview-again"'));
+assert.equal(state.aiFill,fill);
 """)
 
 

@@ -1304,3 +1304,40 @@ def test_missing_expense_physical_cell_can_attach_current_context_and_save(monke
     assert metadata["settlement_physical"]["values"]["gross_weight_kg"] == 9.7
     assert metadata["settlement_physical"]["evidence"]["gross_weight_kg"]["kind"] == "manual_override"
     assert effective_source_values.project_source_values(items["I1"].as_dict(), context)["gross_weight_kg"] == 9.7
+
+
+@pytest.mark.parametrize("field", ["adopted_purchase_value", "purchase_value_history"])
+@pytest.mark.parametrize("operation", ["create", "replace", "remove"])
+def test_normal_item_edit_cannot_change_adopted_purchase_metadata(monkeypatch, field, operation):
+    original_fact = {
+        "material_code": "A", "source_refs": [{"source_id": "ORIGINAL", "row": 1}],
+        "amount_rmb": "20", "quantity": "2", "uom": "件",
+    }
+    forged_fact = {**original_fact, "source_refs": [{"source_id": "FORGED", "row": 1}], "amount_rmb": "1"}
+    original = original_fact if field == "adopted_purchase_value" else [original_fact]
+    forged = forged_fact if field == "adopted_purchase_value" else [forged_fact]
+    before = {"user_note": "before", **({field: original} if operation != "create" else {})}
+    after = {"user_note": "after", **({field: forged} if operation != "remove" else {})}
+    items = {"I1": {"extra_json": json.dumps(before, ensure_ascii=False)}}
+    service, db = _install_item_edit_frappe(monkeypatch, items)
+
+    result = service.update_item_field("I1", "extra_json", after, version_name="V1", _skip_edit_check=True)
+
+    assert not result["ok"] and not result["changed"]
+    assert result["edit_mode"] == "server_metadata"
+    assert json.loads(items["I1"].extra_json) == before
+    assert db.commits == 0
+
+
+def test_normal_item_metadata_edit_can_keep_adopted_purchase_evidence(monkeypatch):
+    fact = {"material_code": "A", "source_refs": [{"source_id": "ORIGINAL", "row": 1}],
+            "amount_rmb": "20", "quantity": "2", "uom": "件"}
+    before = {"adopted_purchase_value": fact, "purchase_value_history": [fact], "user_note": "before"}
+    after = {**before, "user_note": "after"}
+    items = {"I1": {"extra_json": json.dumps(before, ensure_ascii=False)}}
+    service, _db = _install_item_edit_frappe(monkeypatch, items)
+
+    result = service.update_item_field("I1", "extra_json", after, version_name="V1", _skip_edit_check=True)
+
+    assert result["ok"] and result["changed"]
+    assert json.loads(items["I1"].extra_json) == after

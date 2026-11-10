@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import frappe
 
-from overseas_costing.api import materials
+from overseas_costing.api import calculate, materials
 from overseas_costing.services import edit_session_service
 from overseas_costing.services import material_ai_fill_service as ai
 from overseas_costing.services import material_ai_row_selection as rows
@@ -107,7 +107,9 @@ def make_preview(tag, amount):
     assert ledger.rows("item", batch=batch, version=version) == before
     lease = edit_session_service.acquire_edit_session(batch)
     assert lease["ok"]
-    args = (batch, run.name, preview["id"], preview["revision"], lease["edit_token"], str(lease["modified"]))
+    assert preview["batch_modified"] == str(lease["modified"])
+    # Reproduce an old detail tab sending yesterday's revision alongside a fresh preview.
+    args = (batch, run.name, preview["id"], preview["revision"], lease["edit_token"], "2000-01-01 00:00:00")
     frappe.db.commit()
     return args, source, version, before
 
@@ -181,6 +183,19 @@ def main():
         report("ai_fill_consistency_real_database", ok=True, rows=2, shipment_total=sum(amounts),
                concurrent_confirmations=2, idempotent_replays=1)
 
+        lease = edit_session_service.acquire_edit_session(args[0])
+        assert lease["ok"]
+        corrected = amount + Decimal("1.25")
+        edited = calculate.update_item_field(
+            saved[0]["name"], "shipment_value_rmb", str(corrected), version,
+            remark="本地测试人工核对", edit_token=lease["edit_token"],
+            expected_modified=str(lease["modified"]),
+        )
+        assert edited["ok"] and edited["changed"], edited
+        updated_rows = ledger.rows("item", batch=args[0], version=version)
+        assert [Decimal(present_material_row(row)["shipment_value_rmb"]) for row in updated_rows] == [corrected, amount]
+        report("ai_fill_manual_edit_after_confirmation", ok=True, edited_rows=1)
+
         args, source, version, before = make_preview(tag + "-ROLLBACK", amount)
         original_put = FrappeLedger.put
         written = []
@@ -203,6 +218,19 @@ def main():
         assert ledger.rows("item", batch=args[0], version=version) == before
         assert FixtureRepository(source).get_run(args[1]).status == "READY"
         report("ai_fill_consistency_rollback", ok=True, persisted_changes=0)
+        args, source, version, before = make_preview(tag + "-STALE", amount)
+        changed = "2099-01-01 00:00:00"
+        frappe.db.set_value("Overseas Cost Batch", args[0], "modified", changed, update_modified=False)
+        frappe.db.commit()
+        original_confirm = review.confirm
+        with patch.object(review, "confirm", lambda *request: original_confirm(
+            *request, repository=FixtureRepository(source)
+        )):
+            denied = materials.confirm_source_ai_selection(*args[:-1], changed)
+        assert not denied["ok"] and denied["code"] == "BATCH_REVISION_CHANGED", denied
+        assert ledger.rows("item", batch=args[0], version=version) == before
+        assert FixtureRepository(source).get_run(args[1]).status == "READY"
+        report("ai_fill_rejects_changes_after_preview", ok=True, persisted_changes=0)
         verify_oa_document_guard(tag + "-GUARD")
     finally:
         frappe.db.rollback()

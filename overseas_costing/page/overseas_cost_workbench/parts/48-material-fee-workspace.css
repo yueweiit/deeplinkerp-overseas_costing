@@ -659,7 +659,6 @@
 .ocw-mf-ai-field-readonly b { border-radius: 999px; padding: 2px 6px; background: #f2f4f7; color: #667085; font-size: 9px; white-space: nowrap; }
 .ocw-mf-ai-field-selected { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; color: #344054; }
 .ocw-mf-ai-field-selected b.is-apply { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: #e8f7ef; color: #087443; font-size: 12px; }
-.ocw-mf-ai-field-selected button { margin-left: auto; padding: 0; font-size: 11px; }
 .ocw-mf-ai-field-outcome { border-radius: 5px; padding: 1px 4px; background: #f2f4f7; color: #475467; font-size: 11px; }
 .ocw-mf-ai-field-outcome.is-review { background: #fff0cf; color: #8a5700; }
 .ocw-mf-ai-field-reason { display: block; margin-top: 3px; color: #667085; font-size: 11px; white-space: normal; }
