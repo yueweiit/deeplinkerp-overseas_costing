@@ -763,7 +763,7 @@ def test_extract_logistics_fees_maps_optional_mexico_fees_without_shared_currenc
     )
 
     assert [(row["logical_fee_key"], row["amount"], row["currency"], row["allocation_basis"]) for row in fees] == [
-        ("international_express_fee", 125.0, "USD", "chargeable_weight"),
+        ("international_express_fee", 125.0, "USD", "gross_weight"),
         ("customs_clearance_fee", 800.0, "MXN", "goods_value"),
         ("import_tax", 1200.0, "MXN", "goods_value"),
         ("destination_delivery", 450.0, "MXN", "gross_weight"),

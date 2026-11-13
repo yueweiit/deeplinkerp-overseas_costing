@@ -60,7 +60,7 @@ def test_explicit_air_and_delivery_fees_have_canonical_values_and_verified_field
             for row in proposals] == [
         ("international_air_freight", "4288.37", "RMB"), ("destination_delivery", "900", "MXN"),
     ]
-    assert [row["payload"]["allocation_basis"] for row in proposals] == ["chargeable_weight", "gross_weight"]
+    assert [row["payload"]["allocation_basis"] for row in proposals] == ["gross_weight", "gross_weight"]
     assert all(row["result_origin"] == "SYSTEM" and row["default_selected"] for row in proposals)
     assert [row["source_refs"][0]["field"] for row in proposals] == ["物流费用", "当地配送费"]
 

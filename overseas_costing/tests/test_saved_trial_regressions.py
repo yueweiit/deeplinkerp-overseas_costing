@@ -14,7 +14,7 @@ from overseas_costing.services import cost_preview_service, fee_service
 @pytest.mark.parametrize("stored_key", [None, "", "  "])
 def test_saved_trial_keeps_legacy_item_identity_without_backfilling(stored_key):
     items = [dict(name="OLD-1", stable_line_key=stored_key, quantity=10,
-                  goods_value=100, chargeable_weight_kg=1, unit="个", unit_price_uom="个")]
+                  goods_value=100, gross_weight_kg=1, chargeable_weight_kg=1, unit="个", unit_price_uom="个")]
     original = deepcopy(items)
     fees = fee_service.build_default_fee_templates("AIR")
     for fee in fees:

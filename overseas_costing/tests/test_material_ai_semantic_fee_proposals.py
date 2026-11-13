@@ -192,7 +192,7 @@ def test_payment_total_is_the_only_applicable_fee_and_components_are_read_only()
         "amount": "6828.38",
         "currency": "RMB",
         "scope_type": "ALL_ITEMS",
-        "allocation_basis": "chargeable_weight",
+        "allocation_basis": "gross_weight",
         "remark": "同一已选付款工作簿内、同币种的本批次运费行只汇总一次。",
     }
     assert primary["fact_ids"] == [

@@ -9,13 +9,13 @@ from overseas_costing.services import cost_preview_service, fee_allocation_servi
 
 
 MODES = [
-    ("EXPRESS", "international_express_fee", "国际快递费", "chargeable_weight", 5),
-    ("AIR", "international_air_freight", "国际空运费", "chargeable_weight", 4),
-    ("AIR_STANDARD", "international_air_freight", "国际空运费", "chargeable_weight", 4),
-    ("AIR_DDP", "international_air_freight", "国际空运费", "chargeable_weight", 4),
-    ("SEA", "international_sea_freight", "国际海运费", "volume", 4),
-    ("SEA_STANDARD", "international_sea_freight", "国际海运费", "volume", 4),
-    ("SEA_DDP", "international_sea_freight", "国际海运费", "volume", 4),
+    ("EXPRESS", "international_express_fee", "国际快递费", "gross_weight", 5),
+    ("AIR", "international_air_freight", "国际空运费", "gross_weight", 4),
+    ("AIR_STANDARD", "international_air_freight", "国际空运费", "gross_weight", 4),
+    ("AIR_DDP", "international_air_freight", "国际空运费", "gross_weight", 4),
+    ("SEA", "international_sea_freight", "国际海运费", "gross_weight", 4),
+    ("SEA_STANDARD", "international_sea_freight", "国际海运费", "gross_weight", 4),
+    ("SEA_DDP", "international_sea_freight", "国际海运费", "gross_weight", 4),
 ]
 
 
@@ -157,7 +157,7 @@ def test_saved_calculation_rejects_duplicate_rows_before_repository_writes():
 def test_saved_costing_of_raw_legacy_oa_uses_shared_identity_and_amount_state(mode, key, label, basis, count):
     fee = dict(name="OA", rule_code="oa_logistics_freight", expense_category="国际物流费用", amount=200, amount_status="MISSING")
     result = cost_preview_service.build_saved_cost_data(
-        [dict(name="I", goods_value=100, quantity=1, unit="个", chargeable_weight_kg=1, volume_m3=1)], [fee], {}, mode)
+        [dict(name="I", goods_value=100, quantity=1, unit="个", gross_weight_kg=1, chargeable_weight_kg=1, volume_m3=1)], [fee], {}, mode)
     assert result["summary"]["total_cost_rmb"] == "300.00"
     assert result["included_fees"][0]["fee_key"] == key
     assert result["item_updates"][0]["transport_mode"] == fee_service.resolve_transport_mode(mode)

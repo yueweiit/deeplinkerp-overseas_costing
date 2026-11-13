@@ -14,14 +14,14 @@ import re
 
 
 PRIMARY_FREIGHT = {
-    "SEA": ("international_sea_freight", "国际海运费", "volume"),
-    "AIR": ("international_air_freight", "国际空运费", "chargeable_weight"),
-    "EXPRESS": ("international_express_fee", "国际快递费", "chargeable_weight"),
+    "SEA": ("international_sea_freight", "国际海运费", "gross_weight"),
+    "AIR": ("international_air_freight", "国际空运费", "gross_weight"),
+    "EXPRESS": ("international_express_fee", "国际快递费", "gross_weight"),
 }
 HISTORICAL_SURCHARGES = (
-    ("sea_port_forwarder_surcharge", "港杂/货代附加费", "volume", "expense_invoice"),
-    ("air_forwarder_surcharge", "空运附加费", "chargeable_weight", "expense_invoice"),
-    ("express_surcharge", "快递附加费", "chargeable_weight", "expense_invoice"),
+    ("sea_port_forwarder_surcharge", "港杂/货代附加费", "gross_weight", "expense_invoice"),
+    ("air_forwarder_surcharge", "空运附加费", "gross_weight", "expense_invoice"),
+    ("express_surcharge", "快递附加费", "gross_weight", "expense_invoice"),
 )
 OTHER_FEE_TYPES = (
     ("other_port_misc", "港口杂费"),

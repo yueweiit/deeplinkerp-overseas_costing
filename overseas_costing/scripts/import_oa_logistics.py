@@ -221,7 +221,7 @@ PROJECT_OWNERSHIP_FIELD_ALIASES = (
 OPTIONAL_LOGISTICS_FEE_FIELDS = (
     ("customs_clearance_fee", "清关费", "goods_value", ("清关费", "Gastos de despacho de aduana", "Customs clearance fee")),
     ("import_tax", "进口税费", "goods_value", ("进口税费", "Impuestos de importación", "Import tax")),
-    ("express_surcharge", "快递附加费", "chargeable_weight", ("快递附加费", "Cargo adicional exprés", "Express surcharge")),
+    ("express_surcharge", "快递附加费", "gross_weight", ("快递附加费", "Cargo adicional exprés", "Express surcharge")),
     ("destination_delivery", "当地配送费", "gross_weight", ("当地配送费", "Entrega local", "Local delivery fee")),
 )
 PURCHASE_DETAIL_TABLE_FIELD_ALIASES = (

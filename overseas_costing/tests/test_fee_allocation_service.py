@@ -1,5 +1,6 @@
 """逐费用范围和 Decimal 金额守恒分摊测试。"""
 
+from copy import deepcopy
 from decimal import Decimal
 
 import pytest
@@ -10,21 +11,21 @@ from overseas_costing.services.fee_allocation_service import allocate_fee
 @pytest.mark.parametrize("physical", [None, "", "0", "NaN", "Infinity", "-1"])
 def test_incomplete_physical_basis_blocks_the_entire_fee(physical):
     items = [
-        {"stable_line_key": "A", "volume_m3": "1", "goods_value": "100"},
-        {"stable_line_key": "B", "volume_m3": physical, "goods_value": "300"},
+        {"stable_line_key": "A", "gross_weight_kg": "1", "goods_value": "100"},
+        {"stable_line_key": "B", "gross_weight_kg": physical, "goods_value": "300"},
     ]
-    result = allocate_fee({"logical_fee_key": "international_sea_freight", "amount_status": "ACTUAL", "amount": "2004", "allocation_basis": "volume"}, items)
+    result = allocate_fee({"logical_fee_key": "international_sea_freight", "amount_status": "ACTUAL", "amount": "2004", "allocation_basis": "gross_weight"}, items)
     assert result["status"] == "BLOCKED"
     assert result["code"] == "ALLOCATION_BASIS_INCOMPLETE"
-    assert result["preferred_basis"] == "volume"
+    assert result["preferred_basis"] == "gross_weight"
     assert result["allocations"] == {}
 
 
 @pytest.mark.parametrize(("fee_key", "field", "basis"), [
-    ("international_sea_freight", "volume_m3", "volume"),
-    ("sea_port_forwarder_surcharge", "volume_m3", "volume"),
-    ("international_air_freight", "chargeable_weight_kg", "chargeable_weight"),
-    ("international_express_fee", "chargeable_weight_kg", "chargeable_weight"),
+    ("international_sea_freight", "gross_weight_kg", "gross_weight"),
+    ("sea_port_forwarder_surcharge", "gross_weight_kg", "gross_weight"),
+    ("international_air_freight", "gross_weight_kg", "gross_weight"),
+    ("international_express_fee", "gross_weight_kg", "gross_weight"),
     ("destination_delivery", "gross_weight_kg", "gross_weight"),
 ])
 def test_system_prefers_complete_physical_data_over_saved_basis(fee_key, field, basis):
@@ -34,6 +35,26 @@ def test_system_prefers_complete_physical_data_over_saved_basis(fee_key, field, 
     ])
     assert result["basis"] == basis
     assert result["allocations"] == {"A": "25.00", "B": "75.00"}
+
+
+@pytest.mark.parametrize("revision_field", ["amount_revision", "scope_revision"])
+@pytest.mark.parametrize("basis,field", [
+    ("volume", "volume_m3"),
+    ("chargeable_weight", "chargeable_weight_kg"),
+    ("goods_value", "goods_value"),
+])
+def test_manual_freight_basis_takes_priority_over_new_gross_weight_default(revision_field, basis, field):
+    fee = {"logical_fee_key": "international_air_freight", "amount_status": "ACTUAL", "amount": "100",
+           "allocation_basis": basis, revision_field: "manual:existing"}
+    items = [{"stable_line_key": "A", "gross_weight_kg": "10", field: "1"},
+             {"stable_line_key": "B", "gross_weight_kg": "10", field: "3"}]
+    original = deepcopy((fee, items))
+    for _ in range(2):
+        result = allocate_fee(fee, items)
+        assert result["basis"] == basis
+        assert result["allocations"] == {"A": "25.00", "B": "75.00"}
+        assert result["allocated_total"] == "100.00"
+    assert (fee, items) == original
 
 
 def test_zero_amount_needs_no_allocation_measurements():

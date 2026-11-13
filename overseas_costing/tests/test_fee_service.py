@@ -97,13 +97,13 @@ def test_default_fee_templates_follow_transport_specific_primary_and_shared_loca
         "当地配送费",
     ]
     assert [row["allocation_basis"] for row in sea] == [
-        "volume",
+        "gross_weight",
         "goods_value",
         "goods_value",
         "gross_weight",
     ]
     assert air[0]["expense_category"] == "国际空运费"
-    assert air[0]["allocation_basis"] == "chargeable_weight"
+    assert air[0]["allocation_basis"] == "gross_weight"
     assert express[0]["expense_category"] == "国际快递费"
     assert all(row["virtual"] for row in sea + air + express)
 

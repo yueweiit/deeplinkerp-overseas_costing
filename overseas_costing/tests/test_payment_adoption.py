@@ -192,9 +192,9 @@ def test_confirmation_rejects_preview_when_candidate_scope_policy_becomes_legacy
 
 
 @pytest.mark.parametrize("mode,key,scope,basis", [
-    ("SEA", "international_sea_freight", "freight", "volume"),
-    ("AIR", "international_air_freight", "freight", "chargeable_weight"),
-    ("EXPRESS", "international_express_fee", "freight", "chargeable_weight"),
+    ("SEA", "international_sea_freight", "freight", "gross_weight"),
+    ("AIR", "international_air_freight", "freight", "gross_weight"),
+    ("EXPRESS", "international_express_fee", "freight", "gross_weight"),
     ("SEA", "customs_clearance_fee", "customs", "purchase_value"),
     ("SEA", "import_tax", "tax", "purchase_value"),
     ("SEA", "destination_delivery", "mexico_inland", "gross_weight"),

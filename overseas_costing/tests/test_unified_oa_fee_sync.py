@@ -125,6 +125,10 @@ def test_multi_fee_sync_uses_one_canonical_upsert_path_and_is_idempotent(monkeyp
     }
     assert next(row for row in db.rows if row["logical_fee_key"] == "international_express_fee")["currency"] == "USD"
     assert all(row["currency"] == "MXN" for row in db.rows if row["logical_fee_key"] != "international_express_fee")
+    assert all(row["allocation_basis"] == "gross_weight" for row in db.rows
+               if row["logical_fee_key"] in {"international_express_fee", "express_surcharge", "destination_delivery"})
+    assert all(row["allocation_basis"] == "goods_value" for row in db.rows
+               if row["logical_fee_key"] in {"customs_clearance_fee", "import_tax"})
 
 
 @pytest.mark.parametrize("mode,key,label,basis,count", MODES)
@@ -454,3 +458,11 @@ def test_manual_quote_basis_is_saved_and_used_by_preview_and_calculation(monkeyp
     assert preview["included_fees"][0]["allocation_basis"] == saved["included_fees"][0]["allocation_basis"] == basis
     expected = {"goods_value": "25.00", "gross_weight": "50.00", "volume": "20.00", "chargeable_weight": "75.00"}[basis]
     assert preview["included_fees"][0]["allocations"]["I"] == saved["included_fees"][0]["allocations"]["I"] == expected
+    before = deepcopy(db.rows)
+    write_count = len(db.writes)
+    db.batch.update(edit_lock_owner="", edit_lock_token="", edit_lock_expires_at=None)
+    for _ in range(2):
+        assert sync(999)["action"] == "protected"
+        refreshed = fee_service.compose_fee_worklist_rows(db.rows, "AIR")
+        assert fee_allocation_service.preferred_allocation_basis(refreshed[0]) == basis
+    assert db.rows == before and len(db.writes) == write_count

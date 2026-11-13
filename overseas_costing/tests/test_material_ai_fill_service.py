@@ -972,7 +972,7 @@ def test_review_freight_total_arbitration_corrects_air_key_and_marks_full_candid
     for proposal_id in ("TOTAL", "AIR", "OTHER"):
         assert by_id[proposal_id]["payload"]["logical_fee_key"] == "international_air_freight"
         assert by_id[proposal_id]["payload"]["expense_category"] == "国际空运费"
-        assert by_id[proposal_id]["payload"]["allocation_basis"] == "chargeable_weight"
+        assert by_id[proposal_id]["payload"]["allocation_basis"] == "gross_weight"
     assert "VOLUME" not in by_id  # 1.2m³ is not money at the cited locator.
     assert by_id["PORT"]["payload"]["logical_fee_key"] == "port_and_forwarder_charges"
     assert by_id["SURCHARGE"]["payload"]["logical_fee_key"] == "express_surcharge"
@@ -2888,7 +2888,7 @@ def test_approval_quote_becomes_estimated_express_fee_proposal_with_verified_evi
         "amount": "251",
         "currency": "RMB",
         "scope_type": "ALL_ITEMS",
-        "allocation_basis": "chargeable_weight",
+        "allocation_basis": "gross_weight",
         "remark": "DHL 报价；来自钉钉审批正文，待补凭证。",
     }
     assert proposal["source_refs"][0]["field"] == "物流报价Cotización de logística"

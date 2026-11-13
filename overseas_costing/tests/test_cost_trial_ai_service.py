@@ -131,8 +131,8 @@ def test_build_review_falls_back_to_a_complete_basis_when_ai_basis_is_missing():
 
     proposal = result["fee_suggestions"][0]
     assert proposal["ai_recommended_basis"] == "volume"
-    assert proposal["default_basis"] == "chargeable_weight"
-    assert proposal["recommended_basis"] == "chargeable_weight"
+    assert proposal["default_basis"] == "gross_weight"
+    assert proposal["recommended_basis"] == "gross_weight"
     assert proposal["recommended_basis_available"] is True
     assert proposal["requires_temporary_basis"] is False
     assert proposal["decision_source"] == "SYSTEM_FALLBACK"
@@ -172,7 +172,7 @@ def test_ai_normalizer_system_placeholder_is_recorded_as_system_fallback_not_ai(
 
     proposal = result["fee_suggestions"][0]
     assert proposal["ai_recommended_basis"] == ""
-    assert proposal["default_basis"] == "chargeable_weight"
+    assert proposal["default_basis"] == "gross_weight"
     assert proposal["decision_source"] == "SYSTEM_FALLBACK"
     assert result["decision_summary"] == {
         "reused": 0,
@@ -670,7 +670,7 @@ def test_adjustment_reuse_only_never_queues_ai_and_uses_complete_local_default()
     assert started["reuse_reason"] == "ADJUSTMENT_DEFAULTS"
     assert queued == []
     proposal = repo.runs[started["run_id"]]["draft_json"]["fee_suggestions"][0]
-    assert proposal["default_basis"] == "chargeable_weight"
+    assert proposal["default_basis"] == "gross_weight"
     assert proposal["decision_source"] == "SYSTEM_FALLBACK"
 
 
@@ -816,7 +816,7 @@ def test_ai_failure_is_not_retried_and_uses_a_complete_system_fallback():
     draft = repo.runs[started["run_id"]]["draft_json"]
     assert draft["ai_invoked"] is True
     assert draft["fee_suggestions"][0]["decision_source"] == "SYSTEM_FALLBACK"
-    assert draft["fee_suggestions"][0]["default_basis"] == "chargeable_weight"
+    assert draft["fee_suggestions"][0]["default_basis"] == "gross_weight"
 
 
 def test_discard_during_ai_call_cannot_be_revived_to_ready():
