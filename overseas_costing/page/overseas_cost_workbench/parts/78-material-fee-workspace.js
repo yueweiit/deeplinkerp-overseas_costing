@@ -1337,6 +1337,7 @@
       { field: "row_no", label: ocTranslate("行"), readonly: true, width: 40 },
       { field: "material_code", label: ocTranslate("物料编码"), readonly: true, width: 100 },
       { field: "product_name", label: ocTranslate("物料名称"), readonly: true, width: 180 },
+      { field: "spec_model", label: ocTranslate("规格型号"), readonly: true, width: 160 },
       { field: "quantity", label: ocTranslate("采购数量"), readonly: true, numeric: true, width: 130 },
       { field: "actual_shipped_qty", label: ocTranslate("发货数量"), numeric: true, width: 140 },
       { field: "shipped_uom", label: ocTranslate("发货单位"), width: 130 },
@@ -2386,7 +2387,7 @@
       return `<td class="ocw-mf-cell ocw-mf-group-select is-readonly" data-mf-column-index="${columnIndex}" data-mf-grid-field="__group_select"><input type="checkbox" disabled aria-label="${ocTranslate('AI 替换草稿行不可选择')}"></td>`;
     }
     const editable = new Set([
-      "product_name", "spec_model", "quantity", "purchase_uom", "unit_price",
+      "product_name", "quantity", "purchase_uom", "unit_price",
       "unit_price_uom", "purchase_currency", "goods_value", "actual_shipped_qty",
       "shipped_uom", "net_weight_kg", "gross_weight_kg", "volume_m3",
       "chargeable_weight_kg", "project_collection",
@@ -2398,7 +2399,7 @@
     if (fieldname === "actual_shipped_qty") value = item.actual_shipped_qty ?? item.quantity;
     if (fieldname === "shipped_uom") value = item.shipped_uom || item.purchase_uom;
     if (!editable.has(fieldname)) {
-      return `<td class="ocw-mf-cell is-readonly is-ai-replacement" data-mf-column-index="${columnIndex}" data-mf-grid-field="${column.field}" title="${ocTranslate('AI 临时明细，确认后替换原模糊物料行')}"><span>${this.escape(this.formatValue(value || "--"))}</span></td>`;
+      return `<td class="ocw-mf-cell is-readonly is-ai-replacement" data-mf-column-index="${columnIndex}" data-mf-grid-field="${column.field}" title="${this.escape(fieldname === "spec_model" ? this.formatValue(value || "--") : ocTranslate('AI 临时明细，确认后替换原模糊物料行'))}"><span>${this.escape(this.formatValue(value || "--"))}</span></td>`;
     }
     if (fieldname === "project_collection") {
       return this.renderMaterialReferencePickerCell(item, column, value, columnIndex, "is-ai-draft is-ai-replacement");
@@ -2513,7 +2514,7 @@
     }
     if (column.readonly) {
       const fullValue = this.formatValue(value ?? "--");
-      return `<td class="${classes}" data-item-name="${this.escape(item.name || "")}" data-mf-column-index="${columnIndex}" data-mf-grid-field="${column.field}" title="${this.escape(column.field === "product_name" || column.field === "source_doc_no" ? fullValue : reason)}"><span>${this.escape(fullValue)}</span>${column.field === "source_doc_no" ? this.renderApprovalLinkMarker(item.approval_link) : ""}${column.field === "product_name" ? (this.renderReviewFeedbackButton?.({ target_tab: "documents", target_field: column.field, target_item: item.name }, "反馈此行") || "") : ""}</td>`;
+      return `<td class="${classes}" data-item-name="${this.escape(item.name || "")}" data-mf-column-index="${columnIndex}" data-mf-grid-field="${column.field}" title="${this.escape(["product_name", "spec_model", "source_doc_no"].includes(column.field) ? fullValue : reason)}"><span>${this.escape(fullValue)}</span>${column.field === "source_doc_no" ? this.renderApprovalLinkMarker(item.approval_link) : ""}${column.field === "product_name" ? (this.renderReviewFeedbackButton?.({ target_tab: "documents", target_field: column.field, target_item: item.name }, "反馈此行") || "") : ""}</td>`;
     }
     if (requiresCorrection) {
       return `<td class="${classes}" data-mf-column-index="${columnIndex}" data-mf-grid-field="${column.field}" title="${ocTranslate('已有有效值；修正时需填写原因')}"><span>${this.escape(this.formatValue(value ?? "--"))}</span>${valuationMeta}<button type="button" class="ocw-mf-purchase-correct" data-action="mf-correct-purchase" data-item-name="${this.escape(item.name || "")}" data-fieldname="${this.escape(column.field)}">${ocTranslate("修正")}</button>${this.renderMaterialAICandidates(item.name, column.field, aiCell, false)}</td>`;
