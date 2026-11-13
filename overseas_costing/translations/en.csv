@@ -5750,3 +5750,10 @@ RMB 兑 MXN 汇率必须大于零。,The RMB to MXN rate must be greater than ze
 确认后将按下方清单调整本票物料范围,Confirmation adjusts this shipment's material scope as shown below
 另有 {0} 项待核对，本次保留原值,{0} other fields need review; their current values will be kept
 重新预览,Refresh preview
+同表同编码同规格归并数量，保留原始行与采购事实。,Combine quantities with the same table code and specification. Keep source rows and purchase facts.
+{0} 的来源行与人工修改不一致，已保留原行，请核对后归并。,{0} has manual changes. Keep the original rows and review before combining.
+钉钉国际物流审批费用字段由系统直接读取，待补最终凭证。,The system reads explicit logistics approval fees. Final evidence is pending.
+来自钉钉审批正文明确费用，待补凭证。,Explicit fee from the approval form. Evidence is pending.
+当前费用或装箱来源已采用、失效或不可核对，保留现有费用。,The source is selected invalid or unverified. Keep existing fees.
+仅补齐缺失费用，保留已有记录及其金额、范围和停用状态。,Fill missing fees only. Keep existing amounts scopes and disabled states.
+归并货值缺少一致、有效的来源依据，请保留原行核对。,The combined goods value lacks consistent source evidence. Keep the original rows for review.

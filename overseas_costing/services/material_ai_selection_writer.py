@@ -12,7 +12,7 @@ from datetime import datetime
 from .material_ai_row_selection import PHYSICAL, IDENTITY, FILL_FIELDS, missing
 from .logistics_settlement.model import digest, dumps
 from .logistics_settlement.application import row_meta
-from .logistics_settlement.item_metadata import compact_cargo, original_value_snapshot, persist_item_meta
+from .logistics_settlement.item_metadata import compact_cargo, original_value_snapshot, persist_item_meta, store_missing_numbers
 from .logistics_settlement.writer import clean_copy, clone_version_children, DERIVED_FIELDS
 from .logistics_settlement.valuation import reconcile_replacement_value, value_final_cargo
 
@@ -41,6 +41,9 @@ def write_rows(store,ledger,preview,context):
         values={k:deepcopy(v) for k,v in incoming.items() if k in (
             *IDENTITY, *FILL_FIELDS, 'quantity', 'unit', 'source_doc_no', 'stable_line_key',
             'actual_shipped_qty_mode', 'actual_shipped_qty_source_revision')}
+        values.update(incoming.get('_cargo_group_values') or {})
+        if '_cargo_group_values' in incoming:
+            values.update(is_excluded=0, excluded_at=None, excluded_by='', exclusion_reason='')
         meta=deepcopy(source_meta)
         if preview['mode']=='update_selected' and original and incoming.get('_price_metadata'):
             # The catalog derives this only from trusted purchase evidence and
@@ -118,11 +121,8 @@ def write_rows(store,ledger,preview,context):
             meta['settlement_valuation']=deepcopy(valuation)
             values['goods_value']=str(amount)
         if incoming.get('unverified_material_code'):meta['unverified_material_code']=incoming['unverified_material_code']
-        # Only numeric columns need zero storage; absence remains explicit in the mask.
-        for key in (*PHYSICAL,'quantity','actual_shipped_qty'):
-            if key not in ('packaging_type',) and values.get(key) is None:
-                values[key]=0
-                mask.add(key)
+        store_missing_numbers(values, [key for key in (*PHYSICAL,'quantity','actual_shipped_qty')
+                                       if key != 'packaging_type'], mask)
         meta['settlement_packing_missing']=sorted(mask)
         meta['ai_row_packing_values']={k:None if k in mask else incoming.get(k) for k in ('package_count','packaging_type')}
         from .effective_source_values import PHYSICAL_FIELDS as projected_fields

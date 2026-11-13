@@ -2235,14 +2235,14 @@ def _parse_money_amount(value: Any, *, allow_zero: bool = False) -> float | None
     return max(candidates)[2]
 
 
-def extract_logistics_fee_from_approval(item: dict) -> dict:
+def extract_logistics_fee_from_approval(item: dict, *, include_zero: bool = False) -> dict:
     """只提取明确填写的物流费用，报价说明不能直接入账。"""
 
     form_fields = item.get("form_fields") or {}
     currency_field, currency_raw = _find_field_entry(form_fields, LOGISTICS_CURRENCY_FIELD_ALIASES)
     explicit_currency = _normalize_currency_code(currency_raw)
     source_field, raw_value = _find_field_entry(form_fields, LOGISTICS_FEE_FIELD_ALIASES)
-    amount = _parse_money_amount(raw_value)
+    amount = _parse_money_amount(raw_value, allow_zero=include_zero)
     if amount is None:
         return {}
     currency = _normalize_currency_code(raw_value) or explicit_currency or "RMB"
@@ -2257,8 +2257,8 @@ def extract_logistics_fee_from_approval(item: dict) -> dict:
     }
 
 
-def extract_logistics_fees_from_approval(item: dict) -> list[dict]:
-    """Extract positive OA estimates into canonical logical fee descriptors."""
+def extract_logistics_fees_from_approval(item: dict, *, include_zero: bool = False) -> list[dict]:
+    """Extract OA estimates; explicit zero is opt-in for reviewed proposals."""
 
     from overseas_costing.services import fee_service
 
@@ -2267,8 +2267,8 @@ def extract_logistics_fees_from_approval(item: dict) -> list[dict]:
         item.get("transport_mode") or item.get("transport_mode_raw") or (item.get("form_fields") or {})
     )
     primary = item.get("logistics_fee") if isinstance(item.get("logistics_fee"), dict) else {}
-    primary = primary or extract_logistics_fee_from_approval(item)
-    primary_amount = _parse_money_amount(primary.get("amount")) if primary else None
+    primary = primary or extract_logistics_fee_from_approval(item, include_zero=include_zero)
+    primary_amount = _parse_money_amount(primary.get("amount"), allow_zero=include_zero) if primary else None
     if primary_amount is not None and mode:
         definition = fee_service.primary_freight_definition(mode)
         fees.append(
@@ -2285,7 +2285,7 @@ def extract_logistics_fees_from_approval(item: dict) -> list[dict]:
     templates = {row["logical_fee_key"]: row for row in fee_service.build_default_fee_templates(mode)}
     for logical_key, label, basis, aliases in OPTIONAL_LOGISTICS_FEE_FIELDS:
         source_field, raw_value = _find_field_entry(form_fields, aliases)
-        amount = _parse_money_amount(raw_value)
+        amount = _parse_money_amount(raw_value, allow_zero=include_zero)
         if amount is None:
             continue
         template = templates.get(logical_key) or {}
@@ -5287,6 +5287,8 @@ def _sync_oa_fee_descriptor(
     edit_token: str | None = None,
     expected_modified: str | None = None,
     manual_entry: bool = False,
+    only_missing: bool = False,
+    include_zero: bool = False,
 ) -> dict:
     from overseas_costing.services.logistics_settlement.runtime import has_final_binding
     if frappe is not None and has_final_binding(batch_name):
@@ -5318,7 +5320,7 @@ def _sync_oa_fee_descriptor(
                 "source_field": selected.get("source_field") or "物流报价",
                 "source_value": selected.get("evidence_line") or selected.get("source_value") or "",
             }
-    parsed_amount = _parse_money_amount(fee.get("amount")) if fee else None
+    parsed_amount = _parse_money_amount(fee.get("amount"), allow_zero=include_zero) if fee else None
     if not fee or parsed_amount is None:
         return {
             "action": "skipped",
@@ -5429,6 +5431,11 @@ def _sync_oa_fee_descriptor(
                   or fee_service.map_historical_fee_key(row, mode) == definition["logical_fee_key"]]
     active = [row for row in candidates if fee_service.fee_is_active(row)]
 
+    if only_missing and candidates:
+        return {"ok": True, "action": "unchanged", "created_count": 0, "updated_count": 0,
+                "rule_name": candidates[0].get("name") or "", "fee": fee,
+                "reason": "仅补齐缺失费用，保留已有记录及其金额、范围和停用状态。"}
+
     def preserve(action, reason, *, ok=True):
         names = [str(row.get("name") or "") for row in candidates]
         _insert_batch_audit_log(batch_name=batch_name, field_name="oa_logistics_fee_candidate",
@@ -5533,12 +5540,15 @@ def _sync_oa_logistics_allocation_rules(
     version_name: str,
     approval_item: dict,
     include_new_optional_fees: bool = True,
+    only_missing: bool = False,
+    include_zero: bool = False,
 ) -> dict:
-    """Synchronize every positive logistics fee through the canonical upsert."""
+    """Synchronize explicit logistics fees through the canonical upsert."""
 
     from overseas_costing.services import fee_service
 
-    descriptors = extract_logistics_fees_from_approval(approval_item)
+    descriptors = (extract_logistics_fees_from_approval(approval_item, include_zero=True)
+                   if include_zero else extract_logistics_fees_from_approval(approval_item))
     if not include_new_optional_fees:
         descriptors = [
             descriptor
@@ -5561,6 +5571,8 @@ def _sync_oa_logistics_allocation_rules(
             version_name=version_name,
             approval_item=approval_item,
             fee_descriptor=descriptor,
+            only_missing=only_missing,
+            include_zero=include_zero,
         )
         for descriptor in descriptors
     ]

@@ -1616,6 +1616,8 @@ def _material_scope(catalog_rows, sources=None):
             if str(row.get('target_item_name') or '') in current_names
         }
         names.discard('')
+        for row in stage_rows:
+            names.update((row.get('_cargo_group') or {}).get('item_names') or [])
         if stage_rows:
             extension_row_ids = {
                 str(row.get('row_id') or '')
@@ -1707,7 +1709,8 @@ def catalog(items, proposals, fees, context, *, run_id, sources=None, fx_rates=N
             shipment_valuation=None):
         values=deepcopy(values)
         matches=_matches(values,items) if origin=='source' else []
-        if target and target in original and (origin=='current' or proposal.get('proposal_type')=='item_update'):
+        if target and target in original and (origin=='current' or proposal.get('proposal_type')=='item_update'
+                or proposal.get('proposal_type') == 'logistics_reconcile' and proposal.get('result_origin') == 'SYSTEM'):
             matches=[original[target]]
         target=matches[0]['name'] if len(matches)==1 else (target if origin=='current' else '')
         base=digest(run_id,proposal.get('proposal_id'),origin,stable or {k:values.get(k) for k in (*IDENTITY,'unit')})
@@ -1796,10 +1799,19 @@ def catalog(items, proposals, fees, context, *, run_id, sources=None, fx_rates=N
                 purchase_refs = purchase_fact.get('source_refs') if isinstance(purchase_fact, dict) else []
                 split_price = bool(isinstance(reviewed_purchase, dict) and purchase_refs)
                 add(({key:value for key,value in values.items() if key not in PRICE_FIELDS} if split_price else values),
-                    proposal,stable=row.get('stable_line_key') or row.get('name'),
+                    proposal,target=row.get('_existing_name') or '',stable=row.get('stable_line_key') or row.get('name'),
                     fields=([field for field in FILL_FIELDS if field not in PRICE_FIELDS] if split_price else None),
                     price_metadata=(None if split_price else row.get('_review_price_metadata')),
                     shipment_valuation=shipment_valuation)
+                from .logistics_cargo_groups import META_KEY
+                group = json_dict(row.get('extra_json')).get(META_KEY)
+                if group:
+                    rows[-1]['_cargo_group'] = deepcopy(group)
+                    rows[-1]['source_refs'] = [{
+                        **(proposal.get('source_refs') or [{}])[0],
+                        'field': line['table'], 'row': line['row'],
+                        'source_row_id': line['source_row_id'],
+                    } for line in group['source_rows']]
                 reconciled_targets[str(row.get('name') or '')]=rows[-1]
                 if split_price:
                     # Procurement evidence carried by a logistics reconciliation
@@ -2244,6 +2256,7 @@ def project(items, catalog, row_ids, fee_ids, mode, *, field_choices=None):
                 # Compute it from the same final inputs that the preview shows.
                 amount = row.get('shipment_value_rmb')
                 row['goods_value'] = 0 if amount is None else amount
+        _finalize_cargo_groups(result, rows_by_id.values(), changes, scope_excluded)
         actual_by_field={(change['item_name'],change['fieldname']):{
             key:deepcopy(change.get(key)) for key in ('item_name','fieldname','candidate_id','row_id','source_refs','source_group_id','source_priority','workflow_stage','evidence_kind','conflict_override')
         } for change in changes}
@@ -2331,6 +2344,7 @@ def project(items, catalog, row_ids, fee_ids, mode, *, field_choices=None):
     for index,row in enumerate(result,1):row['row_no']=index
     _present_purchase_values(result, legacy_rows=True)
     removed=len(items)-len(used) if mode=='replace_all' else 0
+    _finalize_cargo_groups(result, chosen, changes, scope_excluded)
     actual_by_field={}
     for change in changes:
         audit_target=str(change.get('item_name') or change.get('row_id') or '')
@@ -2346,6 +2360,51 @@ def project(items, catalog, row_ids, fee_ids, mode, *, field_choices=None):
             'can_apply':bool(chosen or selected_fees or scope_excluded),
             'scope_excluded_item_names':sorted(scope_excluded),
             'catalog_fingerprint':catalog['fingerprint']}
+
+
+def _finalize_cargo_groups(rows, choices, changes, excluded):
+    """Retire duplicate source rows only when their summed quantity is adopted."""
+    from .logistics_cargo_groups import META_KEY
+    applied = {(change.get('item_name'), change.get('row_id')) for change in changes
+               if change.get('fieldname') == 'actual_shipped_qty'}
+    for choice in choices:
+        group = choice.get('_cargo_group')
+        target = choice.get('target_item_name')
+        if not group or (target, choice.get('row_id')) not in applied:
+            continue
+        anchor = next((row for row in rows if row.get('name') == target or row.get('_target') == target), None)
+        if anchor is None:
+            continue
+        meta = json_dict(anchor.get('extra_json'))
+        meta[META_KEY] = deepcopy(group)
+        anchor['stable_line_key'] = anchor.get('stable_line_key') or choice['values'].get('stable_line_key')
+        anchor['_cargo_group_values'] = {field: group['values'][field]
+            for field in ('quantity', 'goods_value') if group['item_names'] and group['values'].get(field) is not None}
+        for field, value in anchor['_cargo_group_values'].items():
+            if anchor.get(field) != value:
+                changes.append({'row_id': choice['row_id'], 'item_name': target, 'fieldname': field,
+                    'previous_value': anchor.get(field), 'value': value,
+                    'source_refs': deepcopy(choice['source_refs']), 'derived_source_group': True})
+        anchor.update(anchor['_cargo_group_values'])
+        anchor.update(is_excluded=0, excluded_at=None, excluded_by='', exclusion_reason='')
+        if group.get('purchase_value_fact'):
+            from .purchase_value_evidence import META_KEY as VALUE_KEY, bind_purchase_value, retire_purchase_value
+            fact = bind_purchase_value(anchor, group['purchase_value_fact'])
+            if fact is None:
+                raise ValueError(_('归并货值缺少一致、有效的来源依据，请保留原行核对。'))
+            if meta.get(VALUE_KEY) != fact:
+                retire_purchase_value(meta)
+                meta[VALUE_KEY] = fact
+            from .shipment_cost_service import shipment_value
+            valuation = shipment_value({**anchor, 'extra_json': meta})
+            if valuation.get('error') or Decimal(str(valuation.get('amount_rmb'))) != Decimal(str(group['values']['goods_value'])):
+                raise ValueError(_('归并货值缺少一致、有效的来源依据，请保留原行核对。'))
+        anchor['extra_json'] = meta
+        peers = (set(group['item_names']) & {row.get('name') for row in rows}) - {target}
+        rows[:] = [row for row in rows if row.get('name') not in peers]
+        excluded.update(peers)
+    for index, row in enumerate(rows, 1):
+        row['row_no'] = index
 
 
 def _activate_purchase_value(row, meta, fact):

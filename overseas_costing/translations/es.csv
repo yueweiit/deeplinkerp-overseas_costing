@@ -5980,3 +5980,10 @@ RMB 兑 MXN 汇率必须大于零。,El tipo de cambio de RMB a MXN debe ser may
 确认后将按下方清单调整本票物料范围,La confirmación ajusta los materiales del envío según la lista de abajo
 另有 {0} 项待核对，本次保留原值,Quedan {0} campos por revisar; se conservarán sus valores actuales
 重新预览,Actualizar vista previa
+同表同编码同规格归并数量，保留原始行与采购事实。,Se suman cantidades de la misma tabla con igual código y especificación. Se conservan las filas originales y los datos de compra.
+{0} 的来源行与人工修改不一致，已保留原行，请核对后归并。,{0} tiene cambios manuales. Se conservan las filas originales para revisar antes de agrupar.
+钉钉国际物流审批费用字段由系统直接读取，待补最终凭证。,El sistema lee los gastos explícitos de la aprobación logística. Falta el comprobante final.
+来自钉钉审批正文明确费用，待补凭证。,Gasto explícito del formulario de aprobación. Falta el comprobante.
+当前费用或装箱来源已采用、失效或不可核对，保留现有费用。,La fuente está seleccionada o no es válida o verificable. Se conservan los gastos actuales.
+仅补齐缺失费用，保留已有记录及其金额、范围和停用状态。,Solo se añaden gastos faltantes. Se conservan importes alcances y estados desactivados existentes.
+归并货值缺少一致、有效的来源依据，请保留原行核对。,El valor agrupado no tiene evidencia de origen consistente. Conserve las filas originales para revisión.

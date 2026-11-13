@@ -25,6 +25,14 @@ ANALYSIS_KEYS = (
 )
 
 
+def store_missing_numbers(values, fields, missing):
+    """Store absent numeric columns as zero while keeping their absence explicit."""
+    for field in fields:
+        if values.get(field) is None:
+            values[field] = 0
+            missing.add(field)
+
+
 def original_value_snapshot(item, *, depth=0):
     """Keep purchase identity and prior amounts, never nested extra_json or source grids."""
     if not isinstance(item, dict) or depth > 2:

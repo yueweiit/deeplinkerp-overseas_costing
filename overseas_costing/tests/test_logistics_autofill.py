@@ -1141,14 +1141,18 @@ def test_transaction_rolls_back_row_reconciliation_when_fee_write_fails(monkeypa
     assert state["writes"] == 0 and state["rollbacks"] == 0 and state["commits"] == 0
 
 
-def test_main_approval_archived_labelled_text_preserves_all_eight_rows():
+def test_main_approval_archived_labelled_text_groups_matching_specs_and_preserves_trace():
     from overseas_costing.services.logistics_autofill_service import build_logistics_reconciliation
     source = approval()
     source["form_fields"]["货物信息Bienes"] = "\n".join(
         f"物料编码 Código de material：{code}；物料名称（中文）Nombre del material (chino)：指环扣；规格型号Especificación / Modelo：超队；数量Cantidad：{qty}；单位Unidad：个"
         for code, qty in GOODS)
     rows = build_logistics_reconciliation(existing_items(), source)["payload"]["rows"]
-    assert [(row["material_code"], int(row["actual_shipped_qty"])) for row in rows] == GOODS
+    assert [(row["material_code"], int(row["actual_shipped_qty"])) for row in rows] == [
+        ('FL000429', 100000), ('FL000427', 100000), ('FL000428', 100000),
+        ('FL000430', 100000), ('FL003377', 22000), ('CW000191', 2400),
+    ]
+    assert sum(len(json.loads(row['extra_json'])['logistics_cargo_group']['source_rows']) for row in rows) == 8
 
 
 def test_duplicate_sku_quantity_mismatch_is_not_forced_by_position():

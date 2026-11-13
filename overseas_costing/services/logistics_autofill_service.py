@@ -51,13 +51,16 @@ def run_supplement(callback, *, seconds: float = 60) -> dict:
             signal.setitimer(signal.ITIMER_REAL, max(0.001, old_timer[0] - (time.monotonic() - started)), old_timer[1])
 
 from overseas_costing.services.material_value_semantics import is_placeholder_token
+from overseas_costing.services.logistics_cargo_groups import (
+    META_KEY as CARGO_GROUP, PHYSICAL as CARGO_PHYSICAL, group_goods,
+    AUTO_SCOPE_EXCLUSION_REASON, group_metadata, initial_members, normalized, protected_members,
+)
 from overseas_costing.services.source_review_extract_service import _approval_goods_rows
 from overseas_costing.utils.field_mapper import map_oa_row_to_item, normalize_unit
 
 PURCHASE_FIELDS = ("quantity", "goods_value", "unit_price", "purchase_currency", "purchase_uom",
                    "unit_price_uom", "source_doc_no", "source_type")
 PHYSICAL_FIELDS = ("net_weight_kg", "gross_weight_kg", "volume_m3", "chargeable_weight_kg")
-AUTO_SCOPE_EXCLUSION_REASON = "系统按国际物流物料范围自动排除"
 
 
 def extra(item: dict) -> dict:
@@ -242,6 +245,9 @@ def _scope_source_fingerprint(
                 "product_name": _normalized_material_name(row.get("product_name")),
                 "quantity": str(row.get("quantity") or ""),
                 "unit": str(row.get("unit") or ""),
+                "spec_model": normalized(row.get("spec_model")),
+                "source_table": row.get('_source_table'),
+                "source_rows": row.get('_source_rows'),
             }
             for row in goods
         ],
@@ -256,7 +262,7 @@ def _scope_source_fingerprint(
         ],
     }
     return hashlib.sha256(
-        json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode()
     ).hexdigest()
 
 
@@ -267,16 +273,7 @@ def build_logistics_reconciliation(
     """Build an authoritative logistics-scope draft without mutating inputs."""
     if source.get("approval_role") != "international_logistics":
         return None
-    from .purchase_value_evidence import row_context, shipment_row_cells
-
-    goods = []
-    for raw in _approval_goods_rows(source):
-        raw = row_context(raw, source)
-        row = map_oa_row_to_item(raw)
-        quantity, unit = shipment_row_cells(raw)
-        row["quantity"] = format(quantity[2], "f") if quantity else None
-        row["unit"] = normalize_unit(unit[1]) if unit else None
-        goods.append(row)
+    goods = group_goods(source)
     by_name: dict[str, list[dict]] = {}
     for item in items:
         normalized_name = _normalized_material_name(item.get("product_name"))
@@ -344,7 +341,16 @@ def build_logistics_reconciliation(
     for index, goods_row in enumerate(goods, 1):
         source_code = _display_material_code(goods_row["material_code"])
         code_key = _normalized_material_code(source_code)
-        matches = by_code.get(code_key, [])
+        matches = [item for item in by_code.get(code_key, [])
+                   if not item.get('spec_model') or normalized(item.get('spec_model')) == normalized(goods_row.get('spec_model'))]
+        members = initial_members(items, goods_row, source)
+        if members and protected_members(members, goods_row):
+            message = _("{0} 的来源行与人工修改不一致，已保留原行，请核对后归并。").format(source_code)
+            return {"proposal_id": "logistics-manual-conflict", "proposal_type": "logistics_reconcile",
+                    "result_origin": "SYSTEM", "default_selected": False, "blocked": True,
+                    "conflict": True, "reason": message,
+                    "payload": {"rows": deepcopy(items), "unresolved": [{"message": message}],
+                                "original_item_names": [row['name'] for row in items]}}
         matching_code_hints = hint_by_code.get(code_key, [])
         identity_source_ids.update(
             str(hint.get("source_id") or "") for hint in matching_code_hints
@@ -352,8 +358,7 @@ def build_logistics_reconciliation(
         )
         code = _display_material_code(
             (matches[0] if matches else {}).get("material_code") or source_code)
-        identity = f"{source['source_id']}:{index}:{code_key}"
-        key = "logistics:" + hashlib.sha256(identity.encode()).hexdigest()[:32]
+        key = goods_row['_group_key']
         canonical_by_name: dict[str, str] = {}
         for match in matches:
             display_name = str(match.get("product_name") or "").strip()
@@ -378,7 +383,11 @@ def build_logistics_reconciliation(
             if len(canonical_hint_names) == 1 else ""
         )
         canonical_item_name = str((matches[0] if matches else {}).get("name") or "")
-        old = next((row for row in matches if row.get("stable_line_key") == key or extra(row).get("logistics_row", {}).get("identity") == key), None)
+        old = deepcopy(members[0]) if members else next((row for row in matches if row.get("stable_line_key") == key or extra(row).get("logistics_row", {}).get("identity") == key), None)
+        if members and len(members) > 1:
+            for field in ('quantity', 'goods_value'):
+                values = [_purchase_decimal(item.get(field)) for item in members]
+                old[field] = format(sum(values), 'f') if all(value is not None for value in values) else None
         if old is None:
             # Distinct purchases must not be silently resolved by SKU alone.
             purchase_keys = {extra(row).get("logistics_row", {}).get("purchase_key") or row.get("name") for row in matches}
@@ -392,7 +401,8 @@ def build_logistics_reconciliation(
             return None
         metadata = extra(old)
         prior = metadata.get("logistics_row") or {}
-        fact = prior.get("purchase_fact") or {field: old.get(field) for field in PURCHASE_FIELDS}
+        fact = ({field: old.get(field) for field in PURCHASE_FIELDS} if members
+                else prior.get("purchase_fact") or {field: old.get(field) for field in PURCHASE_FIELDS})
         # An auto-created logistics row records an explicit empty purchase key.
         # Preserve that decision on later audits instead of treating the newly
         # created item name as a purchase-row link and manufacturing allocation
@@ -409,7 +419,8 @@ def build_logistics_reconciliation(
         if retained_name:
             used.add(retained_name)
         row = {field: old.get(field) for field in (*PURCHASE_FIELDS, *PHYSICAL_FIELDS,
-                "project_collection", "manual_override_flag", "manual_override_reason", "spec_model")}
+                "project_collection", "manual_override_flag", "manual_override_reason", "spec_model",
+                "recipient", "supplier")}
         source_name = str(goods_row.get("product_name") or "").strip()
         canonical_name = str(
             old.get("product_name") or shared_canonical_name
@@ -445,6 +456,25 @@ def build_logistics_reconciliation(
             row["actual_shipped_qty"] = old.get("actual_shipped_qty")
             row["actual_shipped_qty_mode"] = "MANUAL_CONFIRMED"
             row["shipped_uom"] = old.get("shipped_uom")
+        for field in CARGO_PHYSICAL:
+            if goods_row.get(field) is not None:
+                row[field] = goods_row[field]
+            elif members and len(goods_row['_source_rows']) > 1:
+                row[field] = None
+        if members and any(extra(item).get('adopted_purchase_value') for item in members):
+            from .logistics_cargo_value import aggregate_cargo_valuation
+            valued = aggregate_cargo_valuation(members, {**row, 'extra_json': metadata})
+            if not valued['ok']:
+                return {'proposal_id': 'logistics-value-conflict', 'proposal_type': 'logistics_reconcile',
+                        'result_origin': 'SYSTEM', 'default_selected': False, 'blocked': True,
+                        'conflict': True, 'reason': valued['message'],
+                        'payload': {'rows': deepcopy(items), 'original_item_names': [item['name'] for item in items]}}
+            metadata = valued['metadata']
+            row['goods_value'] = valued['goods_value']
+            fact['goods_value'] = valued['goods_value']
+        metadata[CARGO_GROUP] = group_metadata(goods_row, source, members, row)
+        if members and metadata.get('adopted_purchase_value'):
+            metadata[CARGO_GROUP]['purchase_value_fact'] = deepcopy(metadata['adopted_purchase_value'])
         metadata["logistics_row"] = {**prior, "identity": key, "source_id": source["source_id"], "approval_no": source.get("approval_no"),
                                       "row_no": index, "purchase_key": purchase_key, "purchase_fact": fact}
         row["extra_json"] = json.dumps(metadata, ensure_ascii=False, default=str)
@@ -454,7 +484,9 @@ def build_logistics_reconciliation(
                 for field in ("unit_price", "purchase_currency", "purchase_uom", "unit_price_uom")
             }
             row["_review_price_metadata"] = deepcopy(metadata)
-        row['_review_source_values'] = {key: row.get(key) for key in ('material_code','product_name','spec_model','actual_shipped_qty','shipped_uom','unit','stable_line_key')}
+        row['_review_source_values'] = {key: row.get(key) for key in ('material_code','product_name','spec_model','actual_shipped_qty','shipped_uom','unit','stable_line_key', *CARGO_PHYSICAL)}
+        row['_review_source_values'].update({field: goods_row.get(field) for field in CARGO_PHYSICAL})
+        row['_review_source_values']['extra_json'] = json.dumps({CARGO_GROUP: metadata[CARGO_GROUP]}, ensure_ascii=False, default=str)
         # Physical fields copied/apportioned above are historical context, not evidence from this approval.
         rows.append(row)
     # International logistics defines this shipment.  Preserve only explicit
@@ -490,7 +522,7 @@ def build_logistics_reconciliation(
                     row[field] = value
     return {"proposal_id": "logistics-reconcile:" + hashlib.sha256(source["source_id"].encode()).hexdigest()[:24],
             "proposal_type": "logistics_reconcile", "result_origin": "SYSTEM", "confidence": 1.0,
-            "default_selected": True, "conflict": False, "reason": "按物流审批逐行填充，保留采购事实。",
+            "default_selected": True, "conflict": False, "reason": _("同表同编码同规格归并数量，保留原始行与采购事实。"),
             "source_refs": [{"source": "approval_form", "source_id": source["source_id"],
                              "file": source.get("source_label"), "approval_no": source.get("approval_no"), "field": "货物信息"}],
             "payload": {"rows": rows, "unresolved": unresolved,
@@ -505,8 +537,8 @@ def build_logistics_reconciliation(
                         "restored_item_names": [],
                         "name_mismatches": name_mismatches,
                         "source_fact_ids": [
-                            f"{source.get('source_id')}:{index}"
-                            for index, _row in enumerate(goods, 1)
+                            f"{source.get('source_id')}:{line['row']}"
+                            for group in goods for line in group['_source_rows']
                         ] + sorted(identity_source_ids),
                         "source_fingerprint": _scope_source_fingerprint(
                             source, goods, identity_hints,
@@ -565,6 +597,11 @@ def apply_reconciliation(
                       is_excluded=0, excluded_at=None, excluded_by="", exclusion_reason="",
                       cost_output_uom=row.get("shipped_uom") or "")
         metadata = extra(row)
+        from .logistics_settlement.item_metadata import store_missing_numbers
+        missing = set(metadata.get('settlement_packing_missing') or [])
+        store_missing_numbers(values, [field for field in (*CARGO_PHYSICAL, 'quantity', 'actual_shipped_qty')
+                                       if field in values], missing)
+        metadata['settlement_packing_missing'] = sorted(missing)
         metadata["autofill_review"] = {"run_id": run_id, "proposal_id": proposal["proposal_id"], "source_refs": proposal.get("source_refs") or []}
         values["extra_json"] = json.dumps(metadata, ensure_ascii=False, default=str)
         if row.get("_existing_name"):

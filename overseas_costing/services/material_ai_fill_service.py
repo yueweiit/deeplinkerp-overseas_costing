@@ -2120,10 +2120,8 @@ def _arbitrate_review_fee_sources(proposals: list[dict]) -> None:
                 if row.get("workflow_stage") == stage
                 and not row.get("source_policy_blocked")
                 and not row.get("source_stage_conflict")
-                and not (
-                    row.get("_semantic_payment_fee")
-                    and row.get("_existing_fee_conflict")
-                )
+                and not (row.get("_existing_fee_conflict")
+                         and (row.get("_semantic_payment_fee") or row.get("_explicit_approval_fee")))
                 and str(row.get("selection_role") or "") != "component"
                 and str(row.get("selection_role") or "") != "alternative"
                 and (
@@ -2468,8 +2466,7 @@ def normalize_source_review_proposals(
                     fee
                     for fee in existing_fees or []
                     if str(fee.get("logical_fee_key") or "") == fee_key
-                    and str(fee.get("amount_status") or "").upper() in {"ESTIMATED", "ACTUAL"}
-                    and not _is_blank(fee.get("amount"))
+                    and not fee.get("virtual")
                 ),
                 None,
             )
@@ -2521,6 +2518,7 @@ def normalize_source_review_proposals(
                 "conflict": conflict,
                 "existing_value_conflict_fields": existing_value_conflict_fields,
                 "_existing_fee_conflict": existing_fee_conflict,
+                "_explicit_approval_fee": bool(system_origin and raw.get("_explicit_approval_fee")),
                 "result_origin": "SYSTEM" if system_origin else "AI",
                 "conflict_group": str(raw.get("conflict_group") or "")[:200],
                 # A model cannot self-elect a fee. Deterministic proposal IDs
@@ -2752,10 +2750,15 @@ def build_approval_fee_proposals(
 ) -> list[dict]:
     from overseas_costing.scripts.import_oa_logistics import extract_logistics_quote_candidates_from_approval
     from overseas_costing.services.transport_fee_service import primary_freight_definition
+    from overseas_costing.services.oa_fee_backfill_service import build_explicit_approval_fee_proposals
+
+    proposals = build_explicit_approval_fee_proposals(source, transport_mode=transport_mode)
+    if any(row["payload"]["logical_fee_key"] in _PRIMARY_REVIEW_FREIGHT_KEYS for row in proposals):
+        return proposals
 
     candidates = extract_logistics_quote_candidates_from_approval({"form_fields": source.get("form_fields") or {}})
     if not candidates:
-        return []
+        return proposals
     from overseas_costing.services.logistics_autofill_service import selected_carrier
     chosen = selected_carrier(candidates, source.get("approval_decisions") or [])
     alternatives = deepcopy(candidates)
@@ -2766,7 +2769,7 @@ def build_approval_fee_proposals(
     definition = primary_freight_definition(transport_mode) or {}
     fee_key = str(definition.get("logical_fee_key") or "")
     if fee_key not in REVIEW_FEE_KEYS:
-        return []
+        return proposals
     multiple = len(candidates) > 1
     existing = next(
         (
@@ -2777,7 +2780,6 @@ def build_approval_fee_proposals(
         ),
         None,
     )
-    proposals = []
     from overseas_costing.services.project_freight_service import approval_project_policy
     project_policy = approval_project_policy(source) if chosen else None
     for index, candidate in enumerate(candidates, start=1):
