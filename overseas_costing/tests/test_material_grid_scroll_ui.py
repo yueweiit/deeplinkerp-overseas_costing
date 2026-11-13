@@ -15,6 +15,8 @@ def test_approval_column_stays_last_with_auxiliary_columns():
         assert fields[-1] == 'source_doc_no'
         assert '__actions' not in fields
         assert fields.count('source_doc_no') == 1
+        assert 'gross_weight_kg' in fields
+        assert 'chargeable_weight_kg' not in fields
     assert result['auxiliary'][-2] == 'source_file_name'
 
 

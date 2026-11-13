@@ -12055,7 +12055,6 @@ class OverseasCostWorkbench {
       { field: "net_weight_kg", label: ocTranslate("净重 kg"), numeric: true, width: 120 },
       { field: "gross_weight_kg", label: ocTranslate("毛重 kg"), numeric: true, width: 130 },
       { field: "volume_m3", label: ocTranslate("体积 m³"), numeric: true, width: 130 },
-      { field: "chargeable_weight_kg", label: ocTranslate("计费重 kg"), numeric: true, width: 140 },
       { field: "supplier", label: ocTranslate("供应商"), width: 220 },
       { field: "project_collection", label: ocTranslate("项目归属"), width: 180 },
     ];
