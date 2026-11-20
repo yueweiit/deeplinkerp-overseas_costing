@@ -116,6 +116,55 @@ def test_repository_legacy_raw_stays_internal_to_ai_messages_and_public_payloads
     assert 'raw_excel_json' not in ai._fingerprint_item(items[0])
 
 
+def test_heterogeneous_logistics_table_preserves_owned_rows_through_repository_and_preview(monkeypatch):
+    from types import SimpleNamespace
+    from overseas_costing.services import dingtalk_approval_service, packing_snapshot_service, material_ai_fill_service as ai
+    from overseas_costing.services.source_review_extract_service import match_approval_goods_rows
+    from overseas_costing.tests.test_source_goods_value_adoption import review, project_defaults
+
+    targets = dict(zip((18, 19, 172, 173, 174, 175, 181, 182), (110000, 5000, 120, 40, 8, 8, 25, 15)))
+    labels = ('物料编码 Código de material', '物料名称（中文）Nombre del material (chino)',
+        '物料名称（西语）Nombre del material (español)', '规格型号Especificación / Modelo',
+        '数量Cantidad', '单位Unidad', '收件人Destinatario')
+    stored_items, _ = _legacy_logistics_rows()
+    seed = stored_items[0]; stored_items = []; body = []
+    for position in range(1, 185):
+        code = 'SKU-BAG' if position in (17, 18, 19) else 'SKU-KG' if 172 <= position <= 175 else 'SKU-ROLL'
+        unit = 'kg' if 172 <= position <= 175 else '卷' if position in (181, 182) else '个'
+        values = (code, '历史品名', 'Nombre', '历史规格', str(targets.get(position, 125000 if position == 17 else 1)), unit, '')
+        row = {'rowNumber': f'ROW-{position}', 'rowValue': [{'label': label, 'value': value}
+            for label, value in zip(labels, values) if not (20 <= position <= 26 and label == labels[5])
+            and not (position == 27 and label == labels[3])]}
+        body.append(row)
+        if position in targets:
+            item = deepcopy(seed)
+            item.update(name=f'I-{position}', material_code=code, quantity=position * 1000,
+                unit=unit, shipped_uom=unit, raw_excel_json={'_dingtalk_row_number': row['rowNumber']})
+            stored_items.append(item)
+    assert sum(len(row['rowValue']) == 7 for row in body) == 176
+    assert sum(labels[5] not in [c['label'] for c in row['rowValue']] for row in body) == 7
+    assert sum(labels[3] not in [c['label'] for c in row['rowValue']] for row in body) == 1
+    approval = dingtalk_approval_service._approval({'corpId': 'CORP', 'processInstanceId': 'LOG',
+        'status': 'COMPLETED', 'result': 'agree', 'formComponentValues': [{'name': '货物信息Bienes',
+            'componentType': 'TableField', 'value': json.dumps(body, ensure_ascii=False)}]}, [])
+    source = packing_snapshot_service._list_approval_body_ai_sources('B1', detail={
+        'ok': True, 'main_approval': approval, 'linked_purchase_approvals': []})[0]
+    assert len(source['form_fields']['货物信息Bienes']) == 184
+    with monkeypatch.context() as context:
+        context.setattr(ai, 'frappe', SimpleNamespace(get_all=lambda doctype, *, fields, **kwargs:
+            [{field: deepcopy(row.get(field)) for field in fields} for row in stored_items]))
+        items = ai.FrappeMaterialAIFillRepository().get_items('B1', 'V1')
+    matches = match_approval_goods_rows(items, source)
+    assert matches[16][-2] is None
+    assert sum(item is not None for *_, item, ambiguous in matches) == 8
+    projected = project_defaults(items, review(items, source))
+    assert [Decimal(str(row['actual_shipped_qty'])) for row in projected['rows']] == list(targets.values())
+    assert [row['quantity'] for row in projected['rows']] == [position * 1000 for position in targets]
+    assert all(row['product_name'] == '主档品名' and row['spec_model'] == '主档规格' for row in projected['rows'])
+    assert all(row['actual_shipped_qty_mode'] == 'EXPLICIT_SOURCE' for row in projected['rows'])
+    assert {c['item_name'] for c in projected['changes']} <= {row['name'] for row in items}
+
+
 @pytest.mark.parametrize('mismatch', [
     'corp', 'missing_corp', 'target_corp', 'instance', 'target_instance_conflict', 'code',
     'source_duplicate', 'source_duplicate_other_code', 'target_duplicate',

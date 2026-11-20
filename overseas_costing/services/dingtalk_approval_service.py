@@ -326,9 +326,13 @@ def _table_value(value) -> dict | None:
         return None
 
     columns: list[str] = []
-    rows: list[list[str]] = []
+    rows: list[dict[str, str]] = []
     row_ids: list[str] = []
     for row_index, row in enumerate(sanitized):
+        raw_row = decoded[row_index] if isinstance(decoded[row_index], dict) else {}
+        row_number = str(raw_row.get("rowNumber") or raw_row.get("row_number") or "").strip()
+        if row_number.upper() == "TABLEFIELD_HEADER":
+            continue
         cells = row.get("rowValue") if isinstance(row, dict) else None
         if not isinstance(cells, list) or not cells:
             return None
@@ -342,21 +346,19 @@ def _table_value(value) -> dict | None:
                 return None
             row_columns.append(label)
             row_values.append(_display_value(cell.get("value")))
-        if row_index == 0:
-            columns = row_columns
-        elif row_columns != columns:
-            return None
-        raw_row = decoded[row_index] if isinstance(decoded[row_index], dict) else {}
-        row_number = str(raw_row.get("rowNumber") or raw_row.get("row_number") or "").strip()
         placeholder_row = dict(zip(row_columns, row_values))
-        if (
-            row_number.upper() == "TABLEFIELD_HEADER"
-            or _is_oa_goods_placeholder_row(placeholder_row)
-        ):
+        if _is_oa_goods_placeholder_row(placeholder_row):
             continue
-        rows.append(row_values)
+        values_by_label = {}
+        for label, value in zip(row_columns, row_values):
+            if label in values_by_label and values_by_label[label] != value:
+                return None
+            values_by_label[label] = value
+            if label not in columns:
+                columns.append(label)
+        rows.append(values_by_label)
         row_ids.append(row_number)
-    table = {"columns": columns, "rows": rows}
+    table = {"columns": columns, "rows": [[row.get(label, "") for label in columns] for row in rows]}
     if any(row_ids):
         table["row_ids"] = row_ids
     return table
