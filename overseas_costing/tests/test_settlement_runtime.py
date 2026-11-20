@@ -740,3 +740,74 @@ def test_existing_form_derived_waybill_is_not_replaced_by_a_later_comment(monkey
     assert saved['waybill_no'] == '4104020185'
     assert json.loads(saved['extra_json'])['waybill_source']['kind'] == 'form-derived'
     assert s.count('audit', binding_id=parsed['id'], action='batch_waybill_conflict') == 1
+
+
+def archived_file_runtime(monkeypatch, store, *, error_type=None, corrupt=False):
+    import hashlib
+    from overseas_costing.services import import_service
+    from overseas_costing.tests.test_settlement_documents import workbook
+
+    data = workbook('完整货物明细', [['物料编码', '数量', '单位'], ['A', 2, '件']])
+    events = {'native': [], 'large': [], 'reads': []}
+
+    def get_object(bucket, object_key):
+        events['reads'].append((bucket, object_key))
+        return SimpleNamespace(read=lambda: data, close=lambda: None, release_conn=lambda: None)
+
+    def get_doc(values):
+        events['native'].append(values)
+        def insert(*, ignore_permissions):
+            assert ignore_permissions is True
+            if error_type:
+                raise error_type('File size exceeded the maximum allowed size')
+            return SimpleNamespace(file_url='/private/files/native.xlsx')
+        return SimpleNamespace(insert=insert)
+
+    def save_large(**values):
+        events['large'].append(values)
+        return SimpleNamespace(file_url='/private/files/large.xlsx')
+
+    monkeypatch.setattr(runtime, 'frappe', SimpleNamespace(get_doc=get_doc))
+    monkeypatch.setattr(runtime, 'logistics_codes', lambda: {'logistics'})
+    monkeypatch.setattr(runtime.Store, 'frappe', lambda: store)
+    monkeypatch.setattr(import_service, '_get_minio_archive_client',
+                        lambda: SimpleNamespace(client=SimpleNamespace(get_object=get_object)))
+    monkeypatch.setattr(import_service, '_save_large_content_as_private_file', save_large)
+    raw = source('L-CACHE', 'logistics')
+    raw['attachments'] = [{'file_id': 'f', 'file_name': '../cargo.xlsx', 'bucket': 'trusted-bucket',
+                           'object_key': 'immutable-key', 'archive_status': 'archived',
+                           'actual_size': len(data), 'archive_quality': 'original',
+                           'sha256': 'invalid' if corrupt else hashlib.sha256(data).hexdigest()}]
+    return lambda: runtime.prepare_source(raw), events, data
+
+
+@pytest.mark.parametrize('error_type', [
+    None, type('MaxFileSizeReached', (Exception,), {}),
+    type('MaxFileSizeReachedError', (Exception,), {}), PermissionError, RuntimeError,
+])
+def test_prepare_source_uses_large_private_file_only_for_typed_size_limit(monkeypatch, store, error_type):
+    run, events, data = archived_file_runtime(monkeypatch, store, error_type=error_type)
+    typed_limit = error_type and error_type.__name__ in {'MaxFileSizeReached', 'MaxFileSizeReachedError'}
+    if error_type and not typed_limit:
+        with pytest.raises(error_type):
+            run()
+        assert not events['large']
+    else:
+        doc = run()['settlement_documents'][0]
+        assert doc['tables'] and not doc.get('cache_issues')
+        assert doc['file_url'] == ('/private/files/large.xlsx' if typed_limit else '/private/files/native.xlsx')
+        assert events['large'] == ([{'file_name': 'cargo.xlsx', 'content': data, 'attached_to_name': ''}]
+                                    if typed_limit else [])
+    assert events['native'] == [{'doctype': 'File', 'file_name': 'cargo.xlsx', 'content': data, 'is_private': 1}]
+    assert events['reads'] == [('trusted-bucket', 'immutable-key')]
+
+
+def test_prepare_source_never_saves_content_that_fails_archive_integrity(monkeypatch, store):
+    from overseas_costing.integrations.dingtalk_approval_source import ArchiveIntegrityError
+    run, events, _ = archived_file_runtime(monkeypatch, store, corrupt=True)
+
+    with pytest.raises(ArchiveIntegrityError):
+        run()
+
+    assert not events['native'] and not events['large']
+    assert store.count('document') == 0

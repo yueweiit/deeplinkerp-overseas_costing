@@ -291,9 +291,75 @@ def _inputs(repo, batch, run, *, locked=False):
         repo.assert_row_dependencies(batch,baseline,lock=locked)
     current_fees=repo.get_fees(batch,context['version'])
     proposals=ai._load_json(ai._record_value(run,'candidates_json'),[])
+    group_reader = getattr(repo, 'get_packing_groups', None)
+    groups = group_reader(batch, context['version']) if callable(group_reader) else []
     result=rows.catalog(items,proposals,current_fees,context.get('effective_source') or {},
-                        run_id=ai._record_value(run,'name'),sources=sources,fx_rates=context.get('fx_rates'))
+        run_id=ai._record_value(run,'name'),sources=sources,fx_rates=context.get('fx_rates'),
+        field_candidate_policy=lambda catalog_rows, field_candidates: _guard_shared_packing_defaults(
+            {'rows': catalog_rows, 'field_candidates': field_candidates}, items,
+            draft.get('packing_group_candidates') or [], groups, sources))
     return context,items,sources,current_fees,result
+
+
+def _guard_shared_packing_defaults(catalog, items, candidates, adopted_groups, sources):
+    from .material_packing_group_service import GROUP_FIELDS
+    from .purchase_value_evidence import number
+
+    if not candidates:
+        return
+    aliases = _packing_key_aliases(items, catalog, {'rows': items}, candidates)
+    item_index = _stable_item_index(items)
+    rows_by_id = {row['row_id']: row for row in catalog.get('rows') or []}
+    for group in candidates:
+        members = {aliases.get(str(key), str(key)) for key in group.get('member_keys') or []}
+        if len(members) < 2:
+            continue
+        fields = {evidence.get('field') for evidence in group.get('evidence') or []
+                  if evidence.get('kind') == 'xlsx_merge'} & set(GROUP_FIELDS)
+        if group.get('creation_method') == 'trusted_comment_text':
+            fields = set(GROUP_FIELDS)
+        names = {item_index[key]['name'] for key in members if key in item_index}
+        for candidate in catalog.get('field_candidates') or []:
+            field = candidate.get('fieldname')
+            total = number(group.get(field)) if field in fields else None
+            if (candidate.get('item_name') not in names or total is None
+                    or number(candidate.get('suggested_value')) != total
+                    or not _shared_packing_source_matches(candidate, rows_by_id, group, sources)):
+                continue
+            confirmed = any(adopted.get('status') == 'confirmed'
+                and set(adopted.get('member_keys') or []) == members
+                and (adopted.get('group_id') == group.get('candidate_id')
+                     or group.get('source_fingerprint') and adopted.get('source_fingerprint') == group['source_fingerprint'])
+                and number(adopted.get(field)) == total for adopted in adopted_groups)
+            candidate.update(default_eligible=False, default_selected=False,
+                packing_group_confirmed=confirmed,
+                resolution_reason=_('共享箱级数据') if confirmed
+                    else _('Shared packing totals require a confirmed packing group.'))
+            candidate.setdefault('packing_group_candidate_ids', []).append(group['candidate_id'])
+
+
+def _shared_packing_source_matches(candidate, rows_by_id, group, sources):
+    from .source_review_manifest_service import stable_source_identity
+
+    source_id = str(group.get('source_id') or '')
+    if not source_id:
+        return False
+    known = [source for source in sources if source_id in {
+        source.get('source_id'), source.get('parent_source_id'), source.get('logical_source_id'),
+        source.get('resolver_source_id')}]
+    sheet_id, _ = stable_source_identity({'source_id': source_id, 'sheet_name': group.get('sheet_name')})
+    group_sheet = _source_ref_sheet(group)
+    if any(str(ref.get('source_id') or '') in {source_id, sheet_id}
+           and not (_source_ref_sheet(ref) and group_sheet and _source_ref_sheet(ref) != group_sheet)
+           for ref in candidate.get('source_refs') or []):
+        return True
+    # A model can cite the parent approval while copying a merged attachment total.
+    # An independently verified approval cell remains an ordinary per-item fact.
+    row = rows_by_id.get(candidate.get('row_id')) or {}
+    return (candidate.get('evidence_kind') == 'approval_form'
+        and candidate.get('process_instance_id') in {
+            rows._dingtalk_instance_id(source) for source in known if rows._dingtalk_instance_id(source)}
+        and not (row.get('_review_verified_fields') or {}).get(candidate.get('fieldname')))
 
 
 def review_catalog(repo,batch,run):
@@ -785,6 +851,16 @@ def _reconstruct_locked_preview(repo,batch_name,run,receipt,draft):
         raise ValueError(_('合并金额组尚未完成人工分摊或合计校验，本次未保存。'))
     selected_fee_ids=current.get('selected_fee_ids') or []
     selected_fees=current.get('fees') or []
+    if selected_fee_ids and ai._record_value(run,'trigger_mode') in ai.AUTOMATIC_GAP_FILL_TRIGGER_MODES:
+        # A locking read sees current amounts even when earlier permission or
+        # preview reads established an older REPEATABLE READ snapshot.
+        locked_fees=repo.get_locked_fees(batch_name,context['version'])
+        fee_order=lambda fee:str(fee.get('name') or '')
+        if digest(sorted(current_fees,key=fee_order))!=digest(sorted(locked_fees,key=fee_order)):
+            raise ValueError(_('来源、费用或物料已变化，请刷新预览；本次未保存。'))
+        fees.assert_missing_fee_selection(
+            catalog,selected_fee_ids,locked_fees,context.get('effective_source') or {},
+            transport_mode=context.get('transport_mode') or '')
     estimate_only=bool(selected_fee_ids) and len(selected_fees)==len(selected_fee_ids) and all(
         str((fee.get('payload') or {}).get('amount_status') or '').upper()=='ESTIMATED'
         for fee in selected_fees)

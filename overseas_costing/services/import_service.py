@@ -1089,7 +1089,7 @@ def register_manual_document_attachment(
     manual_note: str | None = None,
     required=0,
 ) -> dict:
-    """登记人工上传资料，只保留来源，不参与自动解析写入。"""
+    """Register original evidence, then queue the native safe-fill continuation."""
 
     resolved_file_url = str(file_url or "").strip()
     resolved_slot_code = str(slot_code or "").strip()
@@ -1153,15 +1153,26 @@ def register_manual_document_attachment(
     try:
         from overseas_costing.services.material_ai_fill_service import schedule_source_ai_review
 
-        schedule_source_ai_review(
+        processing = schedule_source_ai_review(
             batch_doc_name,
             resolved_version_name,
             trigger_mode="LOCAL_UPLOAD",
+            request_id="local-upload-" + doc.name,
         )
     except Exception:
-        pass
+        processing = {"ok": False, "status": "REVIEW_REQUIRED"}
+    processing = processing.get("automatic_processing") or {
+        "status": "REVIEW_REQUIRED", "run_id": "", "changed_count": 0,
+        "blockers": [{"code": "REVIEW_REQUIRED", "hint": "Automatic processing needs review."}],
+    }
+    if not processing.get("run_id"):
+        # Queued evidence fingerprints were captured by start_source_ai_review;
+        # do not mutate their parse metadata after creating the run.
+        frappe.db.set_value("Overseas Cost Attachment", doc.name, "parse_result_json",
+                            _json_dumps({**manual_meta, "automatic_processing": processing}), update_modified=False)
     return {
         "ok": True,
+        "processing": processing,
         "attachment": {
             "name": doc.name,
             "batch": batch_doc_name,
@@ -1484,9 +1495,21 @@ def _download_oa_attachment_from_archive(
     }
     if archive_status != "archived":
         manual_required = archive_status == "manual_required"
-        access_denied = manual_required and _is_minio_access_denied(manifest.get("last_error"))
+        drive_scope_missing = (
+            manual_required
+            and manifest.get("failure_code") == "Forbidden.AccessDenied.AccessTokenPermissionDenied"
+            and manifest.get("last_attempt_strategy") == "drive_download"
+            and "Drive.DownloadInfo.Read" in str(manifest.get("last_error") or "")
+        )
+        access_denied = manual_required and not drive_scope_missing and _is_minio_access_denied(manifest.get("last_error"))
         if manual_required:
-            if access_denied:
+            if drive_scope_missing:
+                message = _(
+                    "The original attachment is registered, but DingTalk could not archive it. "
+                    "An administrator must check the original submitter and file access, or restore the original from the approval page. "
+                    "No repeat approval submission is needed."
+                )
+            elif access_denied:
                 message = _minio_access_denied_message()
             else:
                 reason = str(manifest.get("last_error") or "归档服务已标记为需要人工补传")
@@ -1509,8 +1532,9 @@ def _download_oa_attachment_from_archive(
             "source_lag_seconds": source_lag_seconds,
             "archive_status": archive_status,
             "fallback_used": False,
-            "needs_manual_upload": manual_required,
-            **({"error_type": "minio_archive_access_denied"} if access_denied else {}),
+            "needs_manual_upload": manual_required and not drive_scope_missing,
+            **({"error_type": "dingtalk_archive_scope_missing"} if drive_scope_missing else
+               {"error_type": "minio_archive_access_denied"} if access_denied else {}),
             "message": message,
         }
 
@@ -4446,9 +4470,14 @@ def _resolve_ambiguous_matches_by_sequence(raw_matches: list[dict]) -> None:
 
 
 def _narrow_item_candidates(mapped_row: dict, candidates: list[dict]) -> list[dict]:
+    from .purchase_value_evidence import spec_identity
+
     spec_key = _normalize_key(mapped_row.get("spec_model"))
     if spec_key:
-        spec_candidates = [candidate for candidate in candidates if _normalize_key(candidate.get("spec_model")) == spec_key]
+        spec_candidates = [candidate for candidate in candidates
+                           if spec_identity(candidate.get("spec_model"), candidate,
+                                            material_code=candidate.get("material_code"))
+                           == spec_identity(spec_key, candidate, material_code=mapped_row.get("material_code"))]
         if spec_candidates:
             return spec_candidates
         if any(_normalize_key(candidate.get("spec_model")) for candidate in candidates):

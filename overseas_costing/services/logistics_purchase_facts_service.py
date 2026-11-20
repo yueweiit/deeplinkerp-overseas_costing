@@ -145,6 +145,8 @@ def _purchase_candidates(sources: list[dict], fx_rates: dict | None = None) -> l
 
 
 def _matching_candidates(item: dict, prior: dict, candidates: list[dict]) -> list[dict]:
+    from .purchase_value_evidence import spec_identity
+
     matches = [candidate for candidate in candidates
                if candidate["material_code"].casefold() == _text(item.get("material_code")).casefold()]
     exact = [row for row in matches if row["purchase_key"] == prior.get("purchase_key")]
@@ -162,12 +164,16 @@ def _matching_candidates(item: dict, prior: dict, candidates: list[dict]) -> lis
         return []
     spec = _text(item.get("spec_model")).casefold()
     if spec and len(matches) > 1:
-        matches = [row for row in matches if not row["spec_model"] or row["spec_model"].casefold() == spec]
+        matches = [row for row in matches if not row["spec_model"]
+                   or spec_identity(row["spec_model"], item, material_code=row.get("material_code"))
+                   == spec_identity(spec, item, material_code=item.get("material_code"))]
     return matches
 
 
 def _same_logical_purchase_row(item: dict, prior: dict, candidate: dict) -> bool:
     """Permit source refresh only with a stable lineage and source row identity."""
+    from .purchase_value_evidence import spec_identity
+
     lineage = _text(prior.get("purchase_logical_source_id"))
     if not lineage or lineage != _text(candidate.get("purchase_logical_source_id")):
         return False
@@ -175,7 +181,9 @@ def _same_logical_purchase_row(item: dict, prior: dict, candidate: dict) -> bool
         return False
     item_spec = _text(item.get("spec_model")).casefold()
     candidate_spec = _text(candidate.get("spec_model")).casefold()
-    return not item_spec or not candidate_spec or item_spec == candidate_spec
+    return (not item_spec or not candidate_spec
+            or spec_identity(item_spec, item, material_code=item.get("material_code"))
+               == spec_identity(candidate_spec, item, material_code=candidate.get("material_code")))
 
 
 def _same_stable_purchase_row(prior: dict, candidate: dict) -> bool:

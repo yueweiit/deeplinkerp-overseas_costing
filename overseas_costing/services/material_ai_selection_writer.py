@@ -20,7 +20,7 @@ from .logistics_settlement.valuation import reconcile_replacement_value, value_f
 def write_rows(store,ledger,preview,context):
     batch_name=preview['batch'];old_version=ledger.get('version',preview['version'],lock=True)
     batch=ledger.get('batch',batch_name,lock=True)
-    if batch.get('current_version')!=old_version['name'] or old_version.get('status')!='Active' or batch.get('confirm_status')=='Confirmed' or batch.get('writeback_status')=='Success':
+    if batch.get('current_version')!=old_version['name'] or old_version.get('status')!='Active' or batch.get('is_locked') or batch.get('confirm_status')=='Confirmed' or batch.get('writeback_status')=='Success':
         raise ValueError(_('当前版本已变化或被冻结，不能覆盖；请刷新后重新预览。'))
     old_items=ledger.rows('item',batch=batch_name,version=old_version['name'])
     originals={i['name']:i for i in old_items};version=old_version

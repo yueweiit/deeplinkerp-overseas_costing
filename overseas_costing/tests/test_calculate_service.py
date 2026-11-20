@@ -766,6 +766,10 @@ def _install_item_edit_frappe(monkeypatch, items):
         def set_value(self, *_args, **_kwargs):
             return None
 
+        def get_column_type(self, doctype, fieldname):
+            assert (doctype, fieldname) == ("Overseas Cost Item", "goods_value")
+            return "decimal(21,9)"
+
         def get_value(self, doctype, name, fieldname=None, **_kwargs):
             if doctype == "Overseas Cost Item":
                 return items[name].batch
@@ -965,6 +969,48 @@ def test_clearing_manual_value_with_no_prior_returns_to_missing(monkeypatch, fie
     assert cleared["valuation"]["amount_rmb"] is None
     assert cleared["valuation"]["error"] == "GOODS_VALUE_MISSING"
     assert cleared["goods_value"] == 0 and items["I1"].goods_value == 0
+
+
+@pytest.mark.parametrize("fieldname", ["shipment_value_rmb", "goods_value"])
+@pytest.mark.parametrize("legacy", [False, True])
+@pytest.mark.parametrize(("stored", "manual_amount", "prior"), [
+    ("101.466666667", "101.4666666666666", None),
+    ("101.466666668", "101.4666666666666", "101.466666668"),
+    ("0", "0", None),
+    ("0.000000001", "0.0000000005", None),
+])
+def test_batch_clear_distinguishes_decimal_mirror_from_independent_legacy_value(
+    monkeypatch, fieldname, legacy, stored, manual_amount, prior,
+) -> None:
+    from overseas_costing.services import edit_session_service
+    from overseas_costing.services.shipment_cost_service import build_manual_shipment_valuation
+
+    row = {"actual_shipped_qty": 2, "shipped_uom": "件", "unit": "件"}
+    manual = build_manual_shipment_valuation(row, manual_amount, actor="old")
+    key = "shipment_valuation" if legacy else "manual_shipment_valuation"
+    items = {"I1": {"goods_value": float(stored), "extra_json": json.dumps({key: manual})}}
+    service, db = _install_item_edit_frappe(monkeypatch, items)
+    monkeypatch.setattr(edit_session_service, "assert_batch_write", lambda *_args, **_kwargs: None)
+
+    result = service.batch_update_items("B1", [{
+        "item_name": "I1", "fieldname": fieldname, "value": "", "remark": "撤销参考估价",
+    }], version_name="V1", edit_token="TOKEN", expected_modified="OLD")
+
+    assert result["ok"] is True and result["changed_count"] == 1
+    cleared = result["results"][0]
+    metadata = json.loads(items["I1"].extra_json)
+    assert "manual_shipment_valuation" not in metadata
+    assert db.commits == 1 and db.rollbacks == 0
+    if prior is None:
+        assert cleared["valuation"]["status"] == "missing"
+        assert cleared["valuation"]["amount_rmb"] is None
+        assert cleared["goods_value"] == 0 and items["I1"].goods_value == 0
+        assert "shipment_valuation" not in metadata
+    else:
+        assert cleared["valuation"]["status"] == "automatic"
+        assert cleared["valuation"]["amount_rmb"] == prior
+        assert items["I1"].goods_value == float(prior)
+        assert metadata["shipment_valuation"]["method"] == "LEGACY_PURCHASE"
 
 
 @pytest.mark.parametrize("fieldname", ["shipment_value_rmb", "goods_value"])

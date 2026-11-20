@@ -147,7 +147,7 @@ def _approval_goods_rows(source: dict) -> list[dict]:
 
 def _match_item(items: list[dict], material_code: Any, source_doc_no: Any = "", *, mapped=None,
                 source_id="", row_no=0) -> Optional[dict]:
-    from .purchase_value_evidence import uom
+    from .purchase_value_evidence import spec_identity, uom
 
     code = str(material_code or "").strip().casefold()
     if not code:
@@ -155,7 +155,9 @@ def _match_item(items: list[dict], material_code: Any, source_doc_no: Any = "", 
     spec = str((mapped or {}).get("spec_model") or "").strip().casefold()
     candidates = [
         item for item in items if str(item.get("material_code") or "").strip().casefold() == code
-        and (not spec or not item.get("spec_model") or str(item["spec_model"]).strip().casefold() == spec)
+        and (not spec or not item.get("spec_model")
+             or spec_identity(item["spec_model"], item, material_code=item.get("material_code"))
+                == spec_identity(spec, item, material_code=material_code))
     ]
     if source_id and row_no:
         from .shipment_cost_service import object_json
@@ -179,7 +181,9 @@ def _match_item(items: list[dict], material_code: Any, source_doc_no: Any = "", 
             candidates = [item for item in candidates
                           if uom(item.get("shipped_uom") or item.get("unit")) == uom(mapped["unit"])]
         if spec:
-            exact = [item for item in candidates if str(item.get("spec_model") or "").strip().casefold() == spec]
+            exact = [item for item in candidates
+                     if spec_identity(item.get("spec_model"), item, material_code=item.get("material_code"))
+                     == spec_identity(spec, item, material_code=material_code)]
             if exact:
                 candidates = exact
         if len(candidates) > 1:

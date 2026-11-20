@@ -282,3 +282,59 @@ RMB 兑 MXN 汇率必须大于零。,RMB 兑 MXN 汇率必须大于零。
 当前费用或装箱来源已采用、失效或不可核对，保留现有费用。,当前费用或装箱来源已采用、失效或不可核对，保留现有费用。
 仅补齐缺失费用，保留已有记录及其金额、范围和停用状态。,仅补齐缺失费用，保留已有记录及其金额、范围和停用状态。
 归并货值缺少一致、有效的来源依据，请保留原行核对。,归并货值缺少一致、有效的来源依据，请保留原行核对。
+资料已收到，正在自动识别、补缺并试算。,资料已收到，正在自动识别、补缺并试算。
+正在自动识别、补缺并试算,正在自动识别、补缺并试算
+资料已处理并完成试算,资料已处理并完成试算
+已完成试算，仍有资料待补,已完成试算，仍有资料待补
+请补充采购金额、币种或对应凭据,请补充采购金额、币种或对应凭据
+有冲突的资料需核对。,有冲突的资料需核对。
+请核对本票对应的支付来源，资料已保存。,请核对本票对应的支付来源，资料已保存。
+当前批次正在编辑，资料已保存，自动处理暂缓。,当前批次正在编辑，资料已保存，自动处理暂缓。
+资料处理需要核对,资料处理需要核对
+资料处理状态读取暂时中断，请稍后刷新查看。,资料处理状态读取暂时中断，请稍后刷新查看。
+资料处理进度,资料处理进度
+已补齐 {0} 项。,已补齐 {0} 项。
+Confirm the matching payment source before continuing.,请先核对本票对应的支付来源。
+"Automatic filling requires a current, unambiguous preview.",请先核对当前有效且无冲突的资料。
+Automatic processing needs review.,自动处理结果需要核对。
+The batch is being edited.,当前批次正在编辑。
+An existing manual analysis needs review before automatic processing.,已有手动分析需要核对，暂不自动处理。
+Reanalyze this older draft to continue automatic processing.,请重新识别这份旧草稿，再继续自动处理。
+请补充采购金额、币种或对应凭据；有冲突的资料需核对。,请补充采购金额、币种或对应凭据；有冲突的资料需核对。
+已补齐 {0} 项,已补齐 {0} 项
+上传后会自动识别、补缺并试算；已有资料无需重复上传。,上传后会自动识别、补缺并试算；已有资料无需重复上传。
+金额、币种以可核实的来源凭据为准,金额、币种以可核实的来源凭据为准
+所需文件 {0} / {1},所需文件 {0} / {1}
+还有 {0} 类文件可按需补充,还有 {0} 类文件可按需补充
+所需文件已上传，待核实识别结果,所需文件已上传，待核实识别结果
+{0}。识别完成后会更新缺项；已有文件可先核对内容。,{0}。识别完成后会更新缺项；已有文件可先核对内容。
+请补充或核对下列资料,请补充或核对下列资料
+查看或补充资料,查看或补充资料
+待核实事项,待核实事项
+Purchase value and evidence,采购金额与凭据
+Shipping and packing documents,发货及装箱资料
+Fee evidence,费用凭据
+"Provide the purchase amount, currency and matching invoice or payment evidence.",请提供采购金额、币种及对应的发票或付款凭据。
+"Provide the shipping quantities, units and packing details for the listed rows.",请提供下列物料的发货数量、单位及装箱明细。
+Provide the bill or fee evidence for the listed fees.,请提供下列费用对应的账单或凭据。
+Current calculation inputs are incomplete; linked source archive coverage has not been verified.,核算数据仍有缺项，关联凭据是否完整尚待核实；已有资料无需重复上传。
+上传装箱资料,上传装箱资料
+已关联资料仍待核对，请先查看下方原因，无需重复上传。,已关联资料仍待核对，请先查看下方原因，无需重复上传。
+The current main approval archive is unavailable.,当前主审批归档暂不可用。
+A linked approval is not available in the upstream archive.,关联审批尚未出现在上游归档中。
+Linked approval archive lookup could not be completed.,暂未完成关联审批归档核对。
+A linked attachment could not be prepared from the archive.,关联附件暂未完成归档读取准备。
+"A linked approval is withdrawn, rejected or unavailable.",关联审批已撤回、拒绝或当前不可用。
+A linked attachment has not been archived upstream.,关联附件尚未完成上游归档。
+A linked attachment is not yet available in the local cache.,关联附件尚未就绪，系统暂无法读取。
+A linked approval is outside the cost archive scope.,关联审批不在成本归档范围内。
+This attachment exceeds the system reading limit ({0} MiB); the original file is retained.,附件超过系统读取上限（{0} MiB），原始文件已保留。
+A workbook image could not be read.,无法读取工作簿中的一张图片。
+A workbook image exceeds the vision size limit.,工作簿中的一张图片超过图像识别大小上限。
+Workbook cell reading reached the system limit.,工作簿单元格读取已达到系统上限。
+Some workbook images have not been transcribed ({0} remaining).,部分工作簿图片尚未完成识别（剩余 {0} 张）。
+资料读取受系统限制，原始文件已保留。,资料读取受系统限制，原始文件已保留。
+请补充本次发货的物料和采购货值。,请补充本次发货的物料和采购货值。
+Shared packing totals require a confirmed packing group.,共享装箱合计需先确认装箱组。
+A workbook image could not be transcribed by OCR.,工作簿图片的 OCR 文字识别未完成。
+"The original attachment is registered, but DingTalk could not archive it. An administrator must check the original submitter and file access, or restore the original from the approval page. No repeat approval submission is needed.",原附件已登记，但钉钉未能完成归档。请管理员核对原提交人状态和文件访问权限，或从审批原单补充原件。无需重新提交审批。

@@ -7,6 +7,9 @@
     const codes = (predicate) => plan.filter(predicate).map((slot) => slot.code);
     const first = (predicate) => codes(predicate)[0] || "";
 
+    if (["goods_value", "shipment_value_rmb", "unit_price", "purchase_currency"].includes(fieldname)) {
+      return codes((slot) => slot.code.endsWith("_commercial_invoice") || slot.code.endsWith("_payment_voucher"));
+    }
     if (
       fieldname === "actual_shipped_qty" ||
       haystack.includes("actual_shipped") ||
@@ -49,22 +52,8 @@
     return this.manualDocumentSlotsForGap(batch, gap, logisticsType)[0] || "";
   }
 
-  addManualDocumentBatchParseButton(batch, dialog) {
-    if (!this.detectManualDocumentLogisticsType(batch)) return;
-    const $footer = dialog.$wrapper.find(".modal-footer");
-    if (!$footer.length || $footer.find("[data-action='manual-doc-batch-parse']").length) return;
-    const $button = $(
-      `<button class="btn btn-secondary btn-sm ocw-manual-batch-parse-btn" type="button" data-action="manual-doc-batch-parse">${ocTranslate("解析手动补传")}</button>`
-    );
-    $button.on("click", () => {
-      this.parseManualDocumentAttachments(batch, dialog, $button).catch((error) => this.showError(error));
-    });
-    const $primary = $footer.find(".btn-primary").last();
-    if ($primary.length) {
-      $button.insertBefore($primary);
-    } else {
-      $footer.append($button);
-    }
+  addManualDocumentBatchParseButton() {
+    // Existing source dialogs call this entry; uploads now continue automatically.
   }
 
   detectManualDocumentLogisticsType(batch = {}) {
@@ -136,11 +125,11 @@
     const plan = this.manualDocumentPlans(logisticsType);
     const bySlot = this.latestManualAttachmentBySlot(attachmentGroups.current);
     const requiredTotal = plan.filter((slot) => slot.required).length;
-    const uploadedRequired = plan.filter((slot) => slot.required && bySlot[slot.code]).length;
-    const uploadedTotal = plan.filter((slot) => bySlot[slot.code]).length;
+    const uploadedRequired = plan.filter((slot) => slot.required && bySlot[slot.code]?.file_url).length;
+    const uploadedTotal = plan.filter((slot) => bySlot[slot.code]?.file_url).length;
     const missingRequired = Math.max(requiredTotal - uploadedRequired, 0);
     const focusSlotCodes = [...new Set(Array.isArray(focus.slotCodes) ? focus.slotCodes : focus.slotCode ? [focus.slotCode] : [])].filter(
-      (slotCode) => slotCode && !bySlot[slotCode]
+      (slotCode) => plan.some((slot) => slot.code === slotCode)
     );
     const focusedSlots = plan.filter((slot) => focusSlotCodes.includes(slot.code));
     const focusedLabels = focusedSlots.map((slot) => slot.label).join("、");
@@ -149,25 +138,25 @@
         <div class="ocw-purchase-target ocw-manual-document-target">
           <span>${ocTranslate("当前批次")}</span>
           <strong>${this.escape(batchLabel)}</strong>
-          <em>${ocTranslate("这里用于补传缺失资料或给财务复核原件；钉钉已能拉到的不用重复上传。")}</em>
+          <em>${ocTranslate("上传后会自动识别、补缺并试算；已有资料无需重复上传。")}</em>
         </div>
         <div class="ocw-manual-doc-source-note">
           <span>${ocTranslate("当前运输方式：")}<strong>${this.escape(logisticsLabel)}</strong></span>
           <span>${ocTranslate("基础信息来自国际物流 OA")}</span>
-          <span>${ocTranslate("单价/币种来自采购支出 OA")}</span>
+          <span>${ocTranslate("金额、币种以可核实的来源凭据为准")}</span>
           <span>${ocTranslate("税费以报关/完税资料最终核对")}</span>
         </div>
         <div class="ocw-manual-doc-summary">
           <span>${ocTranslate("已补传 {0} / {1}", [this.escape(String(uploadedTotal)), this.escape(String(plan.length))])}</span>
-          <span>${ocTranslate("核算资料 {0} / {1}", [this.escape(String(uploadedRequired)), this.escape(String(requiredTotal))])}</span>
-          <span class="${missingRequired ? "warning" : "done"}">${missingRequired ? ocTranslate("{0} 项核算资料待确认", [this.escape(String(missingRequired))]) : ocTranslate("核算资料已补齐")}</span>
+          <span>${ocTranslate("所需文件 {0} / {1}", [this.escape(String(uploadedRequired)), this.escape(String(requiredTotal))])}</span>
+          <span class="${missingRequired ? "warning" : "done"}">${missingRequired ? ocTranslate("还有 {0} 类文件可按需补充", [this.escape(String(missingRequired))]) : ocTranslate("所需文件已上传，待核实识别结果")}</span>
         </div>
         ${
           focusedSlots.length
             ? `
               <div class="ocw-manual-gap-fill-hint">
                 <strong>${ocTranslate("已定位 {0} 处：{1}", [this.escape(String(focusedSlots.length)), this.escape(focusedLabels)])}</strong>
-                <span>${ocTranslate("{0}。上传资料或人工补填保存后，对应高亮会消失。", [this.escape(focus.label || focus.fieldname || ocTranslate("当前缺失项"))])}</span>
+                <span>${ocTranslate("{0}。识别完成后会更新缺项；已有文件可先核对内容。", [this.escape(focus.label || focus.fieldname || ocTranslate("当前缺失项"))])}</span>
               </div>
             `
             : ""
@@ -247,11 +236,8 @@
             <div class="ocw-manual-doc-actions">
               ${!archiveOnly && slot.oaSource ? `<button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="view-dingtalk-approval">${ocTranslate("查看钉钉审批")}</button>` : ""}
               ${archiveOnly ? `<span>${ocTranslate("归档只读；装箱待核对请查看结算明细")}</span>` : `
-              ${
-                slot.attachmentType === "Packing List"
-                  ? `<button class="ocw-primary-btn ocw-mini-btn" type="button" data-action="open-packing-flow">${ocTranslate("获取装箱单")}</button>`
-                  : `<button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="upload-manual-document" data-logistics-type="${this.escape(logisticsType)}" data-slot-code="${this.escape(slot.code)}" data-slot-label="${this.escape(ocTranslate(slot.label))}" data-attachment-type="${this.escape(slot.attachmentType)}" data-required="${slot.required ? "1" : "0"}">${attachment ? ocTranslate("重传") : ocTranslate("上传")}</button>`
-              }
+              <button class="${slot.attachmentType === "Packing List" ? "ocw-primary-btn" : "ocw-outline-btn"} ocw-mini-btn" type="button" data-action="upload-manual-document" data-logistics-type="${this.escape(logisticsType)}" data-slot-code="${this.escape(slot.code)}" data-slot-label="${this.escape(ocTranslate(slot.label))}" data-attachment-type="${this.escape(slot.attachmentType)}" data-required="${slot.required ? "1" : "0"}">${slot.attachmentType === "Packing List" ? ocTranslate("上传装箱资料") : attachment ? ocTranslate("重传") : ocTranslate("上传")}</button>
+              ${slot.attachmentType === "Packing List" ? `<button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="open-packing-flow">${ocTranslate("获取装箱单")}</button>` : ""}
               <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="manual-fill-gap" data-logistics-type="${this.escape(logisticsType)}" data-slot-code="${this.escape(slot.code)}" data-slot-label="${this.escape(ocTranslate(slot.label))}" data-attachment-type="${this.escape(slot.attachmentType)}" data-required="${slot.required ? "1" : "0"}" data-gap-fieldname="${this.escape(focus.fieldname || "")}" data-gap-label="${this.escape(focus.label || slot.label)}">${ocTranslate("人工补填")}</button>`}
               ${
                 attachment && attachment.file_url
@@ -554,7 +540,9 @@
       this.showPendingFeature((result && result.message) || "资料登记失败。");
       return;
     }
-    frappe.show_alert({ message: result.message || ocTranslate("资料已上传"), indicator: "green" });
+    if (!this.followManualDocumentProcessing(batch, result.processing)) {
+      frappe.show_alert({ message: result.message || ocTranslate("资料已上传"), indicator: "green" });
+    }
     if (dialog && dialog.$wrapper && dialog.$wrapper.find("[data-area='manual-documents']").length) {
       await this.loadManualDocumentAttachments(batch, dialog, logisticsType, {
         slotCodes: Array.isArray(slot.focusSlotCodes) ? slot.focusSlotCodes : [],
@@ -644,7 +632,9 @@
       return;
     }
     dialog.hide();
-    frappe.show_alert({ message: result.message || ocTranslate("人工补填已保存"), indicator: "green" });
+    if (!this.followManualDocumentProcessing(batch, result.processing)) {
+      frappe.show_alert({ message: result.message || ocTranslate("人工补填已保存"), indicator: "green" });
+    }
     if (sourceDialog && sourceDialog.$wrapper) {
       await this.loadManualDocumentAttachments(batch, sourceDialog, logisticsType, {
         fieldname: gap.fieldname,

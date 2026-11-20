@@ -5987,3 +5987,59 @@ RMB 兑 MXN 汇率必须大于零。,El tipo de cambio de RMB a MXN debe ser may
 当前费用或装箱来源已采用、失效或不可核对，保留现有费用。,La fuente está seleccionada o no es válida o verificable. Se conservan los gastos actuales.
 仅补齐缺失费用，保留已有记录及其金额、范围和停用状态。,Solo se añaden gastos faltantes. Se conservan importes alcances y estados desactivados existentes.
 归并货值缺少一致、有效的来源依据，请保留原行核对。,El valor agrupado no tiene evidencia de origen consistente. Conserve las filas originales para revisión.
+资料已收到，正在自动识别、补缺并试算。,"Documentos recibidos. Se están leyendo, completando los datos faltantes y calculando los costos."
+正在自动识别、补缺并试算,"Leyendo documentos, completando datos y calculando costos"
+资料已处理并完成试算,Documentos procesados y cálculo de costos completado
+已完成试算，仍有资料待补,Cálculo completado; aún faltan documentos
+请补充采购金额、币种或对应凭据,"Agregue el importe de compra, la moneda o el comprobante correspondiente"
+有冲突的资料需核对。,Hay datos contradictorios que requieren revisión.
+请核对本票对应的支付来源，资料已保存。,Verifique la solicitud de pago correspondiente a este envío. Los documentos se guardaron.
+当前批次正在编辑，资料已保存，自动处理暂缓。,Este lote está en edición. Los documentos se guardaron; el procesamiento automático queda pendiente.
+资料处理需要核对,El procesamiento de documentos requiere revisión
+资料处理状态读取暂时中断，请稍后刷新查看。,Se interrumpió la consulta del estado. Actualice la página más tarde.
+资料处理进度,Progreso del procesamiento
+已补齐 {0} 项。,Se completaron {0} datos.
+Confirm the matching payment source before continuing.,Confirme la solicitud de pago correspondiente antes de continuar.
+"Automatic filling requires a current, unambiguous preview.",Para completar automáticamente los datos se necesita una vista previa vigente y sin conflictos.
+Automatic processing needs review.,El procesamiento automático requiere revisión.
+The batch is being edited.,El lote está en edición.
+An existing manual analysis needs review before automatic processing.,Revise el análisis manual existente antes del procesamiento automático.
+Reanalyze this older draft to continue automatic processing.,Vuelva a analizar este borrador anterior para continuar el procesamiento automático.
+请补充采购金额、币种或对应凭据；有冲突的资料需核对。,"Agregue el importe de compra, la moneda o el comprobante correspondiente; revise los documentos que presenten discrepancias."
+已补齐 {0} 项,Se completaron {0} datos
+上传后会自动识别、补缺并试算；已有资料无需重复上传。,"Después de cargar los archivos, el sistema leerá los datos, completará lo que falte y calculará los costos. No vuelva a cargar documentos que ya existen."
+金额、币种以可核实的来源凭据为准,El importe y la moneda se verifican con los comprobantes de origen.
+所需文件 {0} / {1},Archivos requeridos {0} / {1}
+还有 {0} 类文件可按需补充,Puede agregar {0} tipos de documentos según sea necesario
+所需文件已上传，待核实识别结果,Los archivos requeridos están cargados; falta verificar los datos extraídos.
+{0}。识别完成后会更新缺项；已有文件可先核对内容。,{0}. Los datos pendientes se actualizarán después de la lectura; primero puede revisar los archivos ya cargados.
+请补充或核对下列资料,Agregue o revise los siguientes documentos
+查看或补充资料,Ver o agregar documentos
+待核实事项,Asuntos por verificar
+Purchase value and evidence,Importe de compra y comprobantes
+Shipping and packing documents,Documentos de envío y empaque
+Fee evidence,Comprobantes de gastos
+"Provide the purchase amount, currency and matching invoice or payment evidence.","Indique el importe de compra, la moneda y la factura o el comprobante de pago correspondiente."
+"Provide the shipping quantities, units and packing details for the listed rows.","Indique las cantidades enviadas, las unidades y los datos de empaque de las filas indicadas."
+Provide the bill or fee evidence for the listed fees.,Proporcione la factura o el comprobante de los gastos indicados.
+Current calculation inputs are incomplete; linked source archive coverage has not been verified.,Faltan datos para el cálculo. Aún no se ha comprobado si los documentos vinculados están completos; no vuelva a cargar los que ya existen.
+上传装箱资料,Cargar documentos de empaque
+已关联资料仍待核对，请先查看下方原因，无需重复上传。,Aún falta revisar los documentos vinculados. Consulte los motivos indicados; no es necesario volver a cargarlos.
+The current main approval archive is unavailable.,El archivo de la aprobación principal no está disponible por ahora.
+A linked approval is not available in the upstream archive.,Una aprobación vinculada aún no está disponible en el archivo de origen.
+Linked approval archive lookup could not be completed.,No se pudo completar la consulta de las aprobaciones vinculadas en el archivo de origen.
+A linked attachment could not be prepared from the archive.,No se pudo preparar un archivo adjunto vinculado para su lectura.
+"A linked approval is withdrawn, rejected or unavailable.","Una aprobación vinculada fue retirada, rechazada o no está disponible."
+A linked attachment has not been archived upstream.,Un archivo adjunto vinculado aún no se ha guardado en el archivo de origen.
+A linked attachment is not yet available in the local cache.,Un archivo adjunto vinculado aún no está disponible para su lectura.
+A linked approval is outside the cost archive scope.,La aprobación vinculada está fuera del alcance del archivo de costos.
+This attachment exceeds the system reading limit ({0} MiB); the original file is retained.,Este archivo supera el límite de lectura del sistema ({0} MiB); se conserva el archivo original.
+A workbook image could not be read.,No se pudo leer una imagen del libro.
+A workbook image exceeds the vision size limit.,Una imagen del libro supera el límite de tamaño para reconocimiento visual.
+Workbook cell reading reached the system limit.,La lectura de celdas del libro alcanzó el límite del sistema.
+Some workbook images have not been transcribed ({0} remaining).,Faltan imágenes del libro por transcribir ({0} pendientes).
+资料读取受系统限制，原始文件已保留。,La lectura está limitada por el sistema. Se conserva el archivo original.
+请补充本次发货的物料和采购货值。,Completa los productos y el valor de compra de este envío.
+Shared packing totals require a confirmed packing group.,Los totales compartidos requieren confirmar el grupo de embalaje.
+A workbook image could not be transcribed by OCR.,No se pudo transcribir una imagen del libro mediante OCR.
+"The original attachment is registered, but DingTalk could not archive it. An administrator must check the original submitter and file access, or restore the original from the approval page. No repeat approval submission is needed.","El archivo original está registrado, pero DingTalk no pudo archivarlo. Un administrador debe revisar al solicitante original y el acceso al archivo, o recuperar el original desde la aprobación. No es necesario volver a enviar la aprobación."

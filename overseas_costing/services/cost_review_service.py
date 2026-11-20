@@ -13,6 +13,7 @@ from overseas_costing.services import cost_preview_service, fee_service, fee_sta
 from overseas_costing.services.material_input_service import present_material_row, purchase_value_coverage
 from overseas_costing.services.shipment_cost_service import is_explicit_shipment_zero
 from overseas_costing.services.transport_fee_service import fee_is_active
+from overseas_costing.services.logistics_settlement.fee_policy import FeeSelectionError
 
 
 ISSUE_ORDER = ("purchase", "logistics", "calculation", "erp_failed")
@@ -25,7 +26,7 @@ ALLOCATION_CODES = {"SHIPPING_UNIT_REQUIRED", "ALLOCATION_BASIS_INCOMPLETE", "AL
                     "FEE_SCOPE_EMPTY", "FEE_SCOPE_INVALID", "DIRECT_ITEM_SCOPE_INVALID",
                     "STABLE_ITEM_KEY_REQUIRED", "STABLE_ITEM_KEY_DUPLICATED"}
 FEE_CODES = {"AMOUNT_MISSING", "AMOUNT_STATUS_INVALID", "FEE_AMOUNT_INVALID", "DUPLICATE_LOGICAL_FEE",
-             "FX_RATE_MISSING", "CURRENCY_UNSUPPORTED"}
+             "FX_RATE_MISSING", "CURRENCY_UNSUPPORTED", "FEE_SOURCE_INVALID"}
 MESSAGES = {
     "PURCHASE_SOURCE_INVALID": "采购来源已失效或无法读取，请先核对采购资料。",
     "TRANSPORT_MODE_REQUIRED": "请先确认批次运输方式。",
@@ -223,10 +224,15 @@ def evaluate_review_readiness(*, batch: dict, version: dict, items: list[dict], 
         if not source_ready:
             block('SOURCE_ADOPTION_PENDING', '当前采购支出资料尚未有效采用，旧结果仅供追溯。')
 
-    projection = project_review_inputs(
-        batch=batch, version=version, items=items, fees=fees,
-        fee_components=fee_components, source_context=source_context,
-    )
+    try:
+        projection = project_review_inputs(
+            batch=batch, version=version, items=items, fees=fees,
+            fee_components=fee_components, source_context=source_context,
+        )
+    except FeeSelectionError as error:
+        # A stale adopted fee blocks its batch, not the read-only workbench.
+        # The calculator still raises and cannot revive an older estimate.
+        return _fee_source_blocked_readiness(batch, version, items, source_context, error, blockers)
     mode = projection["mode"]
     inputs = projection["inputs"]
     canonical_fees = projection["canonical_fees"]
@@ -237,14 +243,7 @@ def evaluate_review_readiness(*, batch: dict, version: dict, items: list[dict], 
     calculation_fees = projection["calculation_fees"]
     cost_review_eligible = projection["cost_review_eligible"]
     current_hash = projection["current_hash"]
-    cost_review_started = bool(
-        snapshot.get("calculation_schema") == 2
-        and snapshot.get("input_hash")
-        and isinstance(snapshot.get("comprehensive_cost"), dict)
-        and _saved_result_has_complete_purchase_values(snapshot)
-        and version.get("calculated_at")
-        and snapshot.get("calculated_at")
-    )
+    cost_review_started = _review_started(snapshot, version)
     if any(fee.get("duplicate_rule_names") for fee in canonical_fees):
         # The saver rejects duplicates. The preview retains them as blockers so
         # the read-only workbench can still explain how to repair the batch.
@@ -261,9 +260,7 @@ def evaluate_review_readiness(*, batch: dict, version: dict, items: list[dict], 
 
     if not mode:
         block("TRANSPORT_MODE_REQUIRED")
-    price_inputs = inputs
-    if source_context and source_context.get('root_kind') == 'expense':
-        price_inputs = [row for row in inputs if not ((_dict(row.get('extra_json')).get('settlement_cargo') or {}).get('merchandise_price') or {}).get('present')]
+    price_inputs = _legacy_purchase_inputs(inputs, source_context)
     if price_inputs and _source_invalid(_dict(batch.get("source_status")), price_inputs):
         block("PURCHASE_SOURCE_INVALID")
     keys = [present_material_row(row)["stable_line_key"] for row in inputs]
@@ -312,6 +309,53 @@ def evaluate_review_readiness(*, batch: dict, version: dict, items: list[dict], 
         block("RESULT_STALE")
         result_current = False
 
+    shipment_goods_value_rmb = None
+    if (
+        cost_review_eligible
+        and version.get("name")
+        and version["name"] == batch.get("current_version")
+        and version.get("batch") == batch.get("name")
+        and not {"SOURCE_ADOPTION_PENDING", "PURCHASE_SOURCE_INVALID", "STABLE_ITEM_KEY_DUPLICATED"}.intersection(blockers)
+    ):
+        shipment_goods_value_rmb = expected["summary"]["purchase_goods_value_rmb"]
+    return _review_result(batch, version, blockers, warnings,
+                          result_is_current=result_current, cost_review_started=cost_review_started,
+                          cost_review_eligible=cost_review_eligible,
+                          shipment_goods_value_rmb=shipment_goods_value_rmb)
+
+
+def _review_started(snapshot, version):
+    return bool(snapshot.get("calculation_schema") == 2 and snapshot.get("input_hash")
+                and isinstance(snapshot.get("comprehensive_cost"), dict)
+                and _saved_result_has_complete_purchase_values(snapshot)
+                and version.get("calculated_at") and snapshot.get("calculated_at"))
+
+
+def _legacy_purchase_inputs(inputs, source_context):
+    if source_context and source_context.get('root_kind') == 'expense':
+        return [row for row in inputs if not ((_dict(row.get('extra_json')).get('settlement_cargo') or {}).get('merchandise_price') or {}).get('present')]
+    return inputs
+
+
+def _fee_source_blocked_readiness(batch, version, items, source_context, error, blockers):
+    from overseas_costing.services.effective_source_values import project_source_values
+
+    inputs = [project_source_values(item, source_context if source_context else None) for item in items]
+    coverage = purchase_value_coverage(inputs)
+    blockers["FEE_SOURCE_INVALID"] = {"code": "FEE_SOURCE_INVALID", "message": str(error), "issue": "logistics"}
+    if not coverage["complete"]:
+        code = "GOODS_VALUE_MISSING" if coverage["item_count"] else "MATERIAL_ITEMS_REQUIRED"
+        blockers[code] = {"code": code, "message": "请补充本次发货的物料和采购货值。", "issue": "purchase"}
+    price_inputs = _legacy_purchase_inputs(inputs, source_context)
+    if price_inputs and _source_invalid(_dict(batch.get("source_status")), price_inputs):
+        blockers["PURCHASE_SOURCE_INVALID"] = {
+            "code": "PURCHASE_SOURCE_INVALID", "message": MESSAGES["PURCHASE_SOURCE_INVALID"], "issue": "purchase"}
+    return _review_result(batch, version, blockers, {}, result_is_current=False,
+                          cost_review_started=_review_started(_dict(version.get("summary_snapshot_json")), version),
+                          cost_review_eligible=coverage["complete"], shipment_goods_value_rmb=None)
+
+
+def _review_result(batch, version, blockers, warnings, **values):
     confirmed = str(batch.get("confirm_status") or "").lower() == "confirmed"
     state = "confirmed" if confirmed else "processing" if blockers else "ready"
     issues = {row["issue"] for row in blockers.values()}
@@ -330,20 +374,8 @@ def evaluate_review_readiness(*, batch: dict, version: dict, items: list[dict], 
         action = "supplement_allocation"
     else:
         action = "recalculate"
-    shipment_goods_value_rmb = None
-    if (
-        cost_review_eligible
-        and version.get("name")
-        and version["name"] == batch.get("current_version")
-        and version.get("batch") == batch.get("name")
-        and not {"SOURCE_ADOPTION_PENDING", "PURCHASE_SOURCE_INVALID", "STABLE_ITEM_KEY_DUPLICATED"}.intersection(blockers)
-    ):
-        shipment_goods_value_rmb = expected["summary"]["purchase_goods_value_rmb"]
     return {"review_state": state, "review_blockers": list(blockers.values()),
-            "review_warnings": list(warnings.values()), "result_is_current": result_current,
-            "cost_review_started": cost_review_started,
-            "cost_review_eligible": cost_review_eligible,
-            "shipment_goods_value_rmb": shipment_goods_value_rmb,
+            "review_warnings": list(warnings.values()), **values,
             "issue_codes": [code for code in ISSUE_ORDER if code in issues], "primary_issue": primary,
             "primary_action": action, "reviewed_at": version.get("reviewed_at") or version.get("confirmed_at") if confirmed else None,
             "reviewed_version": version.get("name") if confirmed else None,

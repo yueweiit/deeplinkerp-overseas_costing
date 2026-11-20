@@ -621,7 +621,7 @@ def _source_groups(catalog_rows, sources):
     return groups
 
 
-def _field_candidates(catalog_rows, *, fx_rates=None):
+def _field_candidates(catalog_rows, *, fx_rates=None, candidate_policy=None):
     """Resolve fields inside each process, then fall through business stages."""
 
     result=[]
@@ -709,6 +709,8 @@ def _field_candidates(catalog_rows, *, fx_rates=None):
                     or row.get('_review_primary_source_id') or ''),
                 'value_basis': _public_value_basis(fieldname, row),
             })
+    if candidate_policy:
+        candidate_policy(catalog_rows, result)
     # A trusted parser result and the semantic pass may independently report
     # the same field from the same exact evidence row.  That is corroboration,
     # not a user-facing choice or conflict.  Keep one server candidate while
@@ -824,6 +826,8 @@ def _field_candidates(catalog_rows, *, fx_rates=None):
                 candidate['resolution_reason']='候选同时引用多个流程，无法安全归属；保留手工核对但不作为默认值。'
             elif candidate.get('_review_field_mismatch'):
                 candidate['resolution_reason']='更正评论明确指向其他字段，本候选仅供人工核对。'
+            elif candidate.get('packing_group_candidate_ids') and not candidate['default_eligible']:
+                continue
             elif not candidate['default_eligible']:
                 candidate['resolution_reason']='当前已有受保护的明确值，本候选仅可人工核对。'
             elif candidate['confidence']<0.9:
@@ -1693,7 +1697,7 @@ def _manual_scope_protected(row):
     )
 
 
-def catalog(items, proposals, fees, context, *, run_id, sources=None, fx_rates=None):
+def catalog(items, proposals, fees, context, *, run_id, sources=None, fx_rates=None, field_candidate_policy=None):
     """Do not expose inherited purchase values as newly recognized packing evidence."""
     from .effective_source_values import project_source_values
     items=[project_source_values(i,context) for i in items]
@@ -1884,7 +1888,7 @@ def catalog(items, proposals, fees, context, *, run_id, sources=None, fx_rates=N
     scope=_material_scope(rows,sources)
     scoped_rows=_rows_in_material_scope(
         rows,scope['item_names'],scope['source_row_ids'],constrained=scope['constrained'])
-    all_field_candidates=_field_candidates(rows, fx_rates=fx_rates)
+    all_field_candidates=_field_candidates(rows, fx_rates=fx_rates, candidate_policy=field_candidate_policy)
     scoped_row_ids={str(row.get('row_id') or '') for row in scoped_rows}
     field_candidates=[
         candidate for candidate in all_field_candidates

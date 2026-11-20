@@ -108,25 +108,36 @@ def enrich_raw(store, raw, *, reader, cache_file=None):
                 content = reader(manifest)
                 parsed = parse_document(content, str(manifest.get('file_name') or 'attachment'))
                 if cache_file:
-                    try:
-                        parsed['file_url'] = cache_file(content, str(manifest.get('file_name') or 'attachment'))
-                    except Exception as exc:
-                        if type(exc).__name__ not in {'MaxFileSizeReached', 'MaxFileSizeReachedError'}:
-                            raise
-                        # The immutable archive is still available. A private File
-                        # cache size limit must not discard the entire approval.
-                        parsed['cache_issues'] = ['附件超过本地预览大小限制；原始归档保留，预览待处理']
-                        parsed['issues'] = list(parsed.get('issues') or []) + parsed['cache_issues']
+                    _cache_file(parsed, content, manifest, cache_file)
             cached = {'id': identity, 'source_id': digest(row.get('corp_id'), row.get('process_instance_id')),
                       'fingerprint': identity, 'status': parsed['status'], 'file_id': manifest.get('file_id'),
                       'file_name': manifest.get('file_name'), 'manifest': manifest, **parsed}
             # A pending archive is retried on later inventory, without pinning a negative cache.
             if manifest.get('archive_status') == 'archived':
                 store.insert('document', {k: cached[k] for k in ('id','source_id','fingerprint','status')} | {'data': dumps(cached)})
+        elif cache_file and not cached.get('file_url') and manifest.get('archive_status') == 'archived':
+            cached = deepcopy(cached)
+            _cache_file(cached, reader(manifest), manifest, cache_file)
+            store.put('document', {k: cached[k] for k in ('id','source_id','fingerprint','status')} | {'data': dumps(cached)})
         document = dict(cached)
         document['manifest'] = manifest
         documents.append(document)
     return with_cached_documents(row, documents)
+
+
+def _cache_file(document, content, manifest, cache_file):
+    previous = document.get('cache_issues') or []
+    try:
+        document['file_url'] = cache_file(content, str(manifest.get('file_name') or 'attachment'))
+    except Exception as exc:
+        if type(exc).__name__ not in {'MaxFileSizeReached', 'MaxFileSizeReachedError'}:
+            raise
+        # A local size limit must not discard the immutable archive or parsed data.
+        document['cache_issues'] = ['附件超过本地预览大小限制；原始归档保留，预览待处理']
+    else:
+        document.pop('cache_issues', None)
+    document['issues'] = [issue for issue in document.get('issues') or [] if issue not in previous]
+    document['issues'].extend(document.get('cache_issues') or [])
 
 
 def with_cached_documents(raw, documents):

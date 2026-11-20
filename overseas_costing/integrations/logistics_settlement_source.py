@@ -106,6 +106,23 @@ class SettlementArchive:
                 return rows
             cursor = page['next_cursor']
 
+    def get_reference_metadata(self, pairs):
+        if not pairs:
+            return []
+        predicates = ' OR '.join('(i.corp_id=%s AND i.process_instance_id=%s)' for _ in pairs)
+        query = '''SELECT i.corp_id,i.process_instance_id,i.process_code,i.title,i.status,i.result,
+                   i.deleted_at,p.name AS template_name,
+                   EXISTS(SELECT 1 FROM costing_read.financial_sources_v1 fin
+                       WHERE fin.corp_id=i.corp_id AND fin.process_instance_id=i.process_instance_id)
+                       AS registered_financial_flow
+              FROM public.ding_approval_instance i
+              LEFT JOIN public.ding_process_template p USING(corp_id,process_code)
+             WHERE ''' + predicates
+        with self.source._connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(query, tuple(value for pair in pairs for value in pair))
+                return [dict(row) for row in cursor.fetchall()]
+
     def preflight(self):
         with self.source._connection() as connection:
             with connection.cursor() as cursor:

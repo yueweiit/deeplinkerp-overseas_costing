@@ -10,13 +10,14 @@ import pytest
                                        (PermissionError('secret permission details'), 'PERMISSION_DENIED'),
                                        (RuntimeError('secret SQL and document body'), 'AI_INTERNAL_ERROR')])
 def test_endpoint_rolls_back_logs_only_identity_and_returns_inline_error(monkeypatch, failure, code):
-    events = []
+    events, calls = [], []
     fake = SimpleNamespace(db=SimpleNamespace(rollback=lambda:events.append('rollback')),
         logger=lambda *args: SimpleNamespace(warning=lambda message:events.append(message)))
     monkeypatch.setitem(sys.modules, 'frappe', fake)
     errors = importlib.import_module('overseas_costing.services.material_ai_errors')
     @errors.source_review_endpoint('启动分析')
     def endpoint(batch_name):
+        calls.append(batch_name)
         raise failure
     response = endpoint('B1')
     assert response['ok'] is False and response['code'] == code
@@ -25,6 +26,7 @@ def test_endpoint_rolls_back_logs_only_identity_and_returns_inline_error(monkeyp
     assert 'secret' not in str(response) + str(events)
     assert response['error']['stage'] == '启动分析'
     assert response['trace_id'] in str(events)
+    assert calls == ['B1'] and events.count('rollback') == 1
 
 
 def test_source_error_keeps_approval_and_corrective_action(monkeypatch):
@@ -65,3 +67,26 @@ def test_database_deadlock_restarts_transaction_without_changing_request(monkeyp
         return {'ok':True,'run_id':'ALREADY-COMMITTED'}
     assert endpoint('B','SAME-REQUEST')['run_id']=='ALREADY-COMMITTED'
     assert calls==['SAME-REQUEST','SAME-REQUEST'] and len(rollbacks)==1
+
+
+def test_endpoint_deadlock_limit_keeps_three_rollbacks_and_private_inline_failure(monkeypatch):
+    from overseas_costing.services.material_ai_errors import source_review_endpoint
+
+    class QueryDeadlockError(Exception):
+        pass
+
+    calls, events = [], []
+    monkeypatch.setitem(sys.modules, 'frappe', SimpleNamespace(
+        db=SimpleNamespace(rollback=lambda: events.append('rollback')),
+        logger=lambda *args: SimpleNamespace(warning=events.append)))
+
+    @source_review_endpoint('启动分析')
+    def endpoint(batch_name, request_id):
+        calls.append((batch_name, request_id))
+        raise QueryDeadlockError('private SQL and document body')
+
+    result = endpoint('B1', 'SAME-REQUEST')
+    assert calls == [('B1', 'SAME-REQUEST')] * 3 and events.count('rollback') == 3
+    assert result['code'] == 'AI_INTERNAL_ERROR' and not result['retryable']
+    assert 'private' not in str(result) + str(events)
+    assert sum('material_ai_request_failed' in row for row in events) == 1

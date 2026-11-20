@@ -1004,14 +1004,13 @@ def guard_legacy_item_write(batch_name, version_name):
         raise ValueError(_i18n('采购支出关联批次的已确认版本保留历史，请在当前调整草稿补充资料'))
 
 
-def prepare_source(raw):
+def prepare_source(raw, *, include_unclassified=False):
     from .model import parse_source
     from .documents import enrich_raw
     from overseas_costing.services.import_service import _get_minio_archive_client
     from overseas_costing.integrations.dingtalk_approval_source import MinioArchiveClient
-    from frappe.utils.file_manager import save_file
     from pathlib import Path
-    if parse_source(raw, logistics_codes=logistics_codes())['kind'] == 'unclassified':
+    if not include_unclassified and parse_source(raw, logistics_codes=logistics_codes())['kind'] == 'unclassified':
         return raw
     client = None
     def read(manifest):
@@ -1023,5 +1022,14 @@ def prepare_source(raw):
         content, _ = MinioArchiveClient(bucket=manifest['bucket'], client=client).download(manifest)
         return content
     def cache_file(content, file_name):
-        return save_file(Path(file_name).name, content, None, None, is_private=1).file_url
+        try:
+            return frappe.get_doc({'doctype': 'File', 'file_name': Path(file_name).name,
+                                   'content': content, 'is_private': 1}).insert(ignore_permissions=True).file_url
+        except Exception as exc:
+            if type(exc).__name__ not in {'MaxFileSizeReached', 'MaxFileSizeReachedError'}:
+                raise
+            from overseas_costing.services.import_service import _save_large_content_as_private_file
+            return _save_large_content_as_private_file(
+                file_name=Path(file_name).name, content=content, attached_to_name='',
+            ).file_url
     return enrich_raw(Store.frappe(), raw, reader=read, cache_file=cache_file)

@@ -6293,6 +6293,9 @@ class OverseasCostWorkbench {
     const codes = (predicate) => plan.filter(predicate).map((slot) => slot.code);
     const first = (predicate) => codes(predicate)[0] || "";
 
+    if (["goods_value", "shipment_value_rmb", "unit_price", "purchase_currency"].includes(fieldname)) {
+      return codes((slot) => slot.code.endsWith("_commercial_invoice") || slot.code.endsWith("_payment_voucher"));
+    }
     if (
       fieldname === "actual_shipped_qty" ||
       haystack.includes("actual_shipped") ||
@@ -6335,22 +6338,8 @@ class OverseasCostWorkbench {
     return this.manualDocumentSlotsForGap(batch, gap, logisticsType)[0] || "";
   }
 
-  addManualDocumentBatchParseButton(batch, dialog) {
-    if (!this.detectManualDocumentLogisticsType(batch)) return;
-    const $footer = dialog.$wrapper.find(".modal-footer");
-    if (!$footer.length || $footer.find("[data-action='manual-doc-batch-parse']").length) return;
-    const $button = $(
-      `<button class="btn btn-secondary btn-sm ocw-manual-batch-parse-btn" type="button" data-action="manual-doc-batch-parse">${ocTranslate("解析手动补传")}</button>`
-    );
-    $button.on("click", () => {
-      this.parseManualDocumentAttachments(batch, dialog, $button).catch((error) => this.showError(error));
-    });
-    const $primary = $footer.find(".btn-primary").last();
-    if ($primary.length) {
-      $button.insertBefore($primary);
-    } else {
-      $footer.append($button);
-    }
+  addManualDocumentBatchParseButton() {
+    // Existing source dialogs call this entry; uploads now continue automatically.
   }
 
   detectManualDocumentLogisticsType(batch = {}) {
@@ -6422,11 +6411,11 @@ class OverseasCostWorkbench {
     const plan = this.manualDocumentPlans(logisticsType);
     const bySlot = this.latestManualAttachmentBySlot(attachmentGroups.current);
     const requiredTotal = plan.filter((slot) => slot.required).length;
-    const uploadedRequired = plan.filter((slot) => slot.required && bySlot[slot.code]).length;
-    const uploadedTotal = plan.filter((slot) => bySlot[slot.code]).length;
+    const uploadedRequired = plan.filter((slot) => slot.required && bySlot[slot.code]?.file_url).length;
+    const uploadedTotal = plan.filter((slot) => bySlot[slot.code]?.file_url).length;
     const missingRequired = Math.max(requiredTotal - uploadedRequired, 0);
     const focusSlotCodes = [...new Set(Array.isArray(focus.slotCodes) ? focus.slotCodes : focus.slotCode ? [focus.slotCode] : [])].filter(
-      (slotCode) => slotCode && !bySlot[slotCode]
+      (slotCode) => plan.some((slot) => slot.code === slotCode)
     );
     const focusedSlots = plan.filter((slot) => focusSlotCodes.includes(slot.code));
     const focusedLabels = focusedSlots.map((slot) => slot.label).join("、");
@@ -6435,25 +6424,25 @@ class OverseasCostWorkbench {
         <div class="ocw-purchase-target ocw-manual-document-target">
           <span>${ocTranslate("当前批次")}</span>
           <strong>${this.escape(batchLabel)}</strong>
-          <em>${ocTranslate("这里用于补传缺失资料或给财务复核原件；钉钉已能拉到的不用重复上传。")}</em>
+          <em>${ocTranslate("上传后会自动识别、补缺并试算；已有资料无需重复上传。")}</em>
         </div>
         <div class="ocw-manual-doc-source-note">
           <span>${ocTranslate("当前运输方式：")}<strong>${this.escape(logisticsLabel)}</strong></span>
           <span>${ocTranslate("基础信息来自国际物流 OA")}</span>
-          <span>${ocTranslate("单价/币种来自采购支出 OA")}</span>
+          <span>${ocTranslate("金额、币种以可核实的来源凭据为准")}</span>
           <span>${ocTranslate("税费以报关/完税资料最终核对")}</span>
         </div>
         <div class="ocw-manual-doc-summary">
           <span>${ocTranslate("已补传 {0} / {1}", [this.escape(String(uploadedTotal)), this.escape(String(plan.length))])}</span>
-          <span>${ocTranslate("核算资料 {0} / {1}", [this.escape(String(uploadedRequired)), this.escape(String(requiredTotal))])}</span>
-          <span class="${missingRequired ? "warning" : "done"}">${missingRequired ? ocTranslate("{0} 项核算资料待确认", [this.escape(String(missingRequired))]) : ocTranslate("核算资料已补齐")}</span>
+          <span>${ocTranslate("所需文件 {0} / {1}", [this.escape(String(uploadedRequired)), this.escape(String(requiredTotal))])}</span>
+          <span class="${missingRequired ? "warning" : "done"}">${missingRequired ? ocTranslate("还有 {0} 类文件可按需补充", [this.escape(String(missingRequired))]) : ocTranslate("所需文件已上传，待核实识别结果")}</span>
         </div>
         ${
           focusedSlots.length
             ? `
               <div class="ocw-manual-gap-fill-hint">
                 <strong>${ocTranslate("已定位 {0} 处：{1}", [this.escape(String(focusedSlots.length)), this.escape(focusedLabels)])}</strong>
-                <span>${ocTranslate("{0}。上传资料或人工补填保存后，对应高亮会消失。", [this.escape(focus.label || focus.fieldname || ocTranslate("当前缺失项"))])}</span>
+                <span>${ocTranslate("{0}。识别完成后会更新缺项；已有文件可先核对内容。", [this.escape(focus.label || focus.fieldname || ocTranslate("当前缺失项"))])}</span>
               </div>
             `
             : ""
@@ -6533,11 +6522,8 @@ class OverseasCostWorkbench {
             <div class="ocw-manual-doc-actions">
               ${!archiveOnly && slot.oaSource ? `<button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="view-dingtalk-approval">${ocTranslate("查看钉钉审批")}</button>` : ""}
               ${archiveOnly ? `<span>${ocTranslate("归档只读；装箱待核对请查看结算明细")}</span>` : `
-              ${
-                slot.attachmentType === "Packing List"
-                  ? `<button class="ocw-primary-btn ocw-mini-btn" type="button" data-action="open-packing-flow">${ocTranslate("获取装箱单")}</button>`
-                  : `<button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="upload-manual-document" data-logistics-type="${this.escape(logisticsType)}" data-slot-code="${this.escape(slot.code)}" data-slot-label="${this.escape(ocTranslate(slot.label))}" data-attachment-type="${this.escape(slot.attachmentType)}" data-required="${slot.required ? "1" : "0"}">${attachment ? ocTranslate("重传") : ocTranslate("上传")}</button>`
-              }
+              <button class="${slot.attachmentType === "Packing List" ? "ocw-primary-btn" : "ocw-outline-btn"} ocw-mini-btn" type="button" data-action="upload-manual-document" data-logistics-type="${this.escape(logisticsType)}" data-slot-code="${this.escape(slot.code)}" data-slot-label="${this.escape(ocTranslate(slot.label))}" data-attachment-type="${this.escape(slot.attachmentType)}" data-required="${slot.required ? "1" : "0"}">${slot.attachmentType === "Packing List" ? ocTranslate("上传装箱资料") : attachment ? ocTranslate("重传") : ocTranslate("上传")}</button>
+              ${slot.attachmentType === "Packing List" ? `<button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="open-packing-flow">${ocTranslate("获取装箱单")}</button>` : ""}
               <button class="ocw-outline-btn ocw-mini-btn" type="button" data-action="manual-fill-gap" data-logistics-type="${this.escape(logisticsType)}" data-slot-code="${this.escape(slot.code)}" data-slot-label="${this.escape(ocTranslate(slot.label))}" data-attachment-type="${this.escape(slot.attachmentType)}" data-required="${slot.required ? "1" : "0"}" data-gap-fieldname="${this.escape(focus.fieldname || "")}" data-gap-label="${this.escape(focus.label || slot.label)}">${ocTranslate("人工补填")}</button>`}
               ${
                 attachment && attachment.file_url
@@ -6840,7 +6826,9 @@ class OverseasCostWorkbench {
       this.showPendingFeature((result && result.message) || "资料登记失败。");
       return;
     }
-    frappe.show_alert({ message: result.message || ocTranslate("资料已上传"), indicator: "green" });
+    if (!this.followManualDocumentProcessing(batch, result.processing)) {
+      frappe.show_alert({ message: result.message || ocTranslate("资料已上传"), indicator: "green" });
+    }
     if (dialog && dialog.$wrapper && dialog.$wrapper.find("[data-area='manual-documents']").length) {
       await this.loadManualDocumentAttachments(batch, dialog, logisticsType, {
         slotCodes: Array.isArray(slot.focusSlotCodes) ? slot.focusSlotCodes : [],
@@ -6930,7 +6918,9 @@ class OverseasCostWorkbench {
       return;
     }
     dialog.hide();
-    frappe.show_alert({ message: result.message || ocTranslate("人工补填已保存"), indicator: "green" });
+    if (!this.followManualDocumentProcessing(batch, result.processing)) {
+      frappe.show_alert({ message: result.message || ocTranslate("人工补填已保存"), indicator: "green" });
+    }
     if (sourceDialog && sourceDialog.$wrapper) {
       await this.loadManualDocumentAttachments(batch, sourceDialog, logisticsType, {
         fieldname: gap.fieldname,
@@ -10923,7 +10913,7 @@ class OverseasCostWorkbench {
     });
     this.$root.on("click", "[data-action='mf-ai-fill']", () => {
       const fill = this.ensureMaterialFeeState().aiFill;
-      if (["STARTING", "PAYMENT_SELECTION", "QUEUED", "RUNNING", "READY", "READY_WITH_WARNINGS", "FAILED", "STALE"].includes(String(fill?.status || ""))) {
+      if (fill?.automatic_processing?.status || ["STARTING", "PAYMENT_SELECTION", "QUEUED", "RUNNING", "READY", "READY_WITH_WARNINGS", "FAILED", "STALE"].includes(String(fill?.status || ""))) {
         this.openMaterialAIProgressDialog();
         return;
       }
@@ -11287,10 +11277,12 @@ class OverseasCostWorkbench {
         if (Number(latestAI.clarification_revision || 0) < Number(state.aiClarificationRevision || 0)
             && ["QUEUED", "RUNNING", "READY", "READY_WITH_WARNINGS"].includes(latestAI.status)) latestAI.status = "STALE";
         state.aiFill = { ...latestAI, runId: latestAI.run_id, draftVisible: false };
-        state.aiPendingReady = this.isMaterialAIReadyStatus(latestAI.status) ? latestAI : null;
+        state.aiPendingReady = !latestAI.automatic_processing?.status && this.isMaterialAIReadyStatus(latestAI.status) ? latestAI : null;
+        if (latestAI.automatic_processing?.status) state.aiProgressMinimized = true;
         this.renderMaterialFeeWorkspacePreservingPosition?.();
       }
-      if (["QUEUED", "RUNNING"].includes(String(state.aiFill?.status || "")) && !state.aiFill.polling && !state.aiFill.polling_paused) {
+      if ((this.materialAutomaticProcessingActive(state.aiFill?.automatic_processing)
+          || ["QUEUED", "RUNNING"].includes(String(state.aiFill?.status || ""))) && !state.aiFill.polling && !state.aiFill.polling_paused) {
         state.aiFill.polling = true;
         this.pollMaterialAIFill(state, batchName, versionName || "", state.aiFill.runId)
           .catch((error) => this.failMaterialAIProgress(error, "AI 分析状态读取失败，正在等待重试。"));
@@ -11461,7 +11453,7 @@ class OverseasCostWorkbench {
     const blockingPackingGroups = (materialSummary.packing_groups || []).filter(group => group.blocking || group.status === "needs_reconfirmation");
     const feeSummary = state.fees.summary || {};
     const evidencePending = Number(feeSummary.missing_evidence_fee_count || 0);
-    const aiActive = ["STARTING", "PAYMENT_SELECTION", "QUEUED", "RUNNING", "READY", "READY_WITH_WARNINGS"].includes(String(state.aiFill?.status || ""));
+    const aiActive = state.aiFill?.automatic_processing?.status || ["STARTING", "PAYMENT_SELECTION", "QUEUED", "RUNNING", "READY", "READY_WITH_WARNINGS"].includes(String(state.aiFill?.status || ""));
     const $content = this.$root.find("[data-area='detail-content']");
     $content.html(`
       <div class="ocw-mf-workspace">
@@ -11494,7 +11486,7 @@ class OverseasCostWorkbench {
               <button class="ocw-outline-btn" type="button" data-action="mf-import-wiki">${ocTranslate("获取装箱资料")}</button>
               <button class="ocw-outline-btn ocw-mf-tool-quiet" type="button" data-action="mf-recover-material-rows">${ocTranslate("恢复误删物料")}</button>
               ${this.renderMaterialAIProgressChip()}
-              <button class="ocw-primary-btn" type="button" data-action="mf-ai-fill">${aiActive ? (this.isMaterialAIReadyStatus(state.aiFill?.status) ? ocTranslate("查看填充预览") : ocTranslate("查看填充进度")) : ocTranslate("AI填充资料")}</button>
+              <button class="ocw-primary-btn" type="button" data-action="mf-ai-fill">${state.aiFill?.automatic_processing?.status ? ocTranslate("资料处理进度") : aiActive ? (this.isMaterialAIReadyStatus(state.aiFill?.status) ? ocTranslate("查看填充预览") : ocTranslate("查看填充进度")) : ocTranslate("AI填充资料")}</button>
             </div>
           </div>
           ${blockingPackingGroups.length ? `<div class="ocw-mf-dialog-note"><strong>${ocTranslate("装箱组待重新确认")}</strong><span>${ocTranslate("组内物料曾被删除或恢复，试算已阻止。请勾选完整装箱组后从顶部操作条处理。")}</span></div>` : ""}
@@ -13488,9 +13480,10 @@ class OverseasCostWorkbench {
 
   renderMaterialAIProgressChip() {
     const fill = this.ensureMaterialFeeState().aiFill;
-    const active = ["STARTING", "PAYMENT_SELECTION", "QUEUED", "RUNNING", "READY", "READY_WITH_WARNINGS", "FAILED", "STALE"].includes(String(fill?.status || ""));
+    const automatic = fill?.automatic_processing?.status ? fill.automatic_processing : null;
+    const active = automatic || ["STARTING", "PAYMENT_SELECTION", "QUEUED", "RUNNING", "READY", "READY_WITH_WARNINGS", "FAILED", "STALE"].includes(String(fill?.status || ""));
     const minimized = Boolean(this.ensureMaterialFeeState().aiProgressMinimized);
-    const label = this.isMaterialAIReadyStatus(fill?.status)
+    const label = automatic ? this.materialAutomaticProcessingMessage(automatic) : this.isMaterialAIReadyStatus(fill?.status)
       ? this.materialAIReadyChipLabel(fill)
       : fill?.status === "FAILED"
         ? "AI 分析失败"
@@ -13502,6 +13495,7 @@ class OverseasCostWorkbench {
 
   renderMaterialAIProgressDialogContent() {
     const fill = this.ensureMaterialFeeState().aiFill || {};
+    if (fill.automatic_processing?.status) return this.renderMaterialAutomaticProcessing(fill.automatic_processing);
     if (fill.status === "PAYMENT_SELECTION") return this.renderMaterialAIPaymentSelection(fill);
     const progress = Math.max(0, Math.min(100, Number(fill.progress_percent || 0)));
     const sources = Array.isArray(fill.source_progress) ? fill.source_progress : [];
@@ -13639,7 +13633,7 @@ class OverseasCostWorkbench {
     state.aiProgressMinimized = false;
     if (!state.aiProgressDialog) {
       const dialog = new frappe.ui.Dialog({
-        title: ocTranslate("AI填充资料"),
+        title: ocTranslate(state.aiFill.automatic_processing?.status ? "资料处理进度" : "AI填充资料"),
         fields: [{ fieldtype: "HTML", fieldname: "progress_html", options: this.renderMaterialAIProgressDialogContent() }],
       });
       state.aiProgressDialog = dialog;
@@ -13675,6 +13669,8 @@ class OverseasCostWorkbench {
           this.continueMaterialAIPaymentSelection(true).catch((error) => this.showError(error));
         } else if (action === "mf-ai-open-source") {
           this.openMaterialAISourceProcess($(event.currentTarget).attr("data-mf-ai-source-open-ref"));
+        } else if (action === "mf-auto-documents") {
+          this.openMaterialAutomaticDocuments(Number($(event.currentTarget).attr("data-document-index")));
         } else if (action === "mf-ai-adopt-field") {
           const $button = $(event.currentTarget);
           this.changeMaterialAIRowSelection("fields", $button.attr("data-mf-ai-field-key"), $button.attr("data-mf-ai-candidate-id"));
@@ -13744,8 +13740,9 @@ class OverseasCostWorkbench {
     const state = this.ensureMaterialFeeState();
     const $chip = this.$root?.find?.("[data-mf-ai-progress-chip]");
     const fill = state.aiFill || {};
-    const active = ["STARTING", "PAYMENT_SELECTION", "QUEUED", "RUNNING", "READY", "READY_WITH_WARNINGS", "FAILED", "STALE"].includes(String(fill.status || ""));
-    const chipLabel = this.isMaterialAIReadyStatus(fill.status) ? this.materialAIReadyChipLabel(fill) : fill.status === "FAILED" ? "AI 分析失败" : fill.status === "STALE" ? "AI 草稿已过期" : `AI ${Math.max(0, Math.min(100, Number(fill.progress_percent || 0)))}%`;
+    const automatic = fill.automatic_processing?.status ? fill.automatic_processing : null;
+    const active = automatic || ["STARTING", "PAYMENT_SELECTION", "QUEUED", "RUNNING", "READY", "READY_WITH_WARNINGS", "FAILED", "STALE"].includes(String(fill.status || ""));
+    const chipLabel = automatic ? this.materialAutomaticProcessingMessage(automatic) : this.isMaterialAIReadyStatus(fill.status) ? this.materialAIReadyChipLabel(fill) : fill.status === "FAILED" ? "AI 分析失败" : fill.status === "STALE" ? "AI 草稿已过期" : `AI ${Math.max(0, Math.min(100, Number(fill.progress_percent || 0)))}%`;
     if ($chip?.length) {
       $chip.prop("hidden", !(active && state.aiProgressMinimized));
       $chip.find("span").text(chipLabel);
@@ -13753,10 +13750,14 @@ class OverseasCostWorkbench {
     const $button = this.$root?.find?.("[data-action='mf-ai-fill']");
     if ($button?.length) {
       const status = String(state.aiFill?.status || "");
-      $button.text(this.isMaterialAIReadyStatus(status) ? ocTranslate("查看填充预览") : ["STARTING", "PAYMENT_SELECTION", "QUEUED", "RUNNING"].includes(status) ? ocTranslate("查看填充进度") : ocTranslate("AI填充资料"));
+      $button.text(automatic ? ocTranslate("资料处理进度") : this.isMaterialAIReadyStatus(status) ? ocTranslate("查看填充预览") : ["STARTING", "PAYMENT_SELECTION", "QUEUED", "RUNNING"].includes(status) ? ocTranslate("查看填充进度") : ocTranslate("AI填充资料"));
     }
     const dialog = state.aiProgressDialog;
     if (dialog?.$wrapper?.length) {
+      if (automatic) {
+        dialog.fields_dict.progress_html.$wrapper.html(this.renderMaterialAutomaticProcessing(automatic));
+        return;
+      }
       if (fill.status === "PAYMENT_SELECTION") {
         if (!dialog.$wrapper.find(".is-payment-selection").length) {
           dialog.fields_dict.progress_html.$wrapper.html(this.renderMaterialAIProgressDialogContent());
@@ -13798,7 +13799,7 @@ class OverseasCostWorkbench {
   showMaterialAIReadyDraft() {
     const state = this.ensureMaterialFeeState();
     const ready = state.aiPendingReady || state.aiFill;
-    if (!this.isMaterialAIReadyStatus(ready?.status)) return;
+    if (ready?.automatic_processing?.status || !this.isMaterialAIReadyStatus(ready?.status)) return;
     state.aiFill = ready.selections instanceof Set
       ? ready
       : this.initializeMaterialAIDraft({ ...ready, draftVisible: true });
@@ -15095,7 +15096,9 @@ class OverseasCostWorkbench {
       polling_paused: resumePolling,
       source_progress: state.aiFill?.source_progress?.length ? state.aiFill.source_progress : retrySources,
     };
-    this.openMaterialAIProgressDialog();
+    if (state.aiFill.automatic_processing?.status) {
+      frappe.show_alert({ message: ocTranslate("资料处理状态读取暂时中断，请稍后刷新查看。"), indicator: "orange" });
+    } else this.openMaterialAIProgressDialog();
     this.updateMaterialAIProgressSurface();
   }
 
@@ -15216,6 +15219,104 @@ class OverseasCostWorkbench {
     return this.startMaterialAIFill({ force: false });
   }
 
+  followManualDocumentProcessing(batch, processing) {
+    if (!processing?.status) return false;
+    frappe.show_alert({ message: this.materialAutomaticProcessingMessage(processing),
+      indicator: this.materialAutomaticProcessingActive(processing) ? "blue" : processing.status === "CALCULATED" ? "green" : "orange" });
+    if (this.detailState?.batchName !== batch.name || this.detailState.tab !== "documents") return true;
+    const state = this.ensureMaterialFeeState();
+    state.aiRunGeneration = Number(state.aiRunGeneration || 0) + 1;
+    state.aiProgressDialog?.hide();
+    state.aiProgressDialog = null;
+    state.aiProgressMinimized = true;
+    state.aiPendingReady = null;
+    state.aiFill = { status: processing.status, runId: processing.run_id,
+      automatic_processing: processing, draftVisible: false, progress_revision: 0 };
+    this.updateMaterialAIProgressSurface();
+    if (processing.run_id && this.materialAutomaticProcessingActive(processing)) {
+      this.pollMaterialAIFill(state, batch.name, this.detailState.versionName, processing.run_id)
+        .catch((error) => {
+          if (this.materialFeeState === state && state.aiFill?.runId === processing.run_id) {
+            this.failMaterialAIProgress(error, "资料处理状态读取暂时中断，请稍后刷新查看。", { resumePolling: true });
+          }
+        });
+    }
+    return true;
+  }
+
+  materialAutomaticProcessingActive(processing) {
+    return ["QUEUED", "PENDING", "RUNNING", "APPLIED"].includes(processing?.status);
+  }
+
+  materialAutomaticProcessingMessage(processing) {
+    if (processing?.status === "NEEDS_MATERIALS" && processing.required_documents?.length) {
+      return ocTranslate("请补充或核对下列资料");
+    }
+    if (processing?.status === "CALCULATED" && processing.blockers?.length) {
+      return ocTranslate("已完成试算，仍有资料待补");
+    }
+    return ocTranslate({
+      QUEUED: "资料已收到，正在自动识别、补缺并试算。",
+      PENDING: "正在自动识别、补缺并试算",
+      RUNNING: "正在自动识别、补缺并试算",
+      APPLIED: "正在自动识别、补缺并试算",
+      CALCULATED: "资料已处理并完成试算",
+      NEEDS_MATERIALS: "请补充采购金额、币种或对应凭据；有冲突的资料需核对。",
+      PAYMENT_SELECTION: "请核对本票对应的支付来源，资料已保存。",
+      EDIT_LOCKED: "当前批次正在编辑，资料已保存，自动处理暂缓。",
+    }[processing?.status] || "资料处理需要核对");
+  }
+
+  renderMaterialAutomaticProcessing(processing) {
+    const documents = processing.required_documents || [];
+    const actions = processing.actions || [];
+    const coverage = processing.source_coverage || {};
+    const blockers = !documents.length && !actions.length ? this.renderMaterialAutomaticBlockers(processing.blockers) : "";
+    const documentSections = documents.map((group, index) => `<section class="ocw-mf-ai-preview-section">
+      <h4>${this.escape(ocTranslate(group.label))}</h4><p>${this.escape(ocTranslate(group.hint || ""))}</p>
+      <ul>${this.renderMaterialAutomaticBlockers(group.blockers)}</ul>
+      <button class="ocw-outline-btn" type="button" data-action="mf-auto-documents" data-document-index="${index}">${ocTranslate("查看或补充资料")}</button></section>`).join("");
+    const paused = this.ensureMaterialFeeState().aiFill?.polling_paused;
+    return `<div class="ocw-mf-ai-progress-dialog" data-mf-ai-automatic-host="1">
+      <header><strong>${this.escape(this.materialAutomaticProcessingMessage(processing))}</strong></header>
+      <main class="ocw-mf-ai-dialog-body"><p>${ocTranslate("已补齐 {0} 项", [Number(processing.changed_count || 0)])}</p>${paused ? `<p>${ocTranslate("资料处理状态读取暂时中断，请稍后刷新查看。")}</p>` : ""}
+      ${coverage.status === "PARTIAL" ? `<section class="ocw-mf-ai-preview-section"><p>${ocTranslate("已关联资料仍待核对，请先查看下方原因，无需重复上传。")}</p><ul>${this.renderMaterialAutomaticBlockers(coverage.blockers)}</ul></section>`
+        : !coverage.status && documents.some((group) => group.source_coverage === "not_verified") ? `<p>${ocTranslate("Current calculation inputs are incomplete; linked source archive coverage has not been verified.")}</p>` : ""}
+      ${documentSections}${actions.length ? `<section class="ocw-mf-ai-preview-section"><h4>${ocTranslate("待核实事项")}</h4><ul>${this.renderMaterialAutomaticBlockers(actions)}</ul></section>` : ""}
+      ${blockers ? `<ul>${blockers}</ul>` : ""}</main>
+      <footer class="ocw-mf-ai-dialog-footer"><button class="ocw-outline-btn" type="button" data-action="mf-ai-minimize">${ocTranslate("关闭")}</button></footer></div>`;
+  }
+
+  renderMaterialAutomaticBlockers(blockers = []) {
+    return blockers.map((row) => {
+      const item = [row.material_code, row.row_no ? ocTranslate("第 {0} 行", [row.row_no]) : "", row.file_name].filter(Boolean).join(" · ");
+      const fee = row.expense_category || this.findMaterialFee(row.fee_key)?.expense_category || "";
+      const field = { goods_value: ocTranslate("本次发货货值"), unit_price: ocTranslate("采购单价"),
+        purchase_currency: ocTranslate("币种") }[row.field] || this.materialImportFieldLabel(row.field);
+      return `<li>${this.escape([item, fee, field !== row.field ? field : "",
+        ocTranslate(row.hint || "资料处理需要核对")].filter(Boolean).join(" · "))}</li>`;
+    }).join("");
+  }
+
+  openMaterialAutomaticDocuments(index) {
+    const state = this.ensureMaterialFeeState();
+    const group = state.aiFill?.automatic_processing?.required_documents?.[index];
+    if (!group) return;
+    state.aiProgressDialog?.hide();
+    state.aiProgressMinimized = true;
+    this.openSourceCenterDialog(this.detailState.batchName, {
+      fieldname: group.fieldname, label: ocTranslate(group.label),
+    });
+  }
+
+  async finishMaterialAutomaticProcessing(state, processing) {
+    state.aiPendingReady = null;
+    frappe.show_alert({ message: this.materialAutomaticProcessingMessage(processing),
+      indicator: processing.status === "CALCULATED" && !processing.blockers?.length ? "green" : "orange" });
+    state.cacheDirty = true;
+    await this.loadMaterialFeeWorkspace({ quiet: true, forceRefresh: true });
+  }
+
   async runMaterialAIFillStart(state, options = {}) {
     const generation = state.aiRunGeneration;
     const batchName = this.detailState.batchName;
@@ -15333,12 +15434,39 @@ class OverseasCostWorkbench {
         delete state.aiFill.request_error;
         delete state.aiFill.error_message;
         state.aiFill.polling_paused = false;
-        if (status.unchanged) {
+        const replacementRunId = String(status.replacement_run_id || "");
+        if (replacementRunId && replacementRunId !== runId) {
+          runId = replacementRunId;
+          state.aiFill = { ...state.aiFill, status: "RUNNING", runId, run_id: runId,
+            progress_revision: 0, draftVisible: false };
+          state.aiPendingReady = null;
+          this.updateMaterialAIProgressSurface();
+          continue;
+        }
+        if (status.unchanged && !status.automatic_processing?.status) {
           if (hadRequestError) this.updateMaterialAIProgressSurface();
           await new Promise((resolve) => window.setTimeout(resolve, 1200));
           continue;
         }
-        state.aiFill = { ...state.aiFill, ...status, runId, polling: true, draftVisible: false };
+        const automatic = status.automatic_processing?.status
+          ? status.automatic_processing : state.aiFill.automatic_processing;
+        state.aiFill = { ...state.aiFill, ...status, automatic_processing: automatic,
+          runId, polling: true, draftVisible: false };
+        if (state.aiFill.automatic_processing?.status) {
+          if (["FAILED", "STALE", "DISCARDED"].includes(status.status)) {
+            state.aiFill.automatic_processing = { status: "REVIEW_REQUIRED", run_id: runId,
+              changed_count: state.aiFill.automatic_processing.changed_count || 0,
+              blockers: [{ hint: status.error_message || ocTranslate("资料处理需要核对") }] };
+          }
+          state.aiPendingReady = null;
+          this.updateMaterialAIProgressSurface();
+          if (!this.materialAutomaticProcessingActive(state.aiFill.automatic_processing)) {
+            await this.finishMaterialAutomaticProcessing(state, state.aiFill.automatic_processing);
+            return;
+          }
+          await new Promise((resolve) => window.setTimeout(resolve, 1200));
+          continue;
+        }
         if (this.isMaterialAIReadyStatus(status.status)) {
           state.aiPendingReady = status;
           this.showMaterialAIReadyDraft();
@@ -15349,7 +15477,8 @@ class OverseasCostWorkbench {
       }
       if (isCurrent()) this.failMaterialAIProgress(new Error(ocTranslate("状态读取等待时间较长，点击重试继续查看当前任务。")), undefined, { resumePolling: true });
     } finally {
-      if (isCurrent()) state.aiFill.polling = false;
+      if (this.materialFeeState === state && state.aiRunGeneration === generation
+          && state.aiFill?.runId === runId) state.aiFill.polling = false;
     }
   }
 
@@ -17805,39 +17934,37 @@ class OverseasCostWorkbench {
   openMaterialXlsxUploader() {
     const batch = this.getDetailBatch();
     if (!frappe.ui.FileUploader) return this.showPendingFeature("当前无法打开上传器，请刷新后重试。");
-    this.ensureEditSession().then((ready) => {
-      if (!ready) return;
-      new frappe.ui.FileUploader({
-        allow_multiple: false,
-        restrictions: { allowed_file_types: [".xlsx", ".xlsm", ".xls", ".pdf", ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".doc", ".docx"], max_file_size: 20 * 1024 * 1024 },
-        on_success: (fileDoc) => {
-          const uploaded = Array.isArray(fileDoc) ? fileDoc[0] : fileDoc;
-          const fileName = String(uploaded?.file_name || uploaded?.name || "");
-          if (fileName.toLowerCase().endsWith(".xls")) {
-            this.showPendingFeature("暂不支持旧版 .xls，请先在 Excel 中另存为 .xlsx 后上传。");
-            return;
-          }
-          this.registerManualDocumentAttachment(batch, this.detailDocumentAdapter(), this.detectManualDocumentLogisticsType(batch), {
-            code: "material_packing_document",
-            label: ocTranslate("本地上传装箱单"),
-            attachmentType: "Packing List",
-            required: false,
-          }, uploaded).then((registered) => {
-            const attachment = registered?.attachment?.name;
-            if (!attachment) return;
-            this.openWikiMaterialImportDialog({ sourceTab: "local" }).then((sourceDialog) => {
-              if ([".xlsx", ".xlsm"].some((suffix) => fileName.toLowerCase().endsWith(suffix))) {
-                this.previewMaterialAttachmentSource(sourceDialog, attachment).catch((error) => this.showWikiMaterialSourceError(sourceDialog, error));
-              } else {
-                frappe.show_alert({ message: ocTranslate("装箱资料已加入，AI 将在后台分析"), indicator: "green" });
-                this.restartMaterialAIForChangedSources();
-              }
-            }).catch((error) => this.showError(error));
+    new frappe.ui.FileUploader({
+      allow_multiple: false,
+      restrictions: { allowed_file_types: [".xlsx", ".xlsm", ".xls", ".pdf", ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".doc", ".docx"], max_file_size: 20 * 1024 * 1024 },
+      on_success: (fileDoc) => {
+        const uploaded = Array.isArray(fileDoc) ? fileDoc[0] : fileDoc;
+        const fileName = String(uploaded?.file_name || uploaded?.name || "");
+        if (fileName.toLowerCase().endsWith(".xls")) {
+          this.showPendingFeature("暂不支持旧版 .xls，请先在 Excel 中另存为 .xlsx 后上传。");
+          return;
+        }
+        this.registerManualDocumentAttachment(batch, this.detailDocumentAdapter(), this.detectManualDocumentLogisticsType(batch), {
+          code: "material_packing_document",
+          label: ocTranslate("本地上传装箱单"),
+          attachmentType: "Packing List",
+          required: false,
+        }, uploaded).then((registered) => {
+          if (registered?.processing?.status) return;
+          const attachment = registered?.attachment?.name;
+          if (!attachment) return;
+          this.openWikiMaterialImportDialog({ sourceTab: "local" }).then((sourceDialog) => {
+            if ([".xlsx", ".xlsm"].some((suffix) => fileName.toLowerCase().endsWith(suffix))) {
+              this.previewMaterialAttachmentSource(sourceDialog, attachment).catch((error) => this.showWikiMaterialSourceError(sourceDialog, error));
+            } else {
+              frappe.show_alert({ message: ocTranslate("装箱资料已加入，AI 将在后台分析"), indicator: "green" });
+              this.restartMaterialAIForChangedSources();
+            }
           }).catch((error) => this.showError(error));
-        },
-      });
-      [0, 100, 300].forEach((delay) => window.setTimeout(() => this.localizeFrappeFileUploader("本地上传装箱单"), delay));
-    }).catch((error) => this.showError(error));
+        }).catch((error) => this.showError(error));
+      },
+    });
+    [0, 100, 300].forEach((delay) => window.setTimeout(() => this.localizeFrappeFileUploader("本地上传装箱单"), delay));
   }
 
   async openWikiMaterialImportDialog(options = {}) {

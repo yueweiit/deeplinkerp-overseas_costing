@@ -380,8 +380,8 @@ def map_purchase_expense_row_to_item(row: dict) -> dict:
 
     return {
         "material_code": _first_value(row, "物品编码Código", "物料编码", "material_code"),
-        "product_name": _first_value(row, "物品名称Nombre del artículo", "物料名称", "product_name"),
-        "spec_model": _first_value(row, "物品规格Especificacion", "规格型号", "spec_model"),
+        "product_name": _first_value(row, "物品名称Nombre del artículo", "物料名称", "product_name", "品名"),
+        "spec_model": _first_value(row, "物品规格Especificacion", "规格型号", "spec_model", "规格"),
         "quantity": _first_value(row, "数量Cantidad", "数量", "Cantidad", "Qty", "QTY", "quantity"),
         "unit": normalize_unit(_first_value(row, "单位Unidad", "单位", "Unidad", "unit")),
         "unit_price": _first_value(row, "单价Precio", "采购单价", "unit_price"),
