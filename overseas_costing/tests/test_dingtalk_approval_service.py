@@ -601,6 +601,7 @@ def test_form_fields_expose_six_row_table_with_bilingual_columns_in_source_order
     assert fields[0]["is_empty"] is False
     assert fields[0]["table"] == {
         "columns": columns,
+        "row_ids": [f"PRIVATE-ROW-{index}" for index in range(1, 7)],
         "rows": [
             ["MAT-1", "物料 1", "10"],
             ["MAT-2", "物料 2", "20"],
@@ -610,7 +611,8 @@ def test_form_fields_expose_six_row_table_with_bilingual_columns_in_source_order
             ["MAT-6", "物料 6", "60"],
         ],
     }
-    assert "PRIVATE" not in json.dumps(fields, ensure_ascii=False)
+    rendered = json.dumps(fields, ensure_ascii=False)
+    assert "PRIVATE-CODE" not in rendered and "PRIVATE-AUTH" not in rendered
 
 
 def test_form_fields_skip_historical_table_header_placeholder_row() -> None:
@@ -651,7 +653,18 @@ def test_form_fields_skip_historical_table_header_placeholder_row() -> None:
     assert fields[0]["table"] == {
         "columns": columns,
         "rows": [["YL000097", "连接器", "6"]],
+        "row_ids": ["TableField_1"],
     }
+
+
+def test_table_row_ids_remain_aligned_when_a_source_id_is_missing_or_repeated():
+    from overseas_costing.services import dingtalk_approval_service as service
+
+    rows = [{'rowNumber': row_id, 'rowValue': [{'label': '物料编码', 'value': 'SKU-1'},
+            {'label': '数量', 'value': index}]} for index, row_id in enumerate(('ROW-A', '', 'ROW-A'), 1)]
+    table = service._table_value(rows)
+    assert table['row_ids'] == ['ROW-A', '', 'ROW-A']
+    assert table['rows'] == [['SKU-1', '1'], ['SKU-1', '2'], ['SKU-1', '3']]
 
 
 def test_form_fields_mark_empty_scalar_values_without_changing_display_text() -> None:

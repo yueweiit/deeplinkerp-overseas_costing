@@ -327,6 +327,7 @@ def _table_value(value) -> dict | None:
 
     columns: list[str] = []
     rows: list[list[str]] = []
+    row_ids: list[str] = []
     for row_index, row in enumerate(sanitized):
         cells = row.get("rowValue") if isinstance(row, dict) else None
         if not isinstance(cells, list) or not cells:
@@ -354,7 +355,11 @@ def _table_value(value) -> dict | None:
         ):
             continue
         rows.append(row_values)
-    return {"columns": columns, "rows": rows}
+        row_ids.append(row_number)
+    table = {"columns": columns, "rows": rows}
+    if any(row_ids):
+        table["row_ids"] = row_ids
+    return table
 
 
 def _form_fields(payload: dict) -> list[dict]:

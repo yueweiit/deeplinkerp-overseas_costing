@@ -145,17 +145,54 @@ def _approval_goods_rows(source: dict) -> list[dict]:
     return [row for _, _, row in _approval_goods_locations(source)]
 
 
+def _legacy_logistics_locator(item):
+    from .shipment_cost_service import object_json
+
+    meta = object_json(item.get("extra_json"))
+    if meta.get("source") != "dingtalk_oa_logistics_form":
+        return None
+    raw = object_json(item.get("raw_excel_json"))
+    row_ids = {str(value).strip() for value in (
+        meta.get("dingtalk_goods_row_no"), raw.get("_dingtalk_row_number")) if value}
+    if not row_ids:
+        return None
+    context = meta.get("effective_logistics_source") or {}
+    if not isinstance(context, dict):
+        context = {}
+    corps = {str(v).strip() for v in (
+        meta.get("corp_id"), meta.get("source_corp_id"), context.get("corp_id")) if v}
+    instances = {str(v).strip() for v in (
+        meta.get("instance_id"), item.get("dingtalk_instance_id"), context.get("instance_id")) if v}
+    return (next(iter(corps)) if len(corps) == 1 else "",
+            next(iter(instances)) if len(instances) == 1 else "",
+            next(iter(row_ids)) if len(row_ids) == 1 else "")
+
+
 def _match_item(items: list[dict], material_code: Any, source_doc_no: Any = "", *, mapped=None,
-                source_id="", row_no=0) -> Optional[dict]:
+                source_id="", row_no=0, approval_source=None, source_row_id="", stable_row_unique=True) -> Optional[dict]:
     from .purchase_value_evidence import spec_identity, uom
 
     code = str(material_code or "").strip().casefold()
     if not code:
         return None
+    candidates = [item for item in items if str(item.get("material_code") or "").strip().casefold() == code]
+    if ((approval_source or {}).get("approval_role") == "international_logistics"
+            and approval_source.get("corp_id") and approval_source.get("process_instance_id")):
+        owner = (str(approval_source.get("corp_id") or "").strip(),
+                 str(approval_source.get("process_instance_id") or "").strip(), str(source_row_id or "").strip())
+        legacy = [(item, _legacy_logistics_locator(item)) for item in candidates
+                  if str(item.get("actual_shipped_qty_mode") or "") in ("", "DEFAULT_PURCHASE")
+                  and _decimal(item.get("actual_shipped_qty") or 0) == 0]
+        owned = [item for item, locator in legacy if locator is not None]
+        located = [item for item, locator in legacy if locator == owner and all(owner) and stable_row_unique]
+        if len(located) == 1:
+            return located[0]
+        # An existing OA locator cannot fall through to a different row of the same SKU.
+        candidates = [item for item in candidates if item not in owned]
     spec = str((mapped or {}).get("spec_model") or "").strip().casefold()
     candidates = [
-        item for item in items if str(item.get("material_code") or "").strip().casefold() == code
-        and (not spec or not item.get("spec_model")
+        item for item in candidates
+        if (not spec or not item.get("spec_model")
              or spec_identity(item["spec_model"], item, material_code=item.get("material_code"))
                 == spec_identity(spec, item, material_code=material_code))
     ]
@@ -209,16 +246,23 @@ def match_approval_goods_rows(items, source):
         if code:
             by_sku[code].append(item)
     source_id = source.get("source_id") or (source.get("source_ref") or {}).get("source_id")
+    locations = _approval_goods_locations(source)
+    source_ids = Counter(str(raw.get("_dingtalk_row_number") or "").strip() for _, _, raw in locations)
+    target_ids = Counter(locator for item in items if (locator := _legacy_logistics_locator(item)) is not None)
     result = []
-    for table, row_no, raw in _approval_goods_locations(source):
+    for table, row_no, raw in locations:
         raw = row_context(raw, source)
         mapped = mapped_row(raw)
         if source.get("approval_role") == "international_logistics":
             quantity, unit = shipment_row_cells(raw)
             mapped.update(quantity=quantity[2] if quantity else None, unit=unit[2] if unit else None)
         code = str(mapped.get("material_code") or "").strip().casefold()
+        row_id = str(raw.get("_dingtalk_row_number") or "").strip()
+        owner = (str(source.get("corp_id") or "").strip(), str(source.get("process_instance_id") or "").strip(), row_id)
         item = _match_item(by_sku.get(code, []), code, raw.get("source_doc_no"),
-                           mapped=mapped, source_id=source_id, row_no=row_no)
+                           mapped=mapped, source_id=source_id, row_no=row_no,
+                           approval_source=source, source_row_id=row_id,
+                           stable_row_unique=source_ids[row_id] == 1 and target_ids[owner] == 1)
         result.append((table, row_no, raw, mapped, item))
     counts = Counter(str(item.get("name") or "") for _, _, _, _, item in result if item)
     return [(*entry, bool(entry[-1] and counts[str(entry[-1].get("name") or "")] > 1))

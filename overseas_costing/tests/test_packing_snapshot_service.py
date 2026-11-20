@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 
 from openpyxl import Workbook
 
@@ -10,6 +11,36 @@ import pytest
 
 from overseas_costing.services import packing_snapshot_service as service
 from overseas_costing.integrations import dingtalk_packing_source
+
+
+def test_approval_body_factory_keeps_structured_row_ids_and_tenant_without_new_defaults():
+    from overseas_costing.services import dingtalk_approval_service
+
+    approval = dingtalk_approval_service._approval({
+        'corpId': 'CORP', 'processInstanceId': 'LOG', 'status': 'RUNNING', 'result': 'agree',
+        'formComponentValues': [{'name': '货物信息Bienes', 'componentType': 'TableField',
+            'value': json.dumps([{'rowNumber': 'ROW-A', 'rowValue': [
+                {'label': '物料编码', 'value': 'SKU-1'}, {'label': '数量', 'value': '3'},
+                {'label': '单位', 'value': 'PIEZA'}]}])}],
+    }, [])
+    source = service._list_approval_body_ai_sources('B1', detail={
+        'ok': True, 'main_approval': approval, 'linked_purchase_approvals': [],
+    })[0]
+
+    assert source['corp_id'] == 'CORP' and source['process_instance_id'] == 'LOG'
+    assert source['approval_role'] == 'international_logistics' and not source['excluded']
+    assert source['form_fields']['货物信息Bienes'] == [{'rowNumber': 'ROW-A', 'rowValue': [
+        {'label': '物料编码', 'value': 'SKU-1'}, {'label': '数量', 'value': '3'},
+        {'label': '单位', 'value': 'PIEZA'}]}]
+    assert '币种' not in source['form_fields']
+
+
+@pytest.mark.parametrize('row_ids', [[], ['ROW-A']])
+def test_approval_field_table_does_not_attach_incomplete_row_ids(row_ids):
+    fields = service._approval_form_fields([{'label': '货物信息', 'value': 'original',
+        'component_type': 'TableField', 'table': {'columns': ['物料编码'],
+            'rows': [['SKU-1'], ['SKU-1']], 'row_ids': row_ids}}])
+    assert fields == {'货物信息': 'original'}
 
 
 def _preview(*, needs_confirmation=False):
