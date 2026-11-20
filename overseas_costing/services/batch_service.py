@@ -855,7 +855,9 @@ def _build_invalid_business_state(batch: dict, items: list[dict] | None = None) 
         if not items:
             return {'invalid':False}
     source_status = batch.get("source_approval_status")
-    if is_invalid_approval_status(source_status):
+    # A completed logistics approval can still have a refused result.
+    if ((context.get('root_kind') == 'logistics' and context.get('invalid'))
+            or is_invalid_approval_status(source_status)):
         return {
             "invalid": True,
             "scope": "source_approval",

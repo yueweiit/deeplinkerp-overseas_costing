@@ -80,6 +80,7 @@ NUMERIC_FIELDS = frozenset(
 PREVIEW_READY_STATES = ("READY", "READY_WITH_WARNINGS")
 ACTIVE_STATES = ("QUEUED", "RUNNING", *PREVIEW_READY_STATES)
 RUNNING_STATES = ("QUEUED", "RUNNING")
+AUTOMATIC_GAP_FILL_TRIGGER_MODES = frozenset({"LOCAL_UPLOAD", "BULK_GAP_FILL"})
 TERMINAL_STATES = ("APPLIED", "DISCARDED", "STALE", "FAILED")
 LEGACY_AI_FLOW_DISABLED_MESSAGE = (
     "AI 填充规则已升级，请重新分析资料后在逐项预览中确认。"
@@ -333,7 +334,7 @@ def _run_evidence_step(callback: Callable[[], Any], *, phase: str) -> Any:
     return bounded.get("result")
 
 
-def _run_ai_semantic(callback: Callable[[], dict], *, fallback: dict) -> dict:
+def _run_ai_semantic(callback: Callable[[], dict], *, fallback: dict, seconds=None) -> dict:
     """Run semantic AI independently while allowing fatal server errors to escape."""
 
     from overseas_costing.services.logistics_autofill_service import run_supplement
@@ -350,7 +351,7 @@ def _run_ai_semantic(callback: Callable[[], dict], *, fallback: dict) -> dict:
             }
 
     try:
-        bounded = run_supplement(invoke, seconds=AI_SEMANTIC_TIMEOUT_SECONDS)
+        bounded = run_supplement(invoke, seconds=seconds or AI_SEMANTIC_TIMEOUT_SECONDS)
     except _EvidenceSystemFailure as fatal:
         raise fatal.error
     if not bounded.get("semantic_completed"):
@@ -3048,6 +3049,8 @@ def _reload_review_manifest(repo: Any, batch_name: str, version_name: str, run: 
         repo, batch_name, version_name, original_sources=_run_uses_original_sources(run),
         payment_candidate_refs=payment_candidate_refs,
     )
+    if selected_ids is not None and _record_value(run, "trigger_mode") in AUTOMATIC_GAP_FILL_TRIGGER_MODES:
+        return prepare_source_manifest(raw_sources)
     if selected_ids is None:
         # Runs created before selectable manifests were introduced remain readable.
         return raw_sources
@@ -3087,6 +3090,7 @@ def start_source_ai_review(
     enqueue: Callable[[str], None] | None = None,
     trigger_mode: str = "MANUAL",
     reanalyze_original_sources: bool = False,
+    source_coverage: dict | None = None,
 ) -> dict:
     """Start a non-blocking review task. Applying the draft still requires an edit token."""
 
@@ -3097,7 +3101,7 @@ def start_source_ai_review(
     # scope, so they intentionally bypass this production preflight.
     if (
         repository is None
-        and trigger_mode == "MANUAL"
+        and trigger_mode in {"MANUAL", *AUTOMATIC_GAP_FILL_TRIGGER_MODES}
         and payment_candidate_refs is None
         and not reanalyze_original_sources
     ):
@@ -3236,6 +3240,7 @@ def start_source_ai_review(
                 "clarification_revision": note["revision"],
                 "cost_version": context["version"],
                 "source_context": deepcopy(context.get("effective_source") or {}),
+                **({"source_coverage": deepcopy(source_coverage)} if source_coverage is not None else {}),
                 **({"payment_candidate_refs": payment_candidate_refs}
                    if payment_candidate_refs is not None else {}),
                 **({"source_dependencies":source_dependencies} if source_dependencies is not None else {}),
@@ -3268,10 +3273,16 @@ def schedule_source_ai_review(
     version_name: str | None = None,
     *,
     trigger_mode: str = "SOURCE_CHANGED",
+    request_id: str | None = None,
 ) -> dict:
     """Best-effort internal trigger used after trusted source data changes."""
 
     try:
+        if trigger_mode in AUTOMATIC_GAP_FILL_TRIGGER_MODES:
+            from .workbench_bulk_ai_service import analyze
+
+            return analyze(str(batch_name or ""), request_id, str(version_name or ""),
+                           trigger_mode=trigger_mode)
         return start_source_ai_review(
             str(batch_name or ""),
             str(version_name or ""),
@@ -3578,6 +3589,23 @@ def get_material_ai_fill_status(
         }
     candidates = _load_json(_record_value(run, "candidates_json"), [])
     draft = _load_json(_record_value(run, "draft_json"), {})
+    automatic_processing = draft.get("automatic_processing") or {}
+    if (status_value == "STALE" and _record_value(run, "trigger_mode") in AUTOMATIC_GAP_FILL_TRIGGER_MODES
+            and automatic_processing.get("replacement_pending")):
+        status_value = "RUNNING"
+    if (_record_value(run, "trigger_mode") in AUTOMATIC_GAP_FILL_TRIGGER_MODES
+            and status_value in {"FAILED", "STALE", "DISCARDED"}):
+        automatic_processing = {"status": status_value, "run_id": str(run_id), "changed_count": 0,
+                                "blockers": [{"code": status_value,
+                                    "hint": SERVER_PREVIEW_FAILURE_MESSAGE if status_value == "FAILED"
+                                    else _safe_public_text(str(_record_value(run, "error_message") or SOURCE_STALE_MESSAGE))}]}
+    elif (_record_value(run, "trigger_mode") in AUTOMATIC_GAP_FILL_TRIGGER_MODES
+          and status_value in RUNNING_STATES and not automatic_processing):
+        automatic_processing = {"status": status_value, "run_id": str(run_id),
+                                "changed_count": 0, "blockers": []}
+    if automatic_processing and (draft.get("review_input") or {}).get("source_coverage"):
+        automatic_processing = {**automatic_processing,
+            "source_coverage": (draft.get("review_input") or {})["source_coverage"]}
     from .material_ai_selection_service import _public_source_progress
     source_progress = _public_source_progress(
         _load_json(_record_value(run, "source_progress_json"), [])
@@ -3632,6 +3660,9 @@ def get_material_ai_fill_status(
         ),
         "candidates": candidates,
         "draft": draft,
+        "automatic_processing": automatic_processing,
+        **({"replacement_run_id": draft["replacement_run_id"]}
+           if draft.get("replacement_run_id") and _record_value(run, "trigger_mode") in AUTOMATIC_GAP_FILL_TRIGGER_MODES else {}),
         "source_progress": source_progress,
         "source_context": next((effective_source.public_context(row.get('source_context'))
                                 for row in _load_json(_record_value(run, 'source_manifest_json'), []) if row.get('source_context')), {}),
@@ -4490,9 +4521,17 @@ def _ensure_local_attachment(source: dict) -> dict:
     if not row.get("file_url"):
         raise ValueError(_i18n("附件尚未保存到系统，暂时无法读取。"))
     path = attachment_parse_service._resolve_source_file_path(file_url=str(row.get("file_url") or ""))
-    if path.stat().st_size > MAX_SOURCE_BYTES:
-        raise ValueError(_i18n("附件超过 25 MB，请压缩或拆分后重新上传。"))
-    return {**source, **row, "source_id": source_id}
+    limit = MAX_SOURCE_BYTES
+    trusted_workbook = (str(row.get('file_name') or '').lower().endswith(('.xlsx', '.xlsm'))
+                        and dingtalk_approval_service.attachment_has_complete_archive_binding(row))
+    if trusted_workbook:
+        config = getattr(frappe, 'conf', None) or {}
+        limit = int(config.get('overseas_cost_ai_trusted_workbook_max_bytes') or 50 * 1024 * 1024)
+    if path.stat().st_size > limit:
+        raise EvidenceReadSkipped('SOURCE_SIZE_LIMIT', _i18n(
+            'This attachment exceeds the system reading limit ({0} MiB); the original file is retained.'
+        ).format(limit // (1024 * 1024)))
+    return {**source, **row, "source_id": source_id, 'trusted_workbook': trusted_workbook}
 
 
 def _projection_candidates(items: list[dict], source: dict, preview: dict) -> list[dict]:
@@ -4922,6 +4961,7 @@ def _read_source(
         if not selected_sheets:
             raise ValueError(_i18n("未读取到工作表，请检查文件是否损坏。"))
         semantic_document = _read_excel_semantic_document(path, source, selected_sheets)
+        semantic_document['trusted_workbook'] = bool(attachment.get('trusted_workbook'))
         semantic_document["ai_eligible"] = source.get('analysis_allowed') is not False
         all_candidates = []
         structured_rows = []
@@ -4955,7 +4995,8 @@ def _read_source(
                 semantic_document.setdefault("parse_errors", []).append(
                     f"{sheet_name}: {skipped.safe_text}"
                 )
-        if not structured_rows and semantic_document.get("parse_errors"):
+        if (not structured_rows and semantic_document.get("parse_errors")
+                and not _document_has_evidence(semantic_document) and not semantic_document.get('read_issues')):
             raise ValueError("；".join(semantic_document["parse_errors"]))
         semantic_document["structured_rows"] = structured_rows[:2000]
         if frappe is not None and attachment.get("source_id"):
@@ -5384,7 +5425,7 @@ def _read_excel_semantic_document(path: Any, source: dict, sheet_names: list[str
     semantic_rows = []
     image_anchors = []
     image_payloads = []
-    image_bytes = 0
+    read_issues = []
     merged_ranges = []
     cell_budget = 20_000
     for sheet_name in selected:
@@ -5419,6 +5460,7 @@ def _read_excel_semantic_document(path: Any, source: dict, sheet_names: list[str
             anchor = getattr(embedded, "anchor", None)
             marker = getattr(anchor, "_from", None)
             if marker is None:
+                read_issues.append({'code': 'SOURCE_IMAGE_UNREAD', 'hint': 'A workbook image could not be read.'})
                 continue
             row = int(getattr(marker, "row", 0)) + 1
             column = int(getattr(marker, "col", 0)) + 1
@@ -5430,24 +5472,28 @@ def _read_excel_semantic_document(path: Any, source: dict, sheet_names: list[str
                     "column": column,
                 }
             )
-            if len(image_payloads) >= MAX_VISION_IMAGES:
-                continue
             try:
                 raw_image = embedded._data()
             except Exception:
+                read_issues.append({'code': 'SOURCE_IMAGE_UNREAD', 'hint': 'A workbook image could not be read.',
+                                    'anchor': image_anchors[-1]})
                 continue
-            if not raw_image or image_bytes + len(raw_image) > MAX_VISION_IMAGE_BYTES:
+            if not raw_image:
+                read_issues.append({'code': 'SOURCE_IMAGE_UNREAD', 'hint': 'A workbook image could not be read.',
+                                    'anchor': image_anchors[-1]})
                 continue
-            image_bytes += len(raw_image)
             image_format = str(getattr(embedded, "format", "png") or "png").lower()
             if image_format == "jpg":
                 image_format = "jpeg"
             if image_format not in {"jpeg", "png", "gif", "webp"}:
+                read_issues.append({'code': 'SOURCE_IMAGE_UNREAD', 'hint': 'A workbook image could not be read.',
+                                    'anchor': image_anchors[-1]})
                 continue
             image_payloads.append(
                 {
                     "anchor": {"sheet": sheet_name, "cell": f"{_excel_column_label(column)}{row}"},
                     "data_url": f"data:image/{image_format};base64,{base64.b64encode(raw_image).decode('ascii')}",
+                    'size_bytes': len(raw_image),
                 }
             )
     workbook.close()
@@ -5458,6 +5504,9 @@ def _read_excel_semantic_document(path: Any, source: dict, sheet_names: list[str
         "merged_ranges": merged_ranges[:5000],
         "image_anchors": image_anchors[:500],
         "_image_payloads": image_payloads,
+        'image_read_status': {'prepared': len(image_payloads), 'processed': 0, 'pending': len(image_payloads)},
+        'read_issues': read_issues + ([{'code': 'SOURCE_CELL_LIMIT',
+            'hint': 'Workbook cell reading reached the system limit.'}] if cell_budget <= 0 else []),
         "truncated": cell_budget <= 0,
     }
 
@@ -5505,23 +5554,36 @@ def _extract_vision_observations_payload(content: str) -> list[dict]:
     return [row for row in observations if isinstance(row, dict)]
 
 
-def _call_vision_style_descriptions(documents: list[dict]) -> dict:
+def _call_vision_style_descriptions(documents: list[dict], *, ocr_fallback=True) -> dict:
     """Transcribe server-selected images into bounded evidence for semantic review."""
+    from .material_ai_vision import describe_images
+
+    return describe_images(documents, _call_vision_batch, max_images=MAX_VISION_IMAGES,
+                           max_bytes=MAX_VISION_IMAGE_BYTES,
+                           ocr_image=_ocr_embedded_image if ocr_fallback else None)
+
+
+def _ocr_embedded_image(image):
+    from pathlib import Path
+    import tempfile
+    from .attachment_parse_service import _ocr_image_file
+
+    try:
+        content = base64.b64decode(str(image.get('data_url') or '').partition(',')[2], validate=True)
+        with tempfile.TemporaryDirectory(prefix='ocw-embedded-ocr-') as temporary:
+            path = Path(temporary) / 'image.png'
+            path.write_bytes(content)
+            return _ocr_image_file(path)
+    except Exception as error:
+        if _is_fatal_system_exception(error) or _classify_evidence_exception(error, 'parse') is None:
+            raise _EvidenceSystemFailure(error) from None
+        return ''
+
+
+def _call_vision_batch(images: list[dict]) -> dict:
 
     from overseas_costing.services import allocation_service
 
-    images = []
-    for document in documents or []:
-        for image in document.get("_image_payloads") or []:
-            if not image.get("data_url"):
-                continue
-            images.append(
-                {
-                    "document_id": document.get("document_id"),
-                    "anchor": image.get("anchor") or {},
-                    "data_url": image.get("data_url"),
-                }
-            )
     if not images:
         return {"ok": True, "model": "", "observations": [], "warning": ""}
     config = _vision_config()
@@ -5858,23 +5920,36 @@ def execute_material_ai_fill(run_id: str, *, repository: Any | None = None) -> d
         existing_fees = _effective_review_fees(repo,context)
         clarification_text = str(_record_value(run, "clarification_text") or "")
 
+        def mark_input_stale(**updates):
+            if _record_value(run, "trigger_mode") in AUTOMATIC_GAP_FILL_TRIGGER_MODES:
+                draft = _load_json(_record_value(run, "draft_json"), {})
+                updates["draft_json"] = {**draft, "automatic_processing": {
+                    "status": "RUNNING", "run_id": str(run_id), "replacement_pending": True,
+                    "changed_count": 0, "blockers": []}}
+            persist(status="STALE", **updates)
+
         def requeue_latest_input() -> str:
-            if not unified_review or _clarification_changed(repo, batch_name, run):
-                return ""
+            automatic = _record_value(run, "trigger_mode") in AUTOMATIC_GAP_FILL_TRIGGER_MODES
+            replacement_id = ""
             try:
-                replacement = start_source_ai_review(
-                    context["batch"],
-                    context["version"],
-                    None,
-                    force=False,
-                    selected_source_ids=_selected_ids_from_run_manifest(
-                        _record_value(run, "source_manifest_json")
-                    ),
-                    repository=repo,
-                    trigger_mode="INPUT_CHANGED",
-                    reanalyze_original_sources=original_sources,
-                )
-                return str(replacement.get("run_id") or "")
+                if not unified_review or _clarification_changed(repo, batch_name, run):
+                    return ""
+                if automatic and repository is None:
+                    from .workbench_bulk_ai_service import analyze
+
+                    replacement = analyze(context["batch"], None, context["version"],
+                                          trigger_mode=_record_value(run, "trigger_mode"))
+                else:
+                    replacement = start_source_ai_review(
+                        context["batch"], context["version"], None, force=False,
+                        selected_source_ids=None if automatic else _selected_ids_from_run_manifest(
+                            _record_value(run, "source_manifest_json")),
+                        repository=repo,
+                        trigger_mode=_record_value(run, "trigger_mode") if automatic else "INPUT_CHANGED",
+                        reanalyze_original_sources=original_sources,
+                        source_coverage=(_load_json(_record_value(run, "draft_json"), {}).get("review_input") or {}).get("source_coverage"),
+                    )
+                replacement_id = str(replacement.get("run_id") or "")
             except Exception as schedule_error:
                 if frappe is not None:
                     try:
@@ -5884,7 +5959,17 @@ def execute_material_ai_fill(run_id: str, *, repository: Any | None = None) -> d
                         )
                     except Exception:
                         pass
-                return ""
+            finally:
+                if automatic:
+                    previous = repo.get_run(str(run_id))
+                    draft = _load_json(_record_value(previous, "draft_json"), {})
+                    draft["replacement_run_id"] = replacement_id
+                    draft["automatic_processing"] = {
+                        "status": "RUNNING" if replacement_id else "REVIEW_REQUIRED", "run_id": str(run_id),
+                        "changed_count": 0, "blockers": [] if replacement_id else [{
+                            "code": "REVIEW_REQUIRED", "hint": "Automatic processing needs review."}]}
+                    repo.save_run(previous, draft_json=draft)
+            return replacement_id
 
         for source in sources:
             source["batch"] = context["batch"]
@@ -5899,7 +5984,7 @@ def execute_material_ai_fill(run_id: str, *, repository: Any | None = None) -> d
             else build_input_fingerprint(context["batch"], context["version"], items, sources, context=context)
         )
         if current_fingerprint != str(_record_value(run, "input_fingerprint") or ""):
-            persist(status="STALE",
+            mark_input_stale(
                 progress_step="资料或版本已变化",
                 error_message="任务输入已变化，系统已按最新资料重新排队。",
                 completed_at=_now(),
@@ -5944,6 +6029,7 @@ def execute_material_ai_fill(run_id: str, *, repository: Any | None = None) -> d
         documents: list[dict] = []
         source_errors = []
         source_warnings = []
+        system_read_issues = []
         completed_sources: list[dict] = []
         materialized_sources: dict[str, dict] = {}
         attempted_evidence: set[tuple[str, str]] = set()
@@ -6017,6 +6103,10 @@ def execute_material_ai_fill(run_id: str, *, repository: Any | None = None) -> d
             )
 
         def skip_evidence(source_index, source, error, elapsed_ms):
+            if error.code in {'SOURCE_SIZE_LIMIT', 'DOWNLOAD_TIMEOUT', 'PARSE_TIMEOUT'}:
+                system_read_issues.append({'code': error.code, 'hint': error.safe_text,
+                    'file_name': source.get('file_name') or source.get('source_label') or '',
+                    'source_id': str(source.get('source_id') or '')})
             _update_source_progress(
                 source_progress,
                 source_index,
@@ -6067,7 +6157,7 @@ def execute_material_ai_fill(run_id: str, *, repository: Any | None = None) -> d
                 has_document_evidence = _document_has_evidence(document)
                 if has_document_evidence or source_candidates:
                     completed_sources.append(source)
-                if has_document_evidence:
+                if has_document_evidence or document.get('read_issues'):
                     document = {**document, "document_id": f"DOC-{len(documents) + 1}",
                                 'approval_role': source.get('approval_role') or document.get('approval_role') or ''}
                     documents.append(document)
@@ -6181,10 +6271,11 @@ def execute_material_ai_fill(run_id: str, *, repository: Any | None = None) -> d
                         }
                     )
                 else:
+                    read_issue = next(iter(document.get('read_issues') or []), None)
                     skip_evidence(
                         source_index,
                         source,
-                        EvidenceReadSkipped(
+                        EvidenceReadSkipped(read_issue['code'], read_issue['hint']) if read_issue else EvidenceReadSkipped(
                             "NO_RECOGNIZABLE_CONTENT", "资料中未发现可识别内容。"
                         ),
                         (time.monotonic() - evidence_started) * 1000,
@@ -6340,6 +6431,9 @@ def execute_material_ai_fill(run_id: str, *, repository: Any | None = None) -> d
                     "proposals": [],
                     "evidence_documents": documents,
                 },
+                seconds=float((getattr(frappe, 'conf', None) or {}).get(
+                    'overseas_cost_ai_trusted_workbook_timeout') or 300)
+                    if any(document.get('trusted_workbook') for document in documents) else AI_SEMANTIC_TIMEOUT_SECONDS,
             )
             enhanced_by_id = {
                 str(document.get("document_id") or ""): document
@@ -6472,7 +6566,19 @@ def execute_material_ai_fill(run_id: str, *, repository: Any | None = None) -> d
                 else {"ok": False, "candidates": [], "warning": ""}
             )
             candidates = normalize_candidates(deterministic + (ai_result.get("candidates") or []), items)
+        from .material_ai_vision import document_read_issues
+        enhanced_documents = {str(document.get('document_id') or ''): document
+                              for document in ai_result.get('evidence_documents') or []}
+        for document in documents:
+            system_read_issues.extend(document_read_issues(
+                enhanced_documents.get(str(document.get('document_id') or ''), document)))
         for index, entry in enumerate(source_progress):
+            unread = [issue for issue in system_read_issues
+                      if issue.get('source_id') == str(entry.get('source_id') or '')]
+            if unread and entry.get('status') not in {'FAILED', 'SKIPPED'}:
+                _update_source_progress(source_progress, index, status='PARTIAL',
+                    detail='资料读取受系统限制，原始文件已保留', error='；'.join(issue['hint'] for issue in unread)[:1000])
+                continue
             if entry.get("status") not in {"ANALYZING", "PARSED"}:
                 continue
             label = str(entry.get("label") or "")
@@ -6558,6 +6664,7 @@ def execute_material_ai_fill(run_id: str, *, repository: Any | None = None) -> d
             )
         else:
             draft = build_material_ai_draft(read_items, candidates)
+        draft['source_read_issues'] = system_read_issues
         try:
             if hasattr(repo, 'lock_review_scope'):
                 repo.lock_review_scope(batch_name)
@@ -6603,7 +6710,7 @@ def execute_material_ai_fill(run_id: str, *, repository: Any | None = None) -> d
                 or refreshed_items != items
                 or not _materialization_only_source_change(before_manifest, refreshed_sources)
             ):
-                persist(status="STALE",
+                mark_input_stale(
                     progress_step="资料或版本已变化",
                     error_message="任务运行期间资料或物料数据已变化，系统已按最新资料重新排队。",
                     completed_at=_now(),
@@ -6692,6 +6799,9 @@ def execute_material_ai_fill(run_id: str, *, repository: Any | None = None) -> d
             if source_completeness == "UNAVAILABLE"
             else "草稿已生成（部分资料待核对）"
         )
+        if _record_value(run, "trigger_mode") in AUTOMATIC_GAP_FILL_TRIGGER_MODES:
+            draft["automatic_processing"] = {"status": "PENDING", "run_id": str(run_id),
+                                              "changed_count": 0, "blockers": []}
         persist(status=ready_status,
             progress_step=ready_progress_step,
             progress_percent=100,
@@ -6708,11 +6818,38 @@ def execute_material_ai_fill(run_id: str, *, repository: Any | None = None) -> d
             source_completeness=source_completeness,
             completed_at=_now(),
         )
+        automatic_processing = None
+        if repository is None and _record_value(run, "trigger_mode") in AUTOMATIC_GAP_FILL_TRIGGER_MODES:
+            from .workbench_bulk_ai_service import continue_automatic_review
+
+            try:
+                automatic_processing = continue_automatic_review(batch_name, str(run_id))
+            except Exception as error:
+                # Analysis remains available even if the separate adoption or
+                # calculation continuation cannot record its result.
+                automatic_processing = {"ok": False, "status": "REVIEW_REQUIRED", "run_id": str(run_id),
+                                        "changed_count": 0, "blockers": [{"code": "REVIEW_REQUIRED",
+                                            "hint": "Automatic processing needs review."}]}
+                try:
+                    latest = repo.get_run(str(run_id))
+                    latest_draft = _load_json(_record_value(latest, "draft_json"), {})
+                    repo.save_run(latest, draft_json={**latest_draft, "automatic_processing": automatic_processing})
+                except Exception:
+                    pass
+                if frappe is not None:
+                    try:
+                        frappe.logger("overseas_costing").warning(_json({
+                            "event": "automatic_ai_continuation_failed", "batch": batch_name,
+                            "run_id": str(run_id), "exception_type": type(error).__name__,
+                        }))
+                    except Exception:
+                        pass
         return {
             "ok": True,
             "run_id": str(run_id),
             "status": ready_status,
             "candidate_count": len(candidates),
+            **({"automatic_processing": automatic_processing} if automatic_processing is not None else {}),
         }
     except _MaterialAIRunClaimLost:
         current = repo.get_run(str(run_id))
@@ -6812,7 +6949,7 @@ def verify_material_ai_runtime(check_connection: bool = True) -> dict:
                         }
                     ],
                 }
-            ]
+            ], ocr_fallback=False,
         )
         if not vision.get("ok"):
             raise RuntimeError(str(vision.get("warning") or "DeepSeek 视觉模型连通性检查失败。"))
@@ -6955,7 +7092,7 @@ class FrappeMaterialAIFillRepository:
         if not resolved:
             raise ValueError(_i18n("未找到批次：{0}").format(batch_name))
         batch = frappe.db.get_value(
-            "Overseas Cost Batch", resolved, ["name", "current_version", "modified", "transport_mode", "confirm_status", "writeback_status"], as_dict=True
+            "Overseas Cost Batch", resolved, ["name", "current_version", "modified", "transport_mode", "confirm_status", "writeback_status", "is_locked"], as_dict=True
         ) or {}
         selected_version = str(version_name or batch.get("current_version") or "")
         version = frappe.db.get_value(
@@ -6967,7 +7104,7 @@ class FrappeMaterialAIFillRepository:
             raise ValueError(_i18n("版本不属于当前批次。"))
         if selected_version != str(batch.get("current_version") or ""):
             raise ValueError(_i18n("只能在当前版本生成 AI 草稿。"))
-        if str(version.get("status") or "") != "Active" or batch.get("confirm_status")=="Confirmed" or batch.get("writeback_status")=="Success":
+        if str(version.get("status") or "") != "Active" or batch.get("is_locked") or batch.get("confirm_status")=="Confirmed" or batch.get("writeback_status")=="Success":
             raise ValueError(_i18n("已确认或归档版本不能生成 AI 草稿。"))
         return {
             "batch": str(batch.get("name") or ""),
@@ -7010,6 +7147,13 @@ class FrappeMaterialAIFillRepository:
             limit_page_length=10000,
         )
 
+    def get_packing_groups(self, batch_name: str, version_name: str) -> list[dict]:
+        from .material_packing_group_service import groups_from_version
+
+        metadata = frappe.db.get_value('Overseas Cost Version',
+            {'name': version_name, 'batch': batch_name}, 'extra_json')
+        return groups_from_version({'extra_json': metadata})
+
     def list_sources(self, batch_name: str, version_name: str) -> list[dict]:
         from overseas_costing.services.packing_snapshot_service import list_material_ai_sources
 
@@ -7036,6 +7180,22 @@ class FrappeMaterialAIFillRepository:
         return fee_service._decorate_historical_rules(
             fee_service._query_rules(batch_name, version_name), transport_mode
         )
+
+    def get_locked_fees(self, batch_name: str, version_name: str) -> list[dict]:
+        """Use current reads when confirming an automatic missing-fee selection."""
+        from overseas_costing.services import fee_service
+
+        batch = frappe.db.sql(
+            "SELECT transport_mode FROM `tabOverseas Cost Batch` WHERE name=%s FOR UPDATE",
+            (batch_name,), as_dict=True,
+        )
+        fields = ", ".join(f"`{field}`" for field in fee_service._rule_fields())
+        rows = frappe.db.sql(
+            f"SELECT {fields} FROM `tabOverseas Cost Allocation Rule` "
+            "WHERE batch=%s AND version=%s ORDER BY name FOR UPDATE",
+            (batch_name, version_name), as_dict=True,
+        )
+        return fee_service._decorate_historical_rules(rows, (batch[0] if batch else {}).get("transport_mode") or "")
 
     def assert_write(self, batch_name: str, edit_token: str, expected_modified: str) -> None:
         from overseas_costing.services import edit_session_service

@@ -208,14 +208,39 @@ def test_bound_generic_fee_save_fails_before_silently_ignored_write(monkeypatch)
         fee_service.save_fee('B','V',{'logical_fee_key':'misc_expense','amount':'10','currency':'RMB','amount_status':'ACTUAL'})
 
 
-def test_valid_expense_is_not_hidden_or_blocked_by_historical_logistics_status(monkeypatch):
+@pytest.mark.parametrize('historical_status', ['拒绝', 'TERMINATED', 'COMPLETED'])
+def test_valid_expense_is_not_hidden_or_blocked_by_historical_logistics_status(monkeypatch, historical_status):
     from overseas_costing.services import batch_service,effective_source_values
     context={'root_kind':'expense','approved':True,'available':True,'invalid':False}
     monkeypatch.setattr(effective_source_values,'batch_source_context',lambda *a,**k:context)
-    batch={'name':'B','current_version':'V','source_approval_status':'拒绝'}
+    batch={'name':'B','current_version':'V','source_approval_status':historical_status}
     assert not batch_service._build_invalid_business_state(batch,[])['invalid']
     context['approved']=False
     assert batch_service._build_invalid_business_state(batch,[])['scope']=='logistics_expense'
+
+
+@pytest.mark.parametrize('status,result,invalid', [
+    ('COMPLETED', 'refuse', True),
+    ('TERMINATED', '', True),
+    ('COMPLETED', 'agree', False),
+])
+def test_logistics_source_status_uses_the_current_approval_result(monkeypatch, status, result, invalid):
+    from overseas_costing.services import batch_service, effective_source_values
+    from overseas_costing.services.effective_logistics_source import context_for_source
+    from overseas_costing.services.logistics_settlement.model import parse_source
+
+    raw = source('L', 'logistics')
+    raw.update(status=status, result=result)
+    current = context_for_source(parse_source(raw, logistics_codes={'logistics'}))
+    monkeypatch.setattr(effective_source_values, 'batch_source_context', lambda *args, **kwargs: current)
+    summary = batch_service._build_batch_source_status({
+        'name': 'B', 'current_version': 'V', 'source_type': 'oa_logistics',
+        'source_approval_status': 'COMPLETED',
+    })
+    assert summary['invalid_business'] is invalid
+    assert summary['invalid_business_scope'] == ('source_approval' if invalid else '')
+    if invalid:
+        assert '业务已拒绝/撤销/终止' in summary['invalid_business_reason']
 
 
 def test_reviewed_packing_does_not_duplicate_the_same_cached_document_row(setup):

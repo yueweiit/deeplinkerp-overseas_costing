@@ -942,15 +942,7 @@ def _list_approval_body_ai_sources(batch_name: str, *, detail: dict | None = Non
         if not instance_id:
             return None
         raw_fields = approval.get("form_fields") or []
-        fields = (
-            dict(raw_fields)
-            if isinstance(raw_fields, dict)
-            else {
-                str(row.get("label") or ""): row.get("value")
-                for row in raw_fields
-                if isinstance(row, dict) and str(row.get("label") or "").strip()
-            }
-        )
+        fields = _approval_form_fields(raw_fields)
         if not fields and not approval.get("excluded"):
             return None
         title = str(approval.get("title") or ("国际物流审批" if role == "international_logistics" else "采购审批"))
@@ -999,6 +991,27 @@ def _list_approval_body_ai_sources(batch_name: str, *, detail: dict | None = Non
         if excluded:
             rows.append(excluded)
     return rows
+
+
+def _approval_form_fields(raw_fields):
+    if isinstance(raw_fields, dict):
+        return dict(raw_fields)
+    values = {}
+    for row in raw_fields:
+        if not isinstance(row, dict) or not str(row.get("label") or "").strip():
+            continue
+        label, value = str(row["label"]), row.get("value")
+        candidates = values.setdefault(label, [])
+        if value not in (None, ""):
+            if candidates and candidates[0] in (None, ""):
+                candidates.clear()
+            if value not in candidates:
+                candidates.append(value)
+        elif not candidates:
+            candidates.append(value)
+    # Hidden empty controls must not erase evidence; conflicting values stay ambiguous.
+    return {label: candidates[0] if len(candidates) == 1 else candidates
+            for label, candidates in values.items()}
 
 
 def selected_packing_ai_sources(batch_name, bundle):

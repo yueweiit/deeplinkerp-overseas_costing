@@ -1939,6 +1939,56 @@ def test_manual_required_access_denied_manifest_hides_raw_archive_error(monkeypa
     assert "AccessDenied" not in result["message"]
 
 
+@pytest.mark.parametrize('code,strategy,error,scope_missing', [
+    ('Forbidden.AccessDenied.AccessTokenPermissionDenied', 'drive_download',
+     'HTTP 403 missing [Drive.DownloadInfo.Read] https://example.invalid/?access_token=PRIVATE', True),
+    ('userNotExist', 'workflow_download', 'HTTP 400 userNotExist', False),
+    ('noPermission', 'workflow_dentry_auth', 'HTTP 400 noPermission', False),
+    ('AccessDenied', 'minio_download', 'AccessDenied: object access denied', False),
+    ('Forbidden.AccessDenied.AccessTokenPermissionDenied', 'storage_dentry',
+     'HTTP 403 missing [Drive.DownloadInfo.Read]', False),
+    ('Forbidden.AccessDenied.AccessTokenPermissionDenied', 'drive_download',
+     'HTTP 403 missing [Drive.File.Read]', False),
+    ('', 'drive_download', 'HTTP 403 missing [Drive.DownloadInfo.Read]', False),
+])
+def test_native_archive_download_distinguishes_drive_application_scope_from_file_errors(
+    monkeypatch, code, strategy, error, scope_missing,
+):
+    from types import SimpleNamespace
+    from overseas_costing.scripts import import_oa_logistics
+    from overseas_costing.services import import_service
+
+    attachment = SimpleNamespace(source_type='OA', file_name='statement.xlsx', file_url='',
+        parse_status='Queued', parse_result_json=json.dumps({'instance_id': 'PROC', 'file_id': 'FILE'}))
+    attachment.save = lambda **kwargs: attachment
+    commits = []
+    monkeypatch.setattr(import_service, 'frappe', SimpleNamespace(get_doc=lambda *args: attachment,
+        db=SimpleNamespace(commit=lambda: commits.append(True))))
+    monkeypatch.setattr(import_oa_logistics, 'resolve_approval_source_mode', lambda: 'postgres')
+    monkeypatch.setattr(import_service, '_get_oa_postgres_source', lambda: SimpleNamespace(
+        get_attachment_manifest=lambda *args: {'archive_status': 'manual_required', 'failure_code': code,
+            'last_attempt_strategy': strategy, 'last_error': error}))
+    monkeypatch.setattr(import_oa_logistics, 'get_access_token', lambda **kwargs: pytest.fail('No DingTalk API call'))
+    monkeypatch.setattr(import_service, '_get_minio_archive_client', lambda: pytest.fail('No archived object yet'))
+
+    result = download_oa_form_attachment('ATT')
+    assert result['needs_manual_upload'] is (not scope_missing)
+    assert (result.get('error_type') == 'dingtalk_archive_scope_missing') is scope_missing
+    assert result['archive_status'] == 'manual_required' and not result['downloaded']
+    assert attachment.parse_status == 'Failed' and attachment.remark == result['message']
+    archive = json.loads(attachment.parse_result_json)['archive']
+    assert archive['failure_code'] == code and archive['last_attempt_strategy'] == strategy
+    assert archive['last_error'] == error and commits == [True]
+    if scope_missing:
+        assert 'original submitter and file access' in result['message']
+        assert 'enable this permission' not in result['message'] and 'No repeat approval submission' in result['message']
+        assert 'MinIO' not in result['message'] and 'PRIVATE' not in result['message']
+    elif code == 'AccessDenied':
+        assert result['error_type'] == 'minio_archive_access_denied'
+    else:
+        assert error in result['message']
+
+
 def test_fetch_dingtalk_attachment_content_passes_signed_headers(monkeypatch) -> None:
     from overseas_costing.services import import_service
 

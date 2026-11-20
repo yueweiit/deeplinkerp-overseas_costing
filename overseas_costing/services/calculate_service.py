@@ -36,6 +36,7 @@ from overseas_costing.services.supplier_resolution_service import (
 # --- First usable implementation for the Excel -> recalculate MVP. ---
 
 import json as _json
+import re
 from copy import deepcopy as _deepcopy
 from datetime import datetime as _datetime
 from decimal import Decimal, InvalidOperation, ROUND_DOWN, ROUND_HALF_UP
@@ -1685,7 +1686,7 @@ def update_item_field(
                 project_source_values(item_doc.as_dict(), source_context), existing_legacy_manual,
             )
             if (legacy_prior is None
-                    and shipment_number(item_doc.goods_value) != shipment_number(existing_legacy_manual.get("amount_rmb"))):
+                    and not _goods_value_matches_manual_mirror(item_doc.goods_value, existing_legacy_manual.get("amount_rmb"))):
                 legacy_prior = build_legacy_shipment_valuation(
                     project_source_values(item_doc.as_dict(), source_context)
                 )
@@ -1696,7 +1697,7 @@ def update_item_field(
         if coerced_value == "":
             if (not any(key in metadata for key in ("shipment_valuation", "settlement_cargo"))
                     and isinstance(existing_manual, dict)
-                    and shipment_number(item_doc.goods_value) != shipment_number(existing_manual.get("amount_rmb"))):
+                    and not _goods_value_matches_manual_mirror(item_doc.goods_value, existing_manual.get("amount_rmb"))):
                 legacy_prior = build_legacy_shipment_valuation(
                     project_source_values(item_doc.as_dict(), source_context)
                 )
@@ -1824,6 +1825,24 @@ def update_item_field(
             if reference_relaxed else "字段已更新，批次已标记为 Dirty。"
         ),
     }
+
+
+def _goods_value_matches_manual_mirror(stored_value, manual_amount) -> bool:
+    from overseas_costing.services.shipment_cost_service import number
+
+    stored, manual = number(stored_value), number(manual_amount)
+    if stored == manual:
+        return True
+    if stored is None or manual is None:
+        return False
+    # Currency display precision does not describe the database's rounded mirror.
+    column_type = _frappe.db.get_column_type("Overseas Cost Item", "goods_value")
+    decimal_type = re.fullmatch(r"decimal\(\d+,\s*(\d+)\)", column_type.lower())
+    if not decimal_type:
+        return False
+    quantum = Decimal(1).scaleb(-int(decimal_type[1]))
+    return (stored.quantize(quantum, rounding=ROUND_HALF_UP)
+            == manual.quantize(quantum, rounding=ROUND_HALF_UP))
 
 
 def _batch_rollback_message(results: list[dict]) -> str:

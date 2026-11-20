@@ -42,6 +42,28 @@ def uom(value):
     return normalize_unit(normalize_weight_uom(value))
 
 
+def spec_identity(value, target, *, material_code=''):
+    """Compare source specifications without a repeated known product-name prefix."""
+    from .material_value_semantics import is_placeholder_token
+    from .logistics_autofill_service import _is_material_code_placeholder
+
+    def normalized(text):
+        return ' '.join(unicodedata.normalize('NFKC', str(text if text is not None else '')).casefold().split())
+
+    specification = normalized(value)
+    target_code = target.get('material_code')
+    if (_is_material_code_placeholder(material_code) or _is_material_code_placeholder(target_code)
+            or normalized(material_code) != normalized(target_code)):
+        return specification
+    product_name = target.get('product_name')
+    prefix = '' if is_placeholder_token(product_name) else normalized(product_name)
+    if prefix and specification.startswith(prefix):
+        remainder = specification[len(prefix):].strip()
+        if remainder:
+            return remainder
+    return specification
+
+
 _DEDICATED_VALUE_ALIASES = ('货值', '采购货值', '总货值', '货值Valor de mercancía',
                             'Valor de mercancía', 'goods_value')
 _PURCHASE_TOTAL_ALIASES = ('总金额Monto Total', '总金额', 'Monto Total', '总价')
@@ -237,7 +259,8 @@ def from_documents(fields, target, refs, documents, *, fx_rates=None, items=None
             if str(mapped.get('material_code') or '').strip().casefold() != str(target.get('material_code') or '').strip().casefold():
                 continue
             if (mapped.get('spec_model') and target.get('spec_model')
-                    and str(mapped['spec_model']).strip().casefold() != str(target['spec_model']).strip().casefold()):
+                    and spec_identity(mapped['spec_model'], target, material_code=mapped.get('material_code'))
+                    != spec_identity(target['spec_model'], target, material_code=target.get('material_code'))):
                 continue
             locator = {**ref, 'row': index, 'field': table}
             if raw.get('_dingtalk_row_number'):
@@ -259,8 +282,9 @@ def identity_matches(row, fact, *, check_uom=True):
     """Stable row keys are not evidence that the material itself is unchanged."""
     identity = lambda value: str(value or '').strip().casefold()
     if (not identity(fact.get('material_code'))
-            or any(identity(row.get(field)) != identity(fact.get(field))
-                   for field in ('material_code', 'spec_model'))):
+            or identity(row.get('material_code')) != identity(fact.get('material_code'))
+            or spec_identity(row.get('spec_model'), row, material_code=row.get('material_code'))
+               != spec_identity(fact.get('spec_model'), row, material_code=fact.get('material_code'))):
         return False
     return not check_uom or same_uom(row.get('shipped_uom') or row.get('unit') or row.get('purchase_uom'), fact.get('uom'))
 
@@ -300,13 +324,15 @@ def bind_purchase_value(row, fact):
     anchored = any(ref.get('row') and (ref.get('source_id') or ref.get('document_id')) for ref in refs)
     if (not anchored or not target['line_key'] or not source['material_code']
             or source['material_code'] != target['material_code']
-            or (source['spec_model'] and target['spec_model'] and source['spec_model'] != target['spec_model'])):
+            or (source['spec_model'] and target['spec_model']
+                and spec_identity(fact.get('spec_model'), row, material_code=fact.get('material_code'))
+                != spec_identity(row.get('spec_model'), row, material_code=row.get('material_code')))):
         return None
     return {**deepcopy(fact), 'target_identity': target}
 
 
 def purchase_target_matches(row, fact):
-    """Old persisted facts keep their original, strict identity behavior."""
+    """Validate saved target bindings before falling back to source identity."""
     bound = fact.get('target_identity')
     if bound is None:
         return identity_matches(row, fact, check_uom=False)

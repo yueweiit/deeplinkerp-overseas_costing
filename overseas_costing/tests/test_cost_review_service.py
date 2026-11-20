@@ -63,6 +63,62 @@ def codes(result):
     return {row["code"] for row in result["review_blockers"]}
 
 
+@pytest.mark.parametrize("confirmed", [False, True])
+@pytest.mark.parametrize("missing_value", [False, True])
+def test_unavailable_adopted_freight_blocks_only_readiness_without_restoring_estimate(confirmed, missing_value):
+    from overseas_costing.services.logistics_settlement.fee_policy import FeeSelectionError
+
+    context = saved_context()
+    source = {"root_kind": "logistics", "separate_adoption": True, "fingerprint": "changed",
+              "freight": {"selected": True, "available": False, "claims": []}, "packing": {}}
+    context["source_context"] = source
+    if missing_value:
+        context["items"][0].update(goods_value=None, unit_price=None)
+    if confirmed:
+        context["batch"]["confirm_status"] = "Confirmed"
+        context["version"]["confirmed_at"] = "2026-09-09 10:00:00"
+    before = deepcopy(context)
+    result = evaluate(context)
+    assert result["review_state"] == ("confirmed" if confirmed else "processing")
+    assert codes(result) == ({"FEE_SOURCE_INVALID", "GOODS_VALUE_MISSING"} if missing_value else {"FEE_SOURCE_INVALID"})
+    assert result["issue_codes"] == (["purchase", "logistics"] if missing_value else ["logistics"])
+    assert result["primary_action"] == ("view" if confirmed else "supplement" if missing_value else "supplement_fees")
+    assert result["cost_review_started"] is True
+    assert result["cost_review_eligible"] is (not missing_value)
+    assert result["result_is_current"] is False
+    assert result["shipment_goods_value_rmb"] is None
+    assert context == before
+    service = importlib.import_module("overseas_costing.services.cost_review_service")
+    with pytest.raises(FeeSelectionError):
+        service.project_review_inputs(**{key: context[key] for key in ("batch", "version", "items", "fees", "source_context")})
+
+
+def test_review_readiness_does_not_hide_unrelated_projection_errors(monkeypatch):
+    service = importlib.import_module("overseas_costing.services.cost_review_service")
+
+    def invalid_projection(**kwargs):
+        raise ValueError("unrelated projection failure")
+
+    monkeypatch.setattr(service, "project_review_inputs", invalid_projection)
+    with pytest.raises(ValueError, match="unrelated projection failure"):
+        evaluate(saved_context())
+
+
+def test_fee_source_blocker_keeps_current_expense_merchandise_out_of_legacy_purchase_checks():
+    context = saved_context()
+    source = {"root_kind": "expense", "separate_adoption": True, "fingerprint": "current",
+              "available": True, "approved": True, "freight": {"selected": True, "available": False}, "packing": {}}
+    context["source_context"] = source
+    context["batch"]["source_status"] = {"purchase_approval_sync_state": "invalid"}
+    context["items"][0]["extra_json"] = {
+        "effective_logistics_source": source, "settlement_cargo": {"merchandise_price": {"present": True}}}
+    result = evaluate(context)
+    assert codes(result) == {"FEE_SOURCE_INVALID", "GOODS_VALUE_MISSING"}
+    assert "PURCHASE_SOURCE_INVALID" not in codes(result)
+    assert result["issue_codes"] == ["purchase", "logistics"]
+    assert result["primary_action"] == "supplement"
+
+
 def test_current_saved_result_is_ready_with_complete_physical_basis_and_missing_sync_marker():
     context = saved_context()
     before = deepcopy(context)
