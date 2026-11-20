@@ -43,6 +43,79 @@ def test_approval_field_table_does_not_attach_incomplete_row_ids(row_ids):
     assert fields == {'货物信息': 'original'}
 
 
+@pytest.mark.parametrize('status', ['RUNNING', 'COMPLETED'])
+def test_full_native_source_manifest_worker_and_selection_keep_legacy_owned_rows(monkeypatch, status):
+    import sqlite3
+    from types import SimpleNamespace
+    from overseas_costing.services import dingtalk_approval_service, material_ai_fill_service as ai
+    from overseas_costing.services import material_ai_selection_service as selection
+    from overseas_costing.services.logistics_settlement import runtime, ledger as ledger_module
+    from overseas_costing.services.logistics_settlement.store import Store
+    from overseas_costing.tests.test_ai_selection_service import Repo
+    from overseas_costing.tests.test_settlement_writer import Ledger
+    from overseas_costing.tests.test_source_review_services import _legacy_logistics_rows
+
+    stored_items, original_source = _legacy_logistics_rows(status=status)
+    # An unclassified line must not turn a field-only review into a scope replacement.
+    original_source['form_fields']['货物信息Bienes'].append({'rowNumber': 'ROW-UNKNOWN', 'rowValue': [
+        {'label': '物料编码', 'value': ''}, {'label': '物料名称', 'value': '待核项'},
+        {'label': '规格型号', 'value': ''}, {'label': '数量Cantidad', 'value': '1'},
+        {'label': '单位Unidad', 'value': '个'}]})
+    approval = dingtalk_approval_service._approval({'corpId': 'CORP', 'processInstanceId': 'LOG',
+        'status': status, 'result': 'agree', 'formComponentValues': [{'name': '货物信息Bienes',
+            'componentType': 'TableField', 'value': json.dumps(original_source['form_fields']['货物信息Bienes'])}]}, [])
+    detail = {'ok': True, 'main_approval': approval, 'linked_purchase_approvals': []}
+    store = Store.sqlite(sqlite3.connect(':memory:')); store.install()
+    store.put('source', {'id': 'S', 'corp': 'CORP', 'instance': 'LOG', 'kind': 'logistics', 'snapshot': 'S1',
+        'match_hash': 'M1', 'updated_at': '2099-01-01',
+        'data': json.dumps({'status': status, 'approval_result': 'agree', 'approved': status == 'COMPLETED'})})
+    ledger = Ledger(store)
+    monkeypatch.setattr(Store, 'frappe', staticmethod(lambda: store))
+    monkeypatch.setattr(ledger_module, 'FrappeLedger', lambda: ledger)
+    monkeypatch.setattr(runtime, 'freight_enabled', lambda: False)
+    monkeypatch.setattr(service, 'frappe', SimpleNamespace(get_list=lambda *a, **kw: []))
+    monkeypatch.setattr(service.effective_source, 'current_source_bundle', lambda *a: None)
+    monkeypatch.setattr(dingtalk_approval_service, 'get_batch_dingtalk_approval_detail', lambda *a: detail)
+    monkeypatch.setattr(service, 'list_packing_sources', lambda *a, **kw: {})
+    monkeypatch.setattr(service, 'get_current_packing_snapshot', lambda *a: {})
+    native = ai.FrappeMaterialAIFillRepository()
+
+    def get_items(*args):
+        with monkeypatch.context() as boundary:
+            boundary.setattr(ai, 'frappe', SimpleNamespace(get_all=lambda doctype, *, fields, **kw:
+                [{field: copy.deepcopy(row.get(field)) for field in fields} for row in stored_items]))
+            return native.get_items(*args)
+
+    repo = Repo()
+    repo.context['effective_source'] = {}
+    repo.get_items = get_items
+    repo.list_sources_with_payment_references = native.list_sources_with_payment_references
+    repo.list_sources = native.list_sources
+    repo.capture_row_dependencies = native.capture_row_dependencies
+    repo.assert_row_dependencies = native.assert_row_dependencies
+    started = ai.start_source_ai_review('B1', 'V1', selected_source_ids=['approval:LOG:form'],
+        payment_candidate_refs=[], force=True, repository=repo, enqueue=lambda run: None)
+    assert ai._load_json(repo.run['source_manifest_json'], [])[0]['corp_id'] == 'CORP'
+    monkeypatch.setattr(ai, '_call_source_review_ai', lambda *a, **kw: {'ok': True, 'proposals': []})
+    errors = []
+    monkeypatch.setattr(ai, 'frappe', SimpleNamespace(log_error=lambda **kw: errors.append(kw)))
+    result = ai.execute_material_ai_fill(started['run_id'], repository=repo)
+    assert ai.is_material_ai_preview_ready(result['status']), errors
+    catalog = selection.review_catalog(repo, 'B1', repo.run)
+    choices = {f"{c['item_name']}:{c['fieldname']}": c['candidate_id'] for c in catalog['field_candidates']
+        if c.get('default_selected') and c['fieldname'] in {'actual_shipped_qty', 'shipped_uom'}}
+    preview = selection.prepare('B1', started['run_id'], [], [], 'fill_missing', 'V1',
+        field_choices=choices, packing_group_ids=[], packing_assignments={}, repository=repo)['preview']
+    assert [row['actual_shipped_qty'] for row in preview['rows']] == ['3', '8']
+    assert all(row['actual_shipped_qty_mode'] == 'EXPLICIT_SOURCE' for row in preview['rows'])
+    assert all(row['product_name'] == '主档品名' and row['spec_model'] == '主档规格' for row in preview['rows'])
+    assert [row['quantity'] for row in preview['rows']] == [1000, 2000]
+    assert all('raw_excel_json' not in row for row in preview['rows'])
+    assert preview['selected_row_ids'] == [] and not preview['selected_fee_ids']
+    assert all(c['fieldname'] in {'actual_shipped_qty', 'shipped_uom'} for c in preview['changes'])
+    assert repo.writes == [] and ai.is_material_ai_preview_ready(repo.run['status'])
+
+
 def _preview(*, needs_confirmation=False):
     group = {
         "group_id": "package-1",
