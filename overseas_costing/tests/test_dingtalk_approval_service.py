@@ -667,6 +667,34 @@ def test_table_row_ids_remain_aligned_when_a_source_id_is_missing_or_repeated():
     assert table['rows'] == [['SKU-1', '1'], ['SKU-1', '2'], ['SKU-1', '3']]
 
 
+def test_table_fields_align_missing_reordered_labels_and_skip_header_schema():
+    from overseas_costing.services import dingtalk_approval_service as service
+
+    rows = [{'rowNumber': row_id, 'rowValue': [{'label': label, 'value': value} for label, value in cells]}
+        for row_id, cells in [
+            ('TABLEFIELD_HEADER', [('仅表头', '不属于货物列')]),
+            ('ROW-A', [('物料编码', 'SKU-1'), ('数量', '3'), ('单位', '个')]),
+            ('ROW-B', [('物料编码', 'SKU-2'), ('数量', '8')]),
+            ('ROW-C', [('单位', 'kg'), ('规格', '蓝'), ('数量', '2'), ('物料编码', 'SKU-3')]),
+        ]]
+    assert service._table_value(rows) == {'columns': ['物料编码', '数量', '单位', '规格'],
+        'rows': [['SKU-1', '3', '个', ''], ['SKU-2', '8', '', ''], ['SKU-3', '2', 'kg', '蓝']],
+        'row_ids': ['ROW-A', 'ROW-B', 'ROW-C']}
+
+
+@pytest.mark.parametrize('repeated_value', ['SKU-1', 'OTHER'])
+def test_conflicting_duplicate_table_labels_cannot_supply_row_identity(repeated_value):
+    from overseas_costing.services import dingtalk_approval_service as service
+
+    table = service._table_value([{'rowNumber': 'ROW-A', 'rowValue': [
+        {'label': '物料编码', 'value': 'SKU-1'}, {'label': '物料编码', 'value': repeated_value},
+        {'label': '数量', 'value': '3'}]}])
+    if repeated_value == 'OTHER':
+        assert table is None
+    else:
+        assert table == {'columns': ['物料编码', '数量'], 'rows': [['SKU-1', '3']], 'row_ids': ['ROW-A']}
+
+
 def test_form_fields_mark_empty_scalar_values_without_changing_display_text() -> None:
     from overseas_costing.services import dingtalk_approval_service as service
 
