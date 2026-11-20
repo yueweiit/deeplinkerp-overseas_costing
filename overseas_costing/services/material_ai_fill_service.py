@@ -3313,6 +3313,7 @@ def _load_json(value: Any, default: Any) -> Any:
 
 
 _PUBLIC_AI_HIDDEN_KEYS = frozenset({
+    "raw_excel_json",
     "_price_metadata", "_purchase_value_fact", "_verified_prior_item", "purchase_fact", "purchase_fact_history",
     "_approval_field_evidence", "_review_verified_fields",
     "settlement_original_values", "ai_fill_original_values", "_shipment_valuation",
@@ -7142,7 +7143,7 @@ class FrappeMaterialAIFillRepository:
         return frappe.get_all(
             "Overseas Cost Item",
             filters={"batch": batch_name, "version": version_name, "is_excluded": 0},
-            fields=list(dict.fromkeys([*GRID_FIELDS, "category", "extra_json", "manual_override_flag", "manual_override_reason"])),
+            fields=list(dict.fromkeys([*GRID_FIELDS, "category", "extra_json", "raw_excel_json", "manual_override_flag", "manual_override_reason"])),
             order_by="row_no asc, name asc",
             limit_page_length=10000,
         )

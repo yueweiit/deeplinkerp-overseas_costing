@@ -1,6 +1,8 @@
 """统一资料审核的来源清单和确定性提取测试。"""
 
 from decimal import Decimal
+from copy import deepcopy
+import json
 
 import pytest
 
@@ -12,6 +14,181 @@ from overseas_costing.services.source_review_manifest_service import (
     prepare_source_manifest,
     source_progress_manifest,
 )
+
+
+def _legacy_logistics_rows(*, canonical=False, status='COMPLETED'):
+    from overseas_costing.services import dingtalk_approval_service, packing_snapshot_service
+
+    body = [{'rowNumber': row_id, 'rowValue': [
+        {'label': '物料编码', 'value': 'SKU-1'}, {'label': '物料名称', 'value': '历史品名'},
+        {'label': '规格型号', 'value': '历史规格'}, {'label': '数量Cantidad', 'value': quantity},
+        {'label': '单位Unidad', 'value': 'PIEZA'}]} for row_id, quantity in [('ROW-A', '3'), ('ROW-B', '8')]]
+    approval = dingtalk_approval_service._approval({
+        'corpId': 'CORP', 'processInstanceId': 'LOG', 'status': status, 'result': 'agree',
+        'formComponentValues': [{'name': '货物信息Bienes', 'componentType': 'TableField',
+                                'value': json.dumps(body, ensure_ascii=False)}],
+    }, [])
+    source = packing_snapshot_service._list_approval_body_ai_sources('B1', detail={
+        'ok': True, 'main_approval': approval, 'linked_purchase_approvals': [],
+    })[0]
+    items = []
+    for index, row_id in enumerate(('ROW-A', 'ROW-B'), 1):
+        meta = {'source': 'dingtalk_oa_logistics_form', 'instance_id': 'LOG',
+                'effective_logistics_source': {'corp_id': 'CORP', 'instance_id': 'LOG'}}
+        if canonical:
+            meta['dingtalk_goods_row_no'] = row_id
+        items.append({'name': 'I' + str(index), 'material_code': 'SKU-1', 'product_name': '主档品名',
+            'spec_model': '主档规格', 'quantity': 1000 * index, 'actual_shipped_qty': 0,
+            'actual_shipped_qty_mode': None, 'unit': '个', 'shipped_uom': '个',
+            'unit_price': 0, 'goods_value': 0, 'extra_json': meta,
+            'raw_excel_json': {} if canonical else {'_dingtalk_row_number': row_id}})
+    return items, source
+
+
+@pytest.mark.parametrize('canonical,status', [(False, 'RUNNING'), (True, 'COMPLETED')])
+def test_legacy_logistics_detail_to_preview_uses_owned_rows_without_borrowing_purchase_quantities(monkeypatch, canonical, status):
+    from types import SimpleNamespace
+    from overseas_costing.services import material_ai_fill_service as ai
+    from overseas_costing.services.material_ai_selection_writer import write_rows
+    from overseas_costing.tests.test_source_goods_value_adoption import review, project_defaults
+    from overseas_costing.tests.test_freight_lines import setup_cost
+
+    stored_items, source = _legacy_logistics_rows(canonical=canonical, status=status)
+
+    def get_all(doctype, *, fields, **kwargs):
+        assert doctype == 'Overseas Cost Item'
+        return [{field: deepcopy(row.get(field)) for field in fields} for row in stored_items]
+
+    with monkeypatch.context() as context:
+        context.setattr(ai, 'frappe', SimpleNamespace(get_all=get_all))
+        items = ai.FrappeMaterialAIFillRepository().get_items('B1', 'V1')
+    before = deepcopy((items, source))
+    catalog = review(items, source)
+    projected = project_defaults(items, catalog)
+    assert [float(r['actual_shipped_qty']) for r in projected['rows']] == [3, 8]
+    assert [r['quantity'] for r in projected['rows']] == [1000, 2000]
+    assert all(r['spec_model'] == '主档规格' and r['product_name'] == '主档品名' for r in projected['rows'])
+    assert all(r['actual_shipped_qty_mode'] == 'EXPLICIT_SOURCE' for r in projected['rows'])
+    assert (items, source) == before
+
+    store, ledger, batch, version, original, *_ = setup_cost()
+    for index, row in enumerate(items):
+        values = {**row, 'batch': batch['name'], 'version': version['name']}
+        if index == 0:
+            values['name'] = original['name']
+            ledger.put('item', original['name'], values)
+        else:
+            ledger.create('item', values)
+    saved_items = ledger.rows('item', batch=batch['name'], version=version['name'])
+    projected = project_defaults(saved_items, review(saved_items, source))
+    write_rows(store, ledger, {**projected, 'batch': batch['name'], 'version': version['name'],
+        'id': 'P', 'revision': 'R', 'run_id': 'RUN', 'source_context': {}, 'sources': []}, {})
+    saved = ledger.rows('item', batch=batch['name'], version=version['name'])
+    assert sorted(float(row['actual_shipped_qty']) for row in saved) == [3, 8]
+    assert all(row['product_name'] == '主档品名' and row['spec_model'] == '主档规格' for row in saved)
+
+
+def test_repository_legacy_raw_stays_internal_to_ai_messages_and_public_payloads(monkeypatch):
+    from types import SimpleNamespace
+    from overseas_costing.services import material_ai_fill_service as ai
+    from overseas_costing.services.material_ai_selection_service import public_preview
+    from overseas_costing.services.material_input_service import GRID_FIELDS
+
+    row = {'name': 'I1', 'material_code': 'SKU-1', 'product_name': '物料', 'spec_model': '型号',
+        'raw_excel_json': json.dumps({'_dingtalk_row_number': 'PRIVATE-RAW-ROW',
+            'image_url': 'https://example.invalid/private-image.png',
+            'accessToken': 'PRIVATE-ACCESS-TOKEN', 'arbitrary_secret': 'PRIVATE-SECRET'})}
+    with monkeypatch.context() as context:
+        context.setattr(ai, 'frappe', SimpleNamespace(get_all=lambda doctype, *, fields, **kwargs:
+            [{field: row.get(field) for field in fields}]))
+        items = ai.FrappeMaterialAIFillRepository().get_items('B1', 'V1')
+    assert items[0]['raw_excel_json'] == row['raw_excel_json']
+    assert 'raw_excel_json' not in GRID_FIELDS
+    for messages in (ai.build_ai_messages(items, []), ai.build_source_review_messages(items, [])):
+        payload = json.dumps(messages, ensure_ascii=False)
+        assert 'raw_excel_json' not in payload and 'PRIVATE-' not in payload
+        assert 'private-image.png' not in payload and 'arbitrary_secret' not in payload
+    for public in (public_preview({'rows': items}), ai._public_ai_payload({'draft': {'rows': items}})):
+        payload = json.dumps(public, ensure_ascii=False)
+        assert 'raw_excel_json' not in payload and 'PRIVATE-' not in payload
+        assert 'private-image.png' not in payload and 'arbitrary_secret' not in payload
+    assert items[0]['raw_excel_json'] == row['raw_excel_json']
+    assert 'raw_excel_json' not in ai._fingerprint_item(items[0])
+
+
+@pytest.mark.parametrize('mismatch', [
+    'corp', 'missing_corp', 'target_corp', 'instance', 'target_instance_conflict', 'code',
+    'source_duplicate', 'source_duplicate_other_code', 'target_duplicate',
+    'target_duplicate_other_code', 'target_locator_conflict', 'purchase', 'missing_source_id',
+])
+def test_legacy_logistics_row_bridge_rejects_wrong_or_ambiguous_ownership(mismatch):
+    from overseas_costing.services.source_review_extract_service import match_approval_goods_rows
+
+    items, source = _legacy_logistics_rows()
+    if mismatch == 'corp': source['corp_id'] = 'OTHER'
+    elif mismatch == 'missing_corp': source.pop('corp_id')
+    elif mismatch == 'target_corp':
+        for item in items: item['extra_json']['effective_logistics_source']['corp_id'] = 'OTHER'
+    elif mismatch == 'instance': source['process_instance_id'] = 'OTHER'
+    elif mismatch == 'target_instance_conflict':
+        for item in items: item['dingtalk_instance_id'] = 'OTHER'
+    elif mismatch == 'code':
+        for row in source['form_fields']['货物信息Bienes']: row['rowValue'][0]['value'] = 'OTHER'
+    elif mismatch in {'source_duplicate', 'source_duplicate_other_code'}:
+        source['form_fields']['货物信息Bienes'][1]['rowNumber'] = 'ROW-A'
+        if mismatch == 'source_duplicate_other_code':
+            source['form_fields']['货物信息Bienes'][1]['rowValue'][0]['value'] = 'OTHER'
+    elif mismatch in {'target_duplicate', 'target_duplicate_other_code'}:
+        items[1]['raw_excel_json']['_dingtalk_row_number'] = 'ROW-A'
+        if mismatch == 'target_duplicate_other_code': items[1]['material_code'] = 'OTHER'
+    elif mismatch == 'target_locator_conflict':
+        for item in items: item['extra_json']['dingtalk_goods_row_no'] = 'OTHER-ROW'
+    elif mismatch == 'purchase': source['approval_role'] = 'purchase'
+    else:
+        for row in source['form_fields']['货物信息Bienes']: row.pop('rowNumber')
+    matches = match_approval_goods_rows(items, source)
+    assert all(resolved is None for *_, resolved, ambiguous in matches)
+
+
+def test_manual_actual_zero_is_preserved_even_when_logistics_row_identity_is_exact():
+    from overseas_costing.tests.test_source_goods_value_adoption import review, project_defaults
+
+    items, source = _legacy_logistics_rows()
+    items = items[:1]
+    items[0].update(actual_shipped_qty_mode='MANUAL_CONFIRMED', product_name='历史品名', spec_model='历史规格')
+    source['form_fields']['货物信息Bienes'] = source['form_fields']['货物信息Bienes'][:1]
+    projected = project_defaults(items, review(items, source))
+    assert all(row['actual_shipped_qty'] == 0 for row in projected['rows'])
+    assert not [c for c in projected['changes'] if c['fieldname'] == 'actual_shipped_qty']
+
+
+def test_another_same_code_logistics_row_cannot_reuse_an_existing_imported_locator():
+    from overseas_costing.services.source_review_extract_service import match_approval_goods_rows
+
+    items, source = _legacy_logistics_rows()
+    extra = deepcopy(source['form_fields']['货物信息Bienes'][0])
+    extra['rowNumber'] = 'ROW-C'
+    extra['rowValue'][3]['value'] = '125000'
+    source['form_fields']['货物信息Bienes'].append(extra)
+    matched = match_approval_goods_rows(items, source)
+    assert [item['name'] if item else None for *_, item, ambiguous in matched] == ['I1', 'I2', None]
+
+
+def test_existing_explicit_and_context_free_matching_keep_their_original_rules():
+    from overseas_costing.services.source_review_extract_service import match_approval_goods_rows
+
+    for explicit in (False, True):
+        items, source = _legacy_logistics_rows()
+        items = items[:1]
+        items[0].update(product_name='历史品名', spec_model='历史规格')
+        source['form_fields']['货物信息Bienes'] = source['form_fields']['货物信息Bienes'][:1]
+        if explicit:
+            items[0].update(actual_shipped_qty=3, actual_shipped_qty_mode='EXPLICIT_SOURCE')
+            items[0]['extra_json']['effective_logistics_source'].pop('corp_id')
+        else:
+            source.pop('corp_id')
+        matches = match_approval_goods_rows(items, source)
+        assert matches[0][-2] == items[0] and matches[0][-1] is False
 
 
 def test_source_manifest_uses_stable_public_ids_and_keeps_approval_bodies_locked() -> None:

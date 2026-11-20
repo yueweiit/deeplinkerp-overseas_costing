@@ -951,6 +951,7 @@ def _list_approval_body_ai_sources(batch_name: str, *, detail: dict | None = Non
             "source_id": f"approval:{instance_id}:form",
             "source_label": f"{title}正文",
             "process_instance_id": instance_id,
+            "corp_id": str(approval.get("corp_id") or ""),
             "approval_role": role,
             "source_context": approval.get("source_context") or {},
             "approval_title": title,
@@ -1001,6 +1002,15 @@ def _approval_form_fields(raw_fields):
         if not isinstance(row, dict) or not str(row.get("label") or "").strip():
             continue
         label, value = str(row["label"]), row.get("value")
+        table = row.get("table") or {}
+        columns, rows, row_ids = table.get("columns"), table.get("rows"), table.get("row_ids")
+        if (row.get("component_type") == "TableField" and isinstance(columns, list) and columns
+                and isinstance(rows, list) and rows
+                and isinstance(row_ids, list) and len(row_ids) == len(rows)
+                and all(isinstance(cells, list) and len(cells) == len(columns) for cells in rows)):
+            value = [{"rowNumber": row_id, "rowValue": [
+                {"label": column, "value": cell} for column, cell in zip(columns, cells)
+            ]} for row_id, cells in zip(row_ids, rows)]
         candidates = values.setdefault(label, [])
         if value not in (None, ""):
             if candidates and candidates[0] in (None, ""):
