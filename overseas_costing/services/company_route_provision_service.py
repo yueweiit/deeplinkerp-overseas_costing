@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+from overseas_costing.services.company_rename_service import (
+    GRUPO_COMPANY,
+    GRUPO_LEGACY_COMPANY,
+    LATINGO_ABBR,
+    LATINGO_COMPANY,
+)
+
 try:
     import frappe
 except ImportError:
@@ -21,7 +28,7 @@ MEXICO_COMPANIES = (
     ("UV IMPRESION", "UVIM"),
     ("YUEWEI MX", "YWFM"),
     ("AmigoMart", "AMIG"),
-    ("YW GRUPO MX", "YWCM"),
+    (LATINGO_COMPANY, LATINGO_ABBR),
 )
 
 # ``project_collection`` is the external OA/DingTalk source label.  Keep those
@@ -32,7 +39,7 @@ MEXICO_PROJECT_ROUTES = {
     "UV IMPRESION MX彩印": "UV IMPRESION",
     "YW Fabricación MX 核心制造": "YUEWEI MX",
     "AmigoMart": "AmigoMart",
-    "YW Centro MX 共享中心 YUEWEI Grupo": "YW GRUPO MX",
+    GRUPO_LEGACY_COMPANY: LATINGO_COMPANY,
 }
 
 ALL_PROJECT_ROUTES = {
@@ -52,6 +59,16 @@ def build_provision_plan(existing_companies: list[dict], existing_routes: list[d
     conflicts = []
     create_companies = []
     skipped_companies = []
+
+    # Provisioning is not a migration command.  Even an apparently empty old
+    # Company can own submitted records, permissions or shared configuration.
+    for old_company in (GRUPO_LEGACY_COMPANY, GRUPO_COMPANY):
+        if old_company in companies_by_name:
+            conflicts.append({
+                "type": "COMPANY_MIGRATION_REQUIRED",
+                "company": old_company,
+                "target_company": LATINGO_COMPANY,
+            })
 
     for company_name in EXISTING_COMPANY_ROUTES.values():
         if company_name not in companies_by_name:

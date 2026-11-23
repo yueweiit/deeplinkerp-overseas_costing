@@ -26,6 +26,13 @@ COMPANY_RENAMES = (
     ("YUEWEI CN悦为中国", "YW 中国共享中心"),
 )
 
+# The historical patch must not perform the later, separately approved company
+# consolidation.  Accept its successor only after the old Company is absent.
+GRUPO_LEGACY_COMPANY = "YW Centro MX 共享中心 YUEWEI Grupo"
+GRUPO_COMPANY = "YW GRUPO MX"
+LATINGO_COMPANY = "LATINGO MX"
+LATINGO_ABBR = "LATMX"
+
 # These fields are intentionally Data rather than Link fields, so
 # ``frappe.rename_doc`` cannot discover them from metadata.
 UNTYPED_COMPANY_REFERENCE_FIELDS = (
@@ -49,10 +56,22 @@ class CompanyRenameError(RuntimeError):
     """Raised before commit when a six-company rename cannot be proven safe."""
 
 
+def _effective_company_renames(company_names: set[str]) -> tuple[tuple[str, str], ...]:
+    """Keep the historical targets until the explicit consolidation is done."""
+
+    if GRUPO_COMPANY not in company_names and LATINGO_COMPANY in company_names:
+        return tuple(
+            (old, LATINGO_COMPANY if new == GRUPO_COMPANY else new)
+            for old, new in COMPANY_RENAMES
+        )
+    return COMPANY_RENAMES
+
+
 def build_company_rename_plan(existing_company_names) -> dict:
     """Preflight the whole rename set before allowing the first write."""
 
     existing = {str(name or "").strip() for name in existing_company_names}
+    # LATINGO alone does not opt an otherwise unrelated site into this old patch.
     managed_names = {name for pair in COMPANY_RENAMES for name in pair}
     if not existing.intersection(managed_names):
         return {
@@ -66,7 +85,7 @@ def build_company_rename_plan(existing_company_names) -> dict:
     renames = []
     already_renamed = []
     conflicts = []
-    for old_name, new_name in COMPANY_RENAMES:
+    for old_name, new_name in _effective_company_renames(existing):
         old_exists = old_name in existing
         new_exists = new_name in existing
         if old_exists and new_exists:
@@ -139,8 +158,13 @@ def audit_company_renames() -> dict:
 
     _require_frappe()
     company_names = set(_company_names())
+    effective_renames = _effective_company_renames(company_names)
     old_names = [old for old, _new in COMPANY_RENAMES]
-    new_names = [new for _old, new in COMPANY_RENAMES]
+    new_names = [new for _old, new in effective_renames]
+    if LATINGO_COMPANY in new_names:
+        # A deleted Company can still have dangling Link, Data, Dynamic Link or
+        # saved-filter references.  Do not treat target existence as completion.
+        old_names.append(GRUPO_COMPANY)
     missing_targets = [name for name in new_names if name not in company_names]
     old_company_records = [name for name in old_names if name in company_names]
     old_references = []
@@ -195,15 +219,32 @@ def audit_company_renames() -> dict:
         "missing_targets": missing_targets,
         "old_company_records": old_company_records,
         "old_references": old_references,
+        "pending_company_migrations": [
+            {
+                "source_company": GRUPO_COMPANY,
+                "target_company": LATINGO_COMPANY,
+                "target_exists": LATINGO_COMPANY in company_names,
+            }
+        ] if GRUPO_COMPANY in company_names else [],
     }
 
 
-def verify_company_renames_complete() -> dict:
-    """Bench/deployment gate: fail unless all six names and links are complete."""
+def verify_company_renames_complete(*, require_latingo_migration: bool = False) -> dict:
+    """Verify historical renames; optionally require the explicit consolidation.
+
+    The default supports deploying this code before the data maintenance.  The
+    stricter mode is read-only and must be used for post-maintenance acceptance.
+    Neither mode performs a Company merge or repairs references.
+    """
 
     audit = audit_company_renames()
     if not audit["ok"]:
         raise CompanyRenameError(_format_audit_error(audit))
+    if require_latingo_migration and audit.get("pending_company_migrations"):
+        raise CompanyRenameError(
+            "LATINGO_COMPANY_MIGRATION_REQUIRED: "
+            + json.dumps(audit["pending_company_migrations"], ensure_ascii=False, sort_keys=True)
+        )
     return audit
 
 

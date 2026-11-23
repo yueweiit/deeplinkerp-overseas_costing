@@ -65,8 +65,9 @@ def test_company_rename_plan_blocks_the_entire_batch_on_collision_or_missing_com
     ]
 
 
-def test_empty_unrelated_site_is_a_safe_noop() -> None:
-    plan = service.build_company_rename_plan(["Unrelated Company"])
+@pytest.mark.parametrize("companies", [[], ["Unrelated Company"], ["LATINGO MX"]])
+def test_empty_unrelated_site_is_a_safe_noop(companies) -> None:
+    plan = service.build_company_rename_plan(companies)
 
     assert plan == {
         "ok": True,
@@ -75,6 +76,147 @@ def test_empty_unrelated_site_is_a_safe_noop() -> None:
         "already_renamed": [],
         "conflicts": [],
     }
+
+
+def _current_company_names(*, migrated=False):
+    return [
+        "LATINGO MX" if migrated and new == "YW GRUPO MX" else new
+        for _old, new in EXPECTED_RENAMES
+    ]
+
+
+def _stub_company_audit(monkeypatch, company_names):
+    monkeypatch.setattr(service, "frappe", SimpleNamespace())
+    monkeypatch.setattr(service, "_company_names", lambda: company_names)
+    monkeypatch.setattr(service, "_company_link_fields", lambda: [
+        ("Warehouse", "company"),
+        ("Process Deferred Accounting", "company"),
+        ("Overseas Cost Project Route", "subsidiary_code"),
+    ])
+    monkeypatch.setattr(service, "_company_dynamic_link_fields", lambda: [
+        ("Comment", "reference_name", "reference_doctype", "Company")
+    ])
+    monkeypatch.setattr(service, "_field_exists", lambda *_args: True)
+    monkeypatch.setattr(service, "_exact_reference_count", lambda *_args: 0)
+    monkeypatch.setattr(service, "_conditional_reference_count", lambda *_args: 0)
+    monkeypatch.setattr(service, "_user_settings_old_references", lambda *_args: [])
+
+
+def test_migrated_site_does_not_recreate_grupo_or_rename_latingo(monkeypatch):
+    names = _current_company_names(migrated=True)
+    _stub_company_audit(monkeypatch, names)
+    monkeypatch.setattr(service, "_rename_company", lambda *_args: pytest.fail("must not write"))
+    plan = service.build_company_rename_plan(names)
+
+    assert plan["ok"] is True
+    assert plan["renames"] == []
+    assert plan["already_renamed"] == names
+    assert service.build_company_rename_plan(names) == plan
+    assert service.rename_operating_companies()["applied"] is False
+
+
+def test_missing_source_and_successor_cannot_pass_migration_acceptance(monkeypatch):
+    names = [name for name in _current_company_names() if name != "YW GRUPO MX"]
+    _stub_company_audit(monkeypatch, names)
+
+    assert service.build_company_rename_plan(names)["ok"] is False
+    with pytest.raises(service.CompanyRenameError, match="missing=YW GRUPO MX"):
+        service.verify_company_renames_complete(require_latingo_migration=True)
+
+
+def test_legacy_long_name_cannot_be_automatically_merged_into_existing_latingo(monkeypatch):
+    names = _current_company_names(migrated=True) + ["YW Centro MX 共享中心 YUEWEI Grupo"]
+    monkeypatch.setattr(service, "_company_names", lambda: names)
+    monkeypatch.setattr(service, "_rename_company", lambda *_args: pytest.fail("must not write"))
+
+    plan = service.build_company_rename_plan(names)
+    assert plan["ok"] is False
+    assert plan["renames"] == []
+    assert plan["conflicts"] == [{
+        "type": "TARGET_ALREADY_EXISTS",
+        "old_name": "YW Centro MX 共享中心 YUEWEI Grupo",
+        "new_name": "LATINGO MX",
+    }]
+    with pytest.raises(service.CompanyRenameError, match="TARGET_ALREADY_EXISTS"):
+        service.rename_operating_companies()
+
+
+@pytest.mark.parametrize("target_exists", [False, True])
+def test_pre_migration_deployment_passes_but_explicit_migration_acceptance_fails(monkeypatch, target_exists):
+    names = _current_company_names() + (["LATINGO MX"] if target_exists else [])
+    _stub_company_audit(monkeypatch, names)
+    monkeypatch.setattr(service, "_rename_company", lambda *_args: pytest.fail("must not write"))
+
+    result = service.rename_operating_companies()
+    assert result["applied"] is False
+    assert result["renamed"] == []
+    audit = service.verify_company_renames_complete()
+    assert audit["ok"] is True
+    assert audit["pending_company_migrations"] == [{
+        "source_company": "YW GRUPO MX", "target_company": "LATINGO MX",
+        "target_exists": target_exists,
+    }]
+    with pytest.raises(service.CompanyRenameError, match="LATINGO_COMPANY_MIGRATION_REQUIRED"):
+        service.verify_company_renames_complete(require_latingo_migration=True)
+
+
+def test_post_migration_audit_accepts_latingo_without_weakening_other_company_checks(monkeypatch):
+    names = _current_company_names(migrated=True)
+    _stub_company_audit(monkeypatch, names)
+    audit = service.verify_company_renames_complete(require_latingo_migration=True)
+    assert audit["ok"] is True
+    assert audit["pending_company_migrations"] == []
+
+    names.remove("LEMOS MX")
+    with pytest.raises(service.CompanyRenameError, match="missing=LEMOS MX"):
+        service.verify_company_renames_complete()
+
+
+@pytest.mark.parametrize("doctype, field", [
+    ("Warehouse", "company"),
+    ("Process Deferred Accounting", "company"),
+    ("Overseas Cost Project Route", "subsidiary_code"),
+    ("Overseas Cost Batch", "subsidiary_code"),
+    ("Overseas Cost Item", "subsidiary_code"),
+    ("Overseas Cost ERP Site", "subsidiary_code"),
+    ("DefaultValue", "defvalue"),
+])
+def test_post_migration_rejects_dangling_grupo_link_and_data_references(monkeypatch, doctype, field):
+    _stub_company_audit(monkeypatch, _current_company_names(migrated=True))
+    monkeypatch.setattr(service, "_exact_reference_count", lambda dt, key, value:
+        1 if (dt, key, value) == (doctype, field, "YW GRUPO MX") else 0)
+
+    with pytest.raises(service.CompanyRenameError, match=doctype):
+        service.verify_company_renames_complete()
+
+
+@pytest.mark.parametrize("doctype, field", [
+    ("User Permission", "for_value"), ("DocShare", "share_name"), ("Comment", "reference_name"),
+])
+def test_post_migration_rejects_dangling_grupo_dynamic_references(monkeypatch, doctype, field):
+    _stub_company_audit(monkeypatch, _current_company_names(migrated=True))
+    monkeypatch.setattr(service, "_conditional_reference_count", lambda dt, key, value, *_args:
+        1 if (dt, key, value) == (doctype, field, "YW GRUPO MX") else 0)
+
+    with pytest.raises(service.CompanyRenameError, match=doctype):
+        service.verify_company_renames_complete()
+
+
+def test_post_migration_rejects_grupo_in_saved_filters(monkeypatch):
+    _stub_company_audit(monkeypatch, _current_company_names(migrated=True))
+
+    def saved_filters(old_names, company_links):
+        assert "YW GRUPO MX" in old_names
+        assert ("Warehouse", "company") in company_links
+        return [{
+            "doctype": "__UserSettings", "fieldname": "Warehouse.company",
+            "value": "YW GRUPO MX", "count": 1,
+        }]
+
+    monkeypatch.setattr(service, "_user_settings_old_references", saved_filters)
+
+    with pytest.raises(service.CompanyRenameError, match="__UserSettings"):
+        service.verify_company_renames_complete()
 
 
 def test_apply_renames_all_companies_then_rewrites_untyped_references_and_audits(monkeypatch) -> None:
