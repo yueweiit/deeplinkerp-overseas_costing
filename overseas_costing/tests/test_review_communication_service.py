@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import importlib.util
 from pathlib import Path
+import sys
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -10,6 +13,41 @@ from overseas_costing.services import review_communication_service as service
 
 ROOT = Path(__file__).resolve().parents[1]
 MIRROR_ROOT = ROOT / "overseas_costing"
+
+
+@pytest.fixture(params=[ROOT, MIRROR_ROOT], ids=["canonical", "frappe_module"])
+def audit_controller(monkeypatch, request):
+    # Replace the unavailable Frappe base class, and execute the real controller.
+    frappe = ModuleType("frappe")
+    model = ModuleType("frappe.model")
+    document = ModuleType("frappe.model.document")
+    document.Document = object
+    path = request.param / "doctype/overseas_cost_audit_log/overseas_cost_audit_log.py"
+    spec = importlib.util.spec_from_file_location("review_audit_controller_test", path)
+    module = importlib.util.module_from_spec(spec)
+    with monkeypatch.context() as scope:
+        for name, value in (("frappe", frappe), ("frappe.model", model),
+                            ("frappe.model.document", document)):
+            scope.setitem(sys.modules, name, value)
+        spec.loader.exec_module(module)
+    return module.OverseasCostAuditLog
+
+
+@pytest.mark.parametrize("action", ["REVIEW_RETURN", "REVIEW_REPLY", "REVIEW_RESUBMIT", "REVIEW_RESOLVE"])
+def test_real_audit_controller_accepts_review_actions(audit_controller, action):
+    audit_controller.validate(SimpleNamespace(batch="B-1", action_type=action))
+
+
+def test_real_audit_controller_still_rejects_unknown_actions(audit_controller):
+    with pytest.raises(ValueError, match="UNKNOWN_ACTION"):
+        audit_controller.validate(SimpleNamespace(batch="B-1", action_type="UNKNOWN_ACTION"))
+
+
+@pytest.mark.parametrize("root", [ROOT, MIRROR_ROOT], ids=["canonical", "frappe_module"])
+def test_audit_select_metadata_allows_all_review_actions(root):
+    meta = json.loads((root / "doctype/overseas_cost_audit_log/overseas_cost_audit_log.json").read_text())
+    options = next(field["options"] for field in meta["fields"] if field["fieldname"] == "action_type").splitlines()
+    assert {"REVIEW_RETURN", "REVIEW_REPLY", "REVIEW_RESUBMIT", "REVIEW_RESOLVE"} <= set(options)
 
 
 def _doctype(name: str) -> dict:
@@ -261,8 +299,15 @@ def test_return_rejects_stale_trial_or_duplicate_active_round(monkeypatch, mutat
     assert repo.rollbacks == 1
 
 
-def test_address_resubmit_and_finance_resolution_follow_round_state(monkeypatch) -> None:
+def test_address_resubmit_and_finance_resolution_follow_round_state(monkeypatch, audit_controller) -> None:
     repo = FakeReviewRepository()
+    insert_audit = repo.insert_audit
+
+    def validated_audit(**values):
+        audit_controller.validate(SimpleNamespace(**values))
+        insert_audit(**values)
+
+    monkeypatch.setattr(repo, "insert_audit", validated_audit)
     monkeypatch.setattr(service, "_repository", lambda: repo)
     monkeypatch.setattr(service, "_current_user", lambda: "buyer@example.com")
     monkeypatch.setattr(service, "_now", lambda: "2026-09-21 11:00:00")
