@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -1000,6 +1001,81 @@ def test_finance_remediation_drawer_is_client_draft_until_one_formal_submit():
     assert 'width: 100%' in label_rule
     assert 'display: block' in textarea_rule
     assert 'box-sizing: border-box' in textarea_rule
+
+
+def test_remediation_drawer_stays_below_system_dialog_backdrop():
+    css = (PARTS / '52-review-communication.css').read_text(encoding='utf-8')
+    detail_css = (PARTS / '45-detail-page.css').read_text(encoding='utf-8')
+
+    def z_index(source, selector):
+        rule = source.split(selector + ' {', 1)[1].split('}', 1)[0]
+        return int(re.search(r'z-index:\s*(\d+)', rule).group(1))
+
+    # Frappe's Bootstrap modal backdrop is 1040 and its dialog is 1050.
+    # Both must cover the drawer, including the part overlapping its buttons.
+    assert (
+        z_index(detail_css, '.ocw-detail-header')
+        < z_index(css, '.ocw-review-drawer-mask')
+        < z_index(css, '.ocw-review-drawer')
+        < 1040
+    )
+
+
+@pytest.mark.parametrize('confirm, expected_open', [(False, True), (True, False)])
+def test_remediation_close_confirmation_preserves_or_discards_drafts(confirm, expected_open):
+    result = run_js(f"""
+const v=makeView();v.detailState={{batchName:'B'}};
+const state=v.ensureReviewCommunicationState();state.drawerOpen=true;
+state.drafts=[{{description:'请核对本次物料的货值',attachments:[{{name:'FILE-1'}}]}}];
+let requests=0,confirms=0;v.call=async()=>{{requests++;}};
+v.renderReviewRemediationDrawer=()=>{{}};
+global.frappe={{confirm(message,yes,no){{confirms++;{str(confirm).lower()}?yes():no();}}}};
+const closed=await v.closeReviewRemediationDrawer();
+console.log(JSON.stringify({{closed,drawerOpen:state.drawerOpen,drafts:state.drafts,requests,confirms}}));
+""")
+    assert result['closed'] is confirm
+    assert result['drawerOpen'] is expected_open
+    assert result['confirms'] == 1
+    assert result['requests'] == 0
+    assert result['drafts'] == ([{
+        'description': '请核对本次物料的货值', 'attachments': [{'name': 'FILE-1'}],
+    }] if expected_open else [])
+
+
+def test_failed_remediation_submit_keeps_drafts_for_retry_then_clears_on_success():
+    result = run_js("""
+const v=makeView();v.detailState={batchName:'B',versionName:'V'};
+v.getDetailBatch=()=>({summary_snapshot:{input_hash:'HASH'}});
+const state=v.ensureReviewCommunicationState();state.drawerOpen=true;
+state.drafts=[{description:'请核对本次物料的货值',attachments:[{name:'FILE-1'}]}];
+const calls=[],errors=[],tabs=[];v.renderReviewRemediationDrawer=()=>{};
+v.showError=e=>errors.push(e.message);
+v.refreshDetailSummary=async()=>{};v.switchDetailTab=async tab=>tabs.push(tab);
+global.frappe={show_alert(){}};
+v.call=async(method,args)=>{calls.push({method,args});
+ if(calls.length===1)throw new Error('费用已变化，请重新核对');
+ return {ok:true};};
+await v.submitReviewRemediation();
+const failed=JSON.parse(JSON.stringify(state));
+await v.submitReviewRemediation();
+console.log(JSON.stringify({failed,state,calls,errors,tabs}));
+""")
+    assert result['failed']['drawerOpen'] is True
+    assert result['failed']['submitting'] is False
+    assert result['failed']['drafts'] == [{
+        'description': '请核对本次物料的货值', 'attachments': [{'name': 'FILE-1'}],
+    }]
+    assert result['errors'] == ['费用已变化，请重新核对']
+    assert len(result['calls']) == 2
+    assert result['calls'][0] == result['calls'][1]
+    assert result['calls'][0]['method'] == 'overseas_costing.api.review.return_for_remediation'
+    assert result['calls'][0]['args']['version_name'] == 'V'
+    assert result['calls'][0]['args']['trial_signature'] == 'HASH'
+    assert json.loads(result['calls'][0]['args']['issues_json'])[0]['attachments'] == ['FILE-1']
+    assert result['state']['drawerOpen'] is False
+    assert result['state']['submitting'] is False
+    assert result['state']['drafts'] == []
+    assert result['tabs'] == ['review']
 
 
 def test_review_communication_tab_supports_reply_resubmit_resolution_and_direct_target():

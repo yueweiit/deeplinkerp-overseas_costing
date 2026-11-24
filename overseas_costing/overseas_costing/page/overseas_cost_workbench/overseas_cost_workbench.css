@@ -9910,13 +9910,14 @@ body.ocw-workspace-sidebar-collapsed .body-sidebar-container {
 .ocw-review-drawer-mask {
   position: fixed;
   inset: 0;
-  z-index: 1090;
+  /* Keep the drawer below Frappe's modal backdrop (1040) and dialog (1050). */
+  z-index: 1038;
   background: rgba(22, 31, 43, .34);
 }
 
 .ocw-review-drawer {
   position: fixed;
-  z-index: 1091;
+  z-index: 1039;
   top: 0;
   right: 0;
   bottom: 0;
