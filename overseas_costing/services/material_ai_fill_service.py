@@ -5524,7 +5524,8 @@ def _vision_config() -> dict:
         except Exception:
             configured = ""
     config["model"] = str(
-        configured
+        config.get("vision_model")
+        or configured
         or os.getenv("OVERSEAS_COST_AI_VISION_MODEL")
         or os.getenv("DEEPSEEK_VISION_MODEL")
         or DEFAULT_DEEPSEEK_VISION_MODEL

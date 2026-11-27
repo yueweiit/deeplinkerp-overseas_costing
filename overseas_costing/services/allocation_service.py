@@ -130,12 +130,25 @@ def _ai_config() -> dict:
         _conf_value("overseas_cost_ai_timeout") or os.getenv("OVERSEAS_COST_AI_TIMEOUT"),
         default=18.0,
     )
-    return {
+    config = {
         "api_key": str(api_key or "").strip(),
         "base_url": str(base_url or DEFAULT_DEEPSEEK_BASE_URL).strip().rstrip("/"),
         "model": str(model or DEFAULT_DEEPSEEK_MODEL).strip(),
         "timeout": timeout,
     }
+    if getattr(getattr(frappe, "local", None), "site", None) and "ai_assistant" in frappe.get_installed_apps():
+        from ai_assistant.ai_assistant.model_client import get_deepseek_config, is_official_deepseek_url
+
+        if is_official_deepseek_url(config["base_url"]):
+            shared = get_deepseek_config()
+            if shared.get("api_key") and is_official_deepseek_url(shared.get("base_url")):
+                config.update(
+                    api_key=shared["api_key"],
+                    base_url=shared["base_url"].rstrip("/"),
+                    model=shared.get("model") or config["model"],
+                    vision_model=shared.get("vision_model"),
+                )
+    return config
 
 
 def _conf_value(key: str):
